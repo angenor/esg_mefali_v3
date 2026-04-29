@@ -13,6 +13,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 logger = logging.getLogger(__name__)
 
 
+# Pattern UUID standard (8-4-4-4-12, hex insensible a la casse).
+# Centralise pour eviter la duplication entre esg_tools.py et application_tools.py
+# (cf. revue story 10.1 finding M3).
+UUID_PATTERN = (
+    r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-"
+    r"[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+)
+
+
 def get_db_and_user(config: RunnableConfig) -> tuple[AsyncSession, uuid.UUID]:
     """Extraire la session DB et le user_id depuis le RunnableConfig.
 

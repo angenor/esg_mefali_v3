@@ -56,6 +56,7 @@ def test_save_valid():
         ("criterion_code", "X1"),
         ("criterion_code", "e1"),
         ("criterion_code", "E"),
+        ("criterion_code", "E1234"),  # boundary {1,3} (review M2)
         ("score", -1),
         ("score", 11),
         ("justification", ""),
