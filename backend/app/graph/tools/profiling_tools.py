@@ -1,8 +1,8 @@
 """Tools LangChain pour le noeud de profilage entreprise.
 
-Deux tools exposés au LLM :
-- update_company_profile : mise à jour partielle du profil
-- get_company_profile : consultation du profil et complétion
+Deux tools exposes au LLM :
+- update_company_profile : mise a jour partielle du profil
+- get_company_profile : consultation du profil et completion
 """
 
 import json
@@ -10,15 +10,46 @@ import logging
 
 from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import tool
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.graph.tools.common import get_db_and_user
+from app.models.company import SectorEnum
 from app.modules.company.schemas import CompanyProfileUpdate
 from app.modules.company.service import FIELD_LABELS, compute_completion
 
 logger = logging.getLogger(__name__)
 
 
-@tool
+class UpdateCompanyProfileArgs(BaseModel):
+    """Args strict pour update_company_profile (PATCH partiel)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    company_name: str | None = Field(None, min_length=1, max_length=255)
+    sector: SectorEnum | None = None
+    sub_sector: str | None = Field(None, min_length=1, max_length=255)
+    employee_count: int | None = Field(None, ge=0, le=100_000)
+    annual_revenue_xof: int | None = Field(None, ge=0, le=10_000_000_000_000)
+    city: str | None = Field(None, min_length=1, max_length=100)
+    country: str | None = Field(None, min_length=1, max_length=100)
+    year_founded: int | None = Field(None, ge=1900, le=2100)
+    has_waste_management: bool | None = None
+    has_energy_policy: bool | None = None
+    has_gender_policy: bool | None = None
+    has_training_program: bool | None = None
+    has_financial_transparency: bool | None = None
+    governance_structure: str | None = Field(None, min_length=1, max_length=2000)
+    environmental_practices: str | None = Field(None, min_length=1, max_length=2000)
+    social_practices: str | None = Field(None, min_length=1, max_length=2000)
+
+
+class GetCompanyProfileArgs(BaseModel):
+    """Args (vide) pour get_company_profile."""
+
+    model_config = ConfigDict(extra="forbid")
+
+
+@tool(args_schema=UpdateCompanyProfileArgs)
 async def update_company_profile(
     config: RunnableConfig,
     company_name: str | None = None,
@@ -38,19 +69,22 @@ async def update_company_profile(
     environmental_practices: str | None = None,
     social_practices: str | None = None,
 ) -> str:
-    """Mettre à jour le profil de l'entreprise avec les informations fournies.
+    """Met a jour le profil entreprise (UPSERT partiel) avec les champs fournis.
 
-    Utilise cet outil quand l'utilisateur partage des informations sur son entreprise :
-    nom, secteur, nombre d'employés, chiffre d'affaires, localisation,
-    ou des pratiques ESG (gestion déchets, politique énergétique, genre, etc.).
-    Seuls les champs fournis seront mis à jour, les autres restent inchangés.
+    Use when:
+    - fait identitaire/ESG fourni (nom, secteur, CA, politique).
+    - persister un champ issu de `ask_interactive_question`.
+    Don't use when:
+    - consultation (utiliser `get_company_profile`).
+    - aucun champ (utiliser `ask_interactive_question`).
+    Exemple: "Solar Niger, 25 employes" -> update_company_profile(company_name='Solar Niger', employee_count=25).
+    Anti: "Mon profil ?" -> NE PAS appeler.
     """
     from app.modules.company import service as company_service
 
     try:
         db, user_id = get_db_and_user(config)
 
-        # Construire le dictionnaire des champs fournis (non-None)
         raw_updates: dict = {}
         local_vars = {
             "company_name": company_name,
@@ -86,17 +120,14 @@ async def update_company_profile(
         if not changed_fields:
             return "Aucun changement détecté (les valeurs sont identiques)."
 
-        # Calculer la complétion après mise à jour
         completion = compute_completion(updated_profile)
 
-        # Construire le message de retour avec métadonnées JSON pour le SSE
         field_lines = [
             f"- {cf['label']} : {cf['value']}"
             for cf in changed_fields
         ]
         fields_text = "\n".join(field_lines)
 
-        # Métadonnées structurées pour les événements SSE profile_update/completion
         sse_metadata = json.dumps({
             "__sse_profile__": True,
             "changed_fields": changed_fields,
@@ -120,13 +151,18 @@ async def update_company_profile(
         return f"Erreur lors de la mise à jour du profil : {e}"
 
 
-@tool
+@tool(args_schema=GetCompanyProfileArgs)
 async def get_company_profile(config: RunnableConfig) -> str:
-    """Consulter le profil actuel de l'entreprise et son niveau de complétion.
+    """Consulte le profil entreprise et son taux de completion (lecture seule).
 
-    Utilise cet outil quand l'utilisateur demande à voir son profil,
-    veut savoir quelles informations manquent, ou demande son pourcentage
-    de complétion. Ne nécessite aucun paramètre.
+    Use when:
+    - "mon profil", "que manque-t-il".
+    - decider du module a ouvrir (besoin secteur/taille).
+    Don't use when:
+    - nouveaux faits fournis (utiliser `update_company_profile`).
+    - score ESG demande (utiliser `get_esg_assessment`).
+    Exemple: "Montre mon profil" -> get_company_profile().
+    Anti: "Mon CA est 50M FCFA" -> NE PAS appeler.
     """
     from app.modules.company import service as company_service
 
@@ -144,7 +180,6 @@ async def get_company_profile(config: RunnableConfig) -> str:
 
         completion = compute_completion(profile)
 
-        # Construire le résumé des champs remplis
         filled_lines: list[str] = []
         all_filled = completion.identity_fields.filled + completion.esg_fields.filled
         for field_name in all_filled:
@@ -156,7 +191,6 @@ async def get_company_profile(config: RunnableConfig) -> str:
 
         filled_text = "\n".join(filled_lines) if filled_lines else "Aucun champ rempli."
 
-        # Construire la liste des champs manquants
         all_missing = completion.identity_fields.missing + completion.esg_fields.missing
         missing_labels = [
             FIELD_LABELS.get(f, f) for f in all_missing

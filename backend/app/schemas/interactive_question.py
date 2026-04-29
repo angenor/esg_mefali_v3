@@ -25,6 +25,8 @@ class InteractiveOption(BaseModel):
 class InteractiveQuestionCreate(BaseModel):
     """Payload de creation d'une question interactive (cote tool LLM)."""
 
+    model_config = ConfigDict(extra="forbid")
+
     question_type: InteractiveQuestionType
     prompt: str = Field(..., min_length=1, max_length=500)
     options: list[InteractiveOption] = Field(..., min_length=2, max_length=8)

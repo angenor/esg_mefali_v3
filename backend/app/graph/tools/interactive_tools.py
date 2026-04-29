@@ -14,17 +14,39 @@ from datetime import datetime, timezone
 
 from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import tool
-from pydantic import ValidationError
-from sqlalchemy import select, update
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from sqlalchemy import update
 
 from app.graph.tools.common import get_db_and_user, log_tool_call
 from app.models.interactive_question import (
     InteractiveQuestion,
     InteractiveQuestionState,
+    InteractiveQuestionType,
 )
-from app.schemas.interactive_question import InteractiveQuestionCreate
+from app.schemas.interactive_question import (
+    InteractiveOption,
+    InteractiveQuestionCreate,
+)
 
 logger = logging.getLogger(__name__)
+
+
+class AskInteractiveQuestionArgs(BaseModel):
+    """Args strict pour le tool ask_interactive_question.
+
+    `module` n'est PAS dans le schema : il est injecte depuis le RunnableConfig
+    (active_module), pas par le LLM.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    question_type: InteractiveQuestionType
+    prompt: str = Field(..., min_length=1, max_length=500)
+    options: list[InteractiveOption] = Field(..., min_length=2, max_length=8)
+    min_selections: int = Field(1, ge=1, le=8)
+    max_selections: int = Field(1, ge=1, le=8)
+    requires_justification: bool = False
+    justification_prompt: str | None = Field(None, min_length=1, max_length=200)
 
 
 def _serialize_for_sse(question: InteractiveQuestion) -> dict:
@@ -49,7 +71,7 @@ def _serialize_for_sse(question: InteractiveQuestion) -> dict:
     }
 
 
-@tool
+@tool(args_schema=AskInteractiveQuestionArgs)
 async def ask_interactive_question(
     question_type: str,
     prompt: str,
@@ -60,25 +82,16 @@ async def ask_interactive_question(
     justification_prompt: str | None = None,
     config: RunnableConfig = None,  # type: ignore[assignment]
 ) -> str:
-    """Pose une question interactive a l'utilisateur sous forme de widget cliquable.
+    """Pose une question interactive cliquable (QCU/QCM, +/- justification).
 
-    A utiliser quand la question attend :
-    - un choix unique (question_type='qcu')
-    - plusieurs choix (question_type='qcm')
-    - un choix + justification texte libre amusante ('qcu_justification' ou 'qcm_justification')
-
-    Args:
-        question_type: 'qcu' | 'qcm' | 'qcu_justification' | 'qcm_justification'.
-        prompt: Enonce de la question (1-500 caracteres, francais avec accents).
-        options: Liste de 2 a 8 dicts {id, label, emoji?, description?}.
-        min_selections: Pour QCM uniquement, minimum d'options a cocher (defaut 1).
-        max_selections: Pour QCM uniquement, maximum d'options a cocher (defaut 1).
-        requires_justification: True uniquement pour les variantes _justification.
-        justification_prompt: Libelle fun du champ justification (200 car max).
-
-    Returns:
-        Texte court avec marker SSE embarque. Le frontend affiche le widget,
-        l'utilisateur repond, et un nouveau tour LLM demarre.
+    Use when:
+    - choix structure parmi 2-8 options (secteur, format).
+    - desambiguiser via widget plutot que texte libre.
+    Don't use when:
+    - consultation (utiliser `get_company_profile`).
+    - reponse connue (utiliser `update_company_profile`).
+    Exemple: "Quel secteur ?" -> ask_interactive_question(question_type='qcu', options=[...]).
+    Anti: "Mon score ESG ?" -> NE PAS appeler.
     """
     try:
         db, _user_id = get_db_and_user(config)
@@ -105,7 +118,6 @@ async def ask_interactive_question(
         or "chat"
     )
 
-    # Validation Pydantic stricte
     try:
         payload = InteractiveQuestionCreate(
             question_type=question_type,  # type: ignore[arg-type]
@@ -125,7 +137,6 @@ async def ask_interactive_question(
         return f"Erreur : {exc}."
 
     try:
-        # Invariant : marquer toute question pending de la conversation comme expired
         now = datetime.now(timezone.utc)
         await db.execute(
             update(InteractiveQuestion)
@@ -173,7 +184,7 @@ async def ask_interactive_question(
                 tool_result={"question_id": str(question.id), "state": "pending"},
                 status="success",
             )
-        except Exception:  # pragma: no cover - journalisation defensive
+        except Exception:  # pragma: no cover
             logger.debug("Echec journalisation tool ask_interactive_question", exc_info=True)
 
         return (

@@ -5,18 +5,86 @@ import uuid
 
 from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import tool
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.graph.tools.common import get_db_and_user
 
 logger = logging.getLogger(__name__)
 
 
-@tool
-async def create_esg_assessment(config: RunnableConfig) -> str:
-    """Creer une nouvelle evaluation ESG pour l'utilisateur.
+_UUID_PATTERN = (
+    r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-"
+    r"[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+)
+_CRITERION_CODE_PATTERN = r"^[ESG][0-9]{1,3}$"
 
-    Utilise le secteur du profil utilisateur (ou 'services' par defaut).
-    Retourne l'identifiant de l'evaluation creee.
+
+class CreateESGAssessmentArgs(BaseModel):
+    """Args (vide) pour create_esg_assessment."""
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class SaveESGCriterionScoreArgs(BaseModel):
+    """Args strict pour save_esg_criterion_score."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    assessment_id: str = Field(..., min_length=36, max_length=36, pattern=_UUID_PATTERN)
+    criterion_code: str = Field(..., pattern=_CRITERION_CODE_PATTERN)
+    score: int = Field(..., ge=0, le=10)
+    justification: str = Field(..., min_length=1, max_length=2000)
+
+
+class _CriterionItem(BaseModel):
+    """Element d'un batch de criteres ESG."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    criterion_code: str = Field(..., pattern=_CRITERION_CODE_PATTERN)
+    score: int = Field(..., ge=0, le=10)
+    justification: str = Field(..., min_length=1, max_length=2000)
+
+
+class BatchSaveESGCriteriaArgs(BaseModel):
+    """Args strict pour batch_save_esg_criteria."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    assessment_id: str = Field(..., min_length=36, max_length=36, pattern=_UUID_PATTERN)
+    criteria: list[_CriterionItem] = Field(..., min_length=1, max_length=30)
+
+
+class FinalizeESGAssessmentArgs(BaseModel):
+    """Args strict pour finalize_esg_assessment."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    assessment_id: str = Field(..., min_length=36, max_length=36, pattern=_UUID_PATTERN)
+
+
+class GetESGAssessmentArgs(BaseModel):
+    """Args strict pour get_esg_assessment."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    assessment_id: str | None = Field(
+        None, min_length=36, max_length=36, pattern=_UUID_PATTERN,
+    )
+
+
+@tool(args_schema=CreateESGAssessmentArgs)
+async def create_esg_assessment(config: RunnableConfig) -> str:
+    """Cree une nouvelle evaluation ESG vide (statut draft) pour l'utilisateur.
+
+    Use when:
+    - l'utilisateur demarre explicitement une evaluation ESG.
+    - aucune evaluation reprenable trouvee via `get_esg_assessment`.
+    Don't use when:
+    - une evaluation est deja en cours (utiliser `get_esg_assessment`).
+    - simple consultation (utiliser `get_esg_assessment`).
+    Exemple: "Demarre mon ESG" -> create_esg_assessment().
+    Anti: "Ou en suis-je ?" -> NE PAS appeler.
     """
     from app.modules.esg.service import create_assessment
 
@@ -25,7 +93,6 @@ async def create_esg_assessment(config: RunnableConfig) -> str:
         configurable = (config or {}).get("configurable", {})
         conversation_id = configurable.get("conversation_id")
 
-        # Recuperer le secteur depuis le profil utilisateur si disponible
         sector = "services"
         if configurable.get("user_profile"):
             sector = configurable["user_profile"].get("sector", "services")
@@ -48,7 +115,7 @@ async def create_esg_assessment(config: RunnableConfig) -> str:
         return f"Erreur lors de la creation de l'evaluation ESG : {e}"
 
 
-@tool
+@tool(args_schema=SaveESGCriterionScoreArgs)
 async def save_esg_criterion_score(
     assessment_id: str,
     criterion_code: str,
@@ -56,13 +123,16 @@ async def save_esg_criterion_score(
     justification: str,
     config: RunnableConfig,
 ) -> str:
-    """Sauvegarder le score d'un critere ESG dans l'evaluation en cours.
+    """Enregistre la note (0-10) d'un seul critere ESG (E/S/G + numero).
 
-    Args:
-        assessment_id: Identifiant UUID de l'evaluation ESG.
-        criterion_code: Code du critere (ex: E1, S3, G7).
-        score: Note de 0 a 10.
-        justification: Justification de la note attribuee.
+    Use when:
+    - evaluer 1-3 criteres ponctuels.
+    - corriger un critere deja sauvegarde.
+    Don't use when:
+    - tout un pilier (utiliser `batch_save_esg_criteria`).
+    - pas d'evaluation (utiliser `create_esg_assessment`).
+    Exemple: "S5 solide" -> save_esg_criterion_score(criterion_code='S5', score=8).
+    Anti: "Pilier E entier" -> NE PAS appeler ; utiliser `batch_save_esg_criteria`.
     """
     from app.modules.esg.service import (
         compute_overall_score,
@@ -82,19 +152,16 @@ async def save_esg_criterion_score(
         if assessment is None:
             return f"Erreur : evaluation ESG {assessment_id} introuvable."
 
-        # Mettre a jour les scores des criteres (copie immutable)
         criteria_scores = dict((assessment.assessment_data or {}).get("criteria_scores", {}))
         criteria_scores[criterion_code] = {
             "score": score,
             "justification": justification,
         }
 
-        # Mettre a jour la liste des criteres evalues (copie immutable)
         evaluated_criteria = list(assessment.evaluated_criteria or [])
         if criterion_code not in evaluated_criteria:
             evaluated_criteria.append(criterion_code)
 
-        # Determiner le pilier courant a partir du code critere
         current_pillar = assessment.current_pillar
         if criterion_code.startswith("E"):
             current_pillar = "environment"
@@ -103,7 +170,6 @@ async def save_esg_criterion_score(
         elif criterion_code.startswith("G"):
             current_pillar = "governance"
 
-        # Persister la mise a jour
         assessment_data = dict(assessment.assessment_data or {})
         assessment_data["criteria_scores"] = criteria_scores
 
@@ -118,7 +184,6 @@ async def save_esg_criterion_score(
             status=ESGStatusEnum.in_progress,
         )
 
-        # Calculer la progression et les scores partiels
         progress = compute_progress_percent(evaluated_criteria)
         scores = compute_overall_score(criteria_scores, assessment.sector)
 
@@ -135,18 +200,21 @@ async def save_esg_criterion_score(
         return f"Erreur lors de la sauvegarde du critere {criterion_code} : {e}"
 
 
-@tool
+@tool(args_schema=FinalizeESGAssessmentArgs)
 async def finalize_esg_assessment(
     assessment_id: str,
     config: RunnableConfig,
 ) -> str:
-    """Finaliser l'evaluation ESG et calculer les scores definitifs, le benchmark sectoriel et les recommandations.
+    """Finalise l'evaluation ESG (completed) et calcule scores 0-100 + benchmark.
 
-    N'appelle ce tool que si l'utilisateur a explicitement confirme vouloir finaliser.
-    Demande d'abord confirmation.
-
-    Args:
-        assessment_id: Identifiant UUID de l'evaluation ESG a finaliser.
+    Use when:
+    - l'utilisateur a confirme explicitement la cloture.
+    - 30 criteres evalues + confirmation utilisateur.
+    Don't use when:
+    - pas de confirmation (demander via `ask_interactive_question`).
+    - simple consultation (utiliser `get_esg_assessment`).
+    Exemple: "Oui, finalise" -> finalize_esg_assessment(assessment_id='...').
+    Anti: "Affiche mon score" -> NE PAS appeler.
     """
     from app.modules.esg.service import finalize_assessment_with_benchmark, get_assessment
 
@@ -195,18 +263,21 @@ async def finalize_esg_assessment(
         return f"Erreur lors de la finalisation de l'evaluation ESG : {e}"
 
 
-@tool
+@tool(args_schema=GetESGAssessmentArgs)
 async def get_esg_assessment(
     config: RunnableConfig,
     assessment_id: str | None = None,
 ) -> str:
-    """Recuperer une evaluation ESG existante.
+    """Consulte une evaluation ESG (par id, sinon la plus recente reprenable).
 
-    Si aucun identifiant n'est fourni, cherche une evaluation en cours (brouillon ou en progression)
-    pour l'utilisateur.
-
-    Args:
-        assessment_id: Identifiant UUID de l'evaluation (optionnel).
+    Use when:
+    - l'utilisateur demande son score ou sa progression.
+    - verifier qu'une evaluation est reprenable.
+    Don't use when:
+    - demarrer une nouvelle evaluation (utiliser `create_esg_assessment`).
+    - sauvegarder un critere (utiliser `save_esg_criterion_score`).
+    Exemple: "Ou en suis-je ?" -> get_esg_assessment().
+    Anti: "Cree une evaluation" -> NE PAS appeler.
     """
     from app.modules.esg.service import (
         compute_progress_percent,
@@ -260,23 +331,22 @@ async def get_esg_assessment(
         return f"Erreur lors de la recuperation de l'evaluation ESG : {e}"
 
 
-@tool
+@tool(args_schema=BatchSaveESGCriteriaArgs)
 async def batch_save_esg_criteria(
     assessment_id: str,
     criteria: list[dict],
     config: RunnableConfig,
 ) -> str:
-    """Sauvegarder plusieurs criteres ESG en un seul appel dans l'evaluation en cours.
+    """Enregistre N criteres ESG (1-30) en une seule transaction.
 
-    Utilise ce tool pour sauvegarder un pilier entier (10 criteres) en une seule transaction
-    au lieu de 10 appels sequentiels a save_esg_criterion_score.
-
-    Args:
-        assessment_id: Identifiant UUID de l'evaluation ESG.
-        criteria: Liste de criteres, chaque element est un dict avec :
-            - criterion_code (str): Code du critere (ex: E1, S3, G7)
-            - score (int): Note de 0 a 10
-            - justification (str): Justification de la note attribuee
+    Use when:
+    - notes de plusieurs criteres (pilier complet).
+    - eviter timeout de N `save_esg_criterion_score`.
+    Don't use when:
+    - un seul critere (utiliser `save_esg_criterion_score`).
+    - pas d'evaluation (utiliser `create_esg_assessment`).
+    Exemple: "Pilier E entier" -> batch_save_esg_criteria(criteria=[...]).
+    Anti: "Note S5 a 8" -> NE PAS appeler.
     """
     from app.models.esg import ESGStatusEnum
     from app.modules.esg.service import (
@@ -300,11 +370,9 @@ async def batch_save_esg_criteria(
         if not criteria:
             return "Erreur : la liste de criteres est vide."
 
-        # Copie immutable des scores et criteres evalues
         criteria_scores = dict((assessment.assessment_data or {}).get("criteria_scores", {}))
         evaluated_criteria = list(assessment.evaluated_criteria or [])
 
-        # Appliquer chaque critere
         for criterion in criteria:
             code = criterion["criterion_code"]
             criteria_scores[code] = {
@@ -314,7 +382,6 @@ async def batch_save_esg_criteria(
             if code not in evaluated_criteria:
                 evaluated_criteria.append(code)
 
-        # Determiner le pilier courant a partir du dernier critere
         last_code = criteria[-1]["criterion_code"]
         current_pillar = assessment.current_pillar
         if last_code.startswith("E"):
@@ -324,7 +391,6 @@ async def batch_save_esg_criteria(
         elif last_code.startswith("G"):
             current_pillar = "governance"
 
-        # Persister la mise a jour en une seule transaction
         assessment_data = dict(assessment.assessment_data or {})
         assessment_data["criteria_scores"] = criteria_scores
 
@@ -337,7 +403,6 @@ async def batch_save_esg_criteria(
             status=ESGStatusEnum.in_progress,
         )
 
-        # Calculer la progression et les scores partiels
         progress = compute_progress_percent(evaluated_criteria)
         scores = compute_overall_score(criteria_scores, assessment.sector)
 

@@ -1,0 +1,63 @@
+{
+  "tools": {
+    "ask_interactive_question": {
+      "description_chars": 976,
+      "args_schema_chars": 1742
+    },
+    "update_company_profile": {
+      "description_chars": 373,
+      "args_schema_chars": 2318
+    },
+    "get_company_profile": {
+      "description_chars": 252,
+      "args_schema_chars": 343
+    },
+    "create_esg_assessment": {
+      "description_chars": 169,
+      "args_schema_chars": 261
+    },
+    "save_esg_criterion_score": {
+      "description_chars": 265,
+      "args_schema_chars": 675
+    },
+    "finalize_esg_assessment": {
+      "description_chars": 298,
+      "args_schema_chars": 487
+    },
+    "get_esg_assessment": {
+      "description_chars": 229,
+      "args_schema_chars": 430
+    },
+    "batch_save_esg_criteria": {
+      "description_chars": 530,
+      "args_schema_chars": 846
+    },
+    "create_fund_application": {
+      "description_chars": 327,
+      "args_schema_chars": 606
+    },
+    "generate_application_section": {
+      "description_chars": 395,
+      "args_schema_chars": 777
+    },
+    "update_application_section": {
+      "description_chars": 326,
+      "args_schema_chars": 659
+    },
+    "get_application_checklist": {
+      "description_chars": 261,
+      "args_schema_chars": 455
+    },
+    "simulate_financing": {
+      "description_chars": 257,
+      "args_schema_chars": 444
+    },
+    "export_application": {
+      "description_chars": 254,
+      "args_schema_chars": 501
+    }
+  },
+  "total_description_chars": 4912,
+  "total_args_schema_chars": 10544,
+  "tools_count": 14
+}

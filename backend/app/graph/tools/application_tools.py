@@ -6,18 +6,96 @@ Six tools exposes au LLM :
 - update_application_section : modifier une section
 - get_application_checklist : consulter la checklist
 - simulate_financing : simulation financiere
-- export_application : exporter en PDF/DOCX
+- export_application : exporter en PDF/DOCX/JSON
 """
 
+import enum
 import logging
 import uuid
 
 from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import tool
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.graph.tools.common import get_db_and_user
+from app.models.application import TargetType
 
 logger = logging.getLogger(__name__)
+
+
+_UUID_PATTERN = (
+    r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-"
+    r"[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+)
+_SECTION_KEY_PATTERN = r"^[a-z][a-z0-9_]{0,63}$"
+
+
+class ExportFormat(str, enum.Enum):
+    """Formats d'export d'un dossier de candidature."""
+
+    pdf = "pdf"
+    docx = "docx"
+    json = "json"
+
+
+# --- Args Schemas ---
+
+
+class CreateFundApplicationArgs(BaseModel):
+    """Args strict pour create_fund_application."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    fund_id: str = Field(..., min_length=36, max_length=36, pattern=_UUID_PATTERN)
+    target_type: TargetType | None = None
+
+
+class GenerateApplicationSectionArgs(BaseModel):
+    """Args strict pour generate_application_section."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    application_id: str = Field(..., min_length=36, max_length=36, pattern=_UUID_PATTERN)
+    section_key: str = Field(..., pattern=_SECTION_KEY_PATTERN)
+    instructions: str | None = Field(None, min_length=1, max_length=2000)
+
+
+class UpdateApplicationSectionArgs(BaseModel):
+    """Args strict pour update_application_section."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    application_id: str = Field(..., min_length=36, max_length=36, pattern=_UUID_PATTERN)
+    section_key: str = Field(..., pattern=_SECTION_KEY_PATTERN)
+    content: str = Field(..., min_length=1, max_length=50_000)
+
+
+class GetApplicationChecklistArgs(BaseModel):
+    """Args strict pour get_application_checklist."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    application_id: str = Field(..., min_length=36, max_length=36, pattern=_UUID_PATTERN)
+
+
+class SimulateFinancingArgs(BaseModel):
+    """Args strict pour simulate_financing."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    application_id: str = Field(..., min_length=36, max_length=36, pattern=_UUID_PATTERN)
+
+
+class ExportApplicationArgs(BaseModel):
+    """Args strict pour export_application."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    application_id: str = Field(..., min_length=36, max_length=36, pattern=_UUID_PATTERN)
+    format: ExportFormat
+
+
+# --- Helpers ---
 
 
 async def _simulate_financing(db, application) -> dict:
@@ -45,31 +123,31 @@ async def _simulate_financing(db, application) -> dict:
 
 
 async def _export_application(db, application, fmt: str) -> str:
-    """Exporter un dossier en PDF ou DOCX.
-
-    Retourne le chemin du fichier genere.
-    """
-    # Placeholder — la generation reelle via WeasyPrint/python-docx
-    # sera implementee dans le service quand les templates seront prets
+    """Exporter un dossier en PDF, DOCX ou JSON. Retourne le chemin du fichier."""
     export_path = f"/uploads/applications/{application.id}.{fmt}"
     logger.info("Export dossier %s au format %s -> %s", application.id, fmt, export_path)
     return export_path
 
 
-@tool
+# --- Tools ---
+
+
+@tool(args_schema=CreateFundApplicationArgs)
 async def create_fund_application(
     fund_id: str,
     config: RunnableConfig,
     target_type: str | None = None,
 ) -> str:
-    """Creer un nouveau dossier de candidature pour un fonds.
+    """Cree un nouveau dossier de candidature pour un fonds vert (statut draft).
 
-    Utilise cet outil quand l'utilisateur demande de creer ou demarrer
-    un dossier de candidature pour un fonds vert specifique.
-
-    Args:
-        fund_id: Identifiant UUID du fonds cible.
-        target_type: Type de destinataire optionnel (direct, banque, agence, developpeur_carbone).
+    Use when:
+    - l'utilisateur valide candidater a un fonds (uuid valide).
+    - apres matching d'un fonds, "je candidate".
+    Don't use when:
+    - aucun fonds identifie (cf. `module financing`).
+    - simple consultation (cf. `module financing`).
+    Exemple: "Je candidate au GCF" -> create_fund_application(fund_id='<uuid>').
+    Anti: "Quels fonds existent ?" -> NE PAS appeler.
     """
     from app.modules.applications.service import create_application
 
@@ -93,22 +171,23 @@ async def create_fund_application(
         return f"Erreur lors de la creation du dossier : {e}"
 
 
-@tool
+@tool(args_schema=GenerateApplicationSectionArgs)
 async def generate_application_section(
     application_id: str,
     section_key: str,
     config: RunnableConfig,
     instructions: str | None = None,
 ) -> str:
-    """Generer une section du dossier de candidature.
+    """Genere par IA le contenu d'une section du dossier (presentation, budget, impact).
 
-    Utilise cet outil quand l'utilisateur demande de generer ou rediger
-    une section du dossier (presentation entreprise, budget, impact, etc.).
-
-    Args:
-        application_id: Identifiant UUID du dossier.
-        section_key: Cle de la section (ex: company_presentation, budget, impact_analysis).
-        instructions: Instructions optionnelles pour la generation.
+    Use when:
+    - "redige", "genere", "ecris" une section.
+    - section_key + application_id connus.
+    Don't use when:
+    - texte deja fourni (utiliser `update_application_section`).
+    - voir checklist (utiliser `get_application_checklist`).
+    Exemple: "Genere la presentation" -> generate_application_section(section_key='company_presentation').
+    Anti: "Voici mon budget" -> NE PAS appeler.
     """
     from app.modules.applications.service import generate_section, get_application_by_id
 
@@ -133,22 +212,23 @@ async def generate_application_section(
         return f"Erreur lors de la generation de la section : {e}"
 
 
-@tool
+@tool(args_schema=UpdateApplicationSectionArgs)
 async def update_application_section(
     application_id: str,
     section_key: str,
     content: str,
     config: RunnableConfig,
 ) -> str:
-    """Modifier le contenu d'une section du dossier de candidature.
+    """Remplace le contenu textuel d'une section existante du dossier.
 
-    Utilise cet outil quand l'utilisateur fournit du texte pour modifier
-    ou remplacer le contenu d'une section existante.
-
-    Args:
-        application_id: Identifiant UUID du dossier.
-        section_key: Cle de la section a modifier.
-        content: Nouveau contenu de la section.
+    Use when:
+    - texte explicite fourni par l'utilisateur.
+    - persister un contenu collecte sur plusieurs tours.
+    Don't use when:
+    - generation IA (utiliser `generate_application_section`).
+    - pas de dossier (utiliser `create_fund_application`).
+    Exemple: "Mon budget 50M FCFA" -> update_application_section(section_key='budget', content='...').
+    Anti: "Genere mon budget" -> NE PAS appeler.
     """
     from app.modules.applications.service import get_application_by_id, update_section
 
@@ -175,18 +255,21 @@ async def update_application_section(
         return f"Erreur lors de la mise a jour de la section : {e}"
 
 
-@tool
+@tool(args_schema=GetApplicationChecklistArgs)
 async def get_application_checklist(
     application_id: str,
     config: RunnableConfig,
 ) -> str:
-    """Consulter la checklist des documents requis pour un dossier de candidature.
+    """Consulte la checklist des documents requis pour un dossier (lecture seule).
 
-    Utilise cet outil quand l'utilisateur demande quels documents sont requis,
-    ce qui manque, ou l'etat d'avancement de son dossier.
-
-    Args:
-        application_id: Identifiant UUID du dossier.
+    Use when:
+    - "quels documents", "que manque-t-il".
+    - decider si l'export est possible.
+    Don't use when:
+    - generer du contenu (utiliser `generate_application_section`).
+    - score ESG (utiliser `get_esg_assessment`).
+    Exemple: "Que manque-t-il ?" -> get_application_checklist(application_id='...').
+    Anti: "Genere mon budget" -> NE PAS appeler.
     """
     from app.modules.applications.service import get_application_by_id, get_checklist
 
@@ -219,18 +302,21 @@ async def get_application_checklist(
         return f"Erreur lors de la consultation de la checklist : {e}"
 
 
-@tool
+@tool(args_schema=SimulateFinancingArgs)
 async def simulate_financing(
     application_id: str,
     config: RunnableConfig,
 ) -> str:
-    """Simuler les conditions de financement pour un dossier de candidature.
+    """Calcule une simulation financiere (montant eligible, ROI, timeline) du dossier.
 
-    Utilise cet outil quand l'utilisateur demande une estimation des montants,
-    du ROI, de la timeline ou de l'impact d'un financement.
-
-    Args:
-        application_id: Identifiant UUID du dossier.
+    Use when:
+    - estimation financiere d'un dossier (montant, ROI, duree).
+    - comparatif avant export.
+    Don't use when:
+    - comparer plusieurs fonds avant candidature (utiliser module financing).
+    - pas de dossier (utiliser `create_fund_application`).
+    Exemple: "Quel montant esperer ?" -> simulate_financing(application_id='...').
+    Anti: "Liste les fonds" -> NE PAS appeler.
     """
     from app.modules.applications.service import get_application_by_id
 
@@ -258,20 +344,22 @@ async def simulate_financing(
         return f"Erreur lors de la simulation : {e}"
 
 
-@tool
+@tool(args_schema=ExportApplicationArgs)
 async def export_application(
     application_id: str,
     format: str,
     config: RunnableConfig,
 ) -> str:
-    """Exporter un dossier de candidature en PDF ou Word.
+    """Exporte le dossier au format pdf|docx|json et retourne l'URL.
 
-    Utilise cet outil quand l'utilisateur demande a telecharger ou exporter
-    son dossier de candidature.
-
-    Args:
-        application_id: Identifiant UUID du dossier.
-        format: Format d'export ('pdf' ou 'docx').
+    Use when:
+    - confirmation de telecharger/envoyer le dossier.
+    - dossier complet (cf. `get_application_checklist`).
+    Don't use when:
+    - dossier incomplet (utiliser `get_application_checklist`).
+    - preparer du contenu (utiliser `generate_application_section`).
+    Exemple: "Exporte en PDF" -> export_application(format='pdf').
+    Anti: "Genere ma presentation" -> NE PAS appeler.
     """
     from app.modules.applications.service import get_application_by_id
 
@@ -282,8 +370,8 @@ async def export_application(
         if application is None:
             return f"Dossier de candidature introuvable (id={application_id})."
 
-        if format not in ("pdf", "docx"):
-            return f"Format non supporte : '{format}'. Utilisez 'pdf' ou 'docx'."
+        if format not in ("pdf", "docx", "json"):
+            return f"Format non supporte : '{format}'. Utilisez 'pdf', 'docx' ou 'json'."
 
         export_path = await _export_application(db, application, format)
 
