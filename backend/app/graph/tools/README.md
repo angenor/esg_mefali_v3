@@ -152,3 +152,10 @@ Lit les 50 dernieres conversations de `tool_call_logs.tools_offered`, agrege
 par noeud LangGraph et ecrit un rapport markdown dans
 `backend/tools/_tools_offered_report.md`. Code de sortie 1 si une conversation
 depasse `MAX_TOOLS_PER_TURN`.
+
+## Eval set v1 — 30 cas (story 10.3)
+
+Golden set deterministe `(message_utilisateur, current_page) -> (tool_attendu,
+payload_attendu)` pour la non-regression du tool-calling LLM. Voir
+`backend/tests/llm_eval/README.md` pour les commandes, l'ajout de cas et les
+verrous a respecter.

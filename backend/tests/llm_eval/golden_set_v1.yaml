@@ -1,0 +1,313 @@
+# Golden set v1 — Story 10.3 (epic M10)
+#
+# Repartition (cf. story 10.3 contexte §1, repartition CORRIGEE) :
+#   ask_interactive_question / qcu                   : 5
+#   ask_interactive_question / qcm                   : 2
+#   ask_interactive_question / qcu_justification     : 1
+#   update_company_profile                           : 6
+#   create_fund_application                          : 3
+#   batch_save_esg_criteria                          : 3
+#   create_carbon_assessment (mutation carbone reelle): 2
+#   trigger_guided_tour                              : 1
+#   get_company_profile_chat / get_user_dashboard_summary (lecture) : 2
+#   Cas piege (pas de tool, texte libre attendu)     : 5
+#   ----------------------------------------------------------------
+#   Total                                            : 30
+#
+# Verrous (rappel) :
+#   - `ask_qcu` / `ask_qcm` / `show_*` n'existent PAS — verrou stories 10.1 + 10.2.
+#   - Le champ s'appelle `current_page` (pas `page_context`).
+#   - `current_page` = path Nuxt brut, normalise par `normalize_page` cote runner.
+#   - `expected_tool: null` => texte libre attendu (cas piege).
+#   - `expected_payload_partial` est valide en subset match (egalite des champs cites).
+#   - Pour les tools dont l'argument requiert un UUID (assessment_id, fund_id,
+#     application_id), `expected_payload_partial` reste vide ou minimal car le LLM
+#     ne peut pas inventer un UUID valide pour la cible reelle. Le test
+#     `payload_valide` (Pydantic strict) reste pertinent : il echouera si le LLM
+#     fournit autre chose qu'un UUID-like — c'est volontaire et trace en baseline.
+
+- id: case_001
+  message: "Quel est le secteur de mon entreprise ?"
+  current_page: "/profile"
+  node_name: "chat"
+  expected_tool: "ask_interactive_question"
+  expected_payload_partial:
+    question_type: "qcu"
+  accepted_alternatives:
+    - "get_company_profile"
+    - "get_company_profile_chat"
+  notes: "QCU classique : choix d'un secteur unique. Alt accepte : LLM peut prudemment lire le profil avant de poser la question (read-before-ask)."
+
+- id: case_002
+  message: "Pour mon profil ESG, je dois choisir une seule forme juridique. Aide moi."
+  current_page: "/profile"
+  node_name: "chat"
+  expected_tool: "ask_interactive_question"
+  expected_payload_partial:
+    question_type: "qcu"
+  accepted_alternatives:
+    - "get_company_profile"
+    - "get_company_profile_chat"
+  notes: "QCU : forme juridique exclusive. Alt accepte : read-before-ask."
+
+- id: case_003
+  message: "Je veux que tu me proposes des choix pour la taille de mon entreprise."
+  current_page: "/profile"
+  node_name: "chat"
+  expected_tool: "ask_interactive_question"
+  expected_payload_partial:
+    question_type: "qcu"
+  notes: "QCU : tranche de taille (PME/TPE/...)"
+
+- id: case_004
+  message: "Propose-moi une liste cliquable pour choisir mon pays principal d'activite."
+  current_page: "/profile"
+  node_name: "chat"
+  expected_tool: "ask_interactive_question"
+  expected_payload_partial:
+    question_type: "qcu"
+  notes: "QCU : pays principal."
+
+- id: case_005
+  message: "Aide-moi a choisir un seul niveau de maturite ESG parmi tes options."
+  current_page: "/esg"
+  node_name: "esg_scoring"
+  expected_tool: "ask_interactive_question"
+  expected_payload_partial:
+    question_type: "qcu"
+  notes: "QCU module ESG."
+
+- id: case_006
+  message: "Je peux cocher plusieurs ODD parmi les 17. Donne-moi la liste cliquable."
+  current_page: "/esg"
+  node_name: "esg_scoring"
+  expected_tool: "ask_interactive_question"
+  expected_payload_partial:
+    question_type: "qcm"
+  notes: "QCM : multi-selection ODD."
+
+- id: case_007
+  message: "Affiche-moi les certifications dont je dispose, je peux en cocher plusieurs."
+  current_page: "/profile"
+  node_name: "chat"
+  expected_tool: "ask_interactive_question"
+  expected_payload_partial:
+    question_type: "qcm"
+  accepted_alternatives:
+    - "get_company_profile"
+    - "get_company_profile_chat"
+  notes: "QCM : certifications multiples. Alt accepte : read-before-ask sur le profil."
+
+- id: case_008
+  message: "Demande-moi de choisir une priorite ESG et explique pourquoi je dois justifier mon choix."
+  current_page: "/esg"
+  node_name: "esg_scoring"
+  expected_tool: "ask_interactive_question"
+  expected_payload_partial:
+    question_type: "qcu_justification"
+  notes: "QCU avec justification obligatoire."
+
+- id: case_009
+  message: "Mon entreprise est une SARL avec 12 salaries dans l'agroalimentaire."
+  current_page: "/profile"
+  node_name: "chat"
+  expected_tool: "update_company_profile"
+  expected_payload_partial:
+    employee_count: 12
+    sector: "agroalimentaire"
+  notes: "Mutation profil 3 champs canoniques."
+
+- id: case_010
+  message: "Mets a jour ma fiche : nous sommes 25 employes."
+  current_page: "/profile"
+  node_name: "chat"
+  expected_tool: "update_company_profile"
+  expected_payload_partial:
+    employee_count: 25
+  notes: "Mutation profil un champ."
+
+- id: case_011
+  message: "Notre raison sociale est Solar Niger SA et nous sommes bases a Niamey."
+  current_page: "/profile"
+  node_name: "chat"
+  expected_tool: "update_company_profile"
+  expected_payload_partial:
+    company_name: "Solar Niger SA"
+    city: "Niamey"
+  notes: "Mutation profil nom + ville."
+
+- id: case_012
+  message: "Note bien que mon secteur principal est l'energie."
+  current_page: "/profile"
+  node_name: "chat"
+  expected_tool: "update_company_profile"
+  expected_payload_partial:
+    sector: "energie"
+  notes: "Mutation profil enum sector."
+
+- id: case_013
+  message: "On a une politique formelle de gestion des dechets, ajoute-le a mon profil."
+  current_page: "/profile"
+  node_name: "chat"
+  expected_tool: "update_company_profile"
+  expected_payload_partial:
+    has_waste_management: true
+  notes: "Mutation profil flag booleen."
+
+- id: case_014
+  message: "Mon entreprise a ete creee en 2018 au Senegal."
+  current_page: "/profile"
+  node_name: "chat"
+  expected_tool: "update_company_profile"
+  expected_payload_partial:
+    year_founded: 2018
+    country: "Senegal"
+  notes: "Mutation profil annee + pays."
+
+- id: case_015
+  message: "Je veux candidater au fonds que je viens de consulter, lance le dossier."
+  current_page: "/financing/123e4567-e89b-12d3-a456-426614174000"
+  node_name: "financing"
+  expected_tool: "create_fund_application"
+  expected_payload_partial: {}
+  accepted_alternatives:
+    - "ask_interactive_question"
+    - "get_fund_details"
+  notes: "Creation dossier depuis fiche fonds. Alt accepte : LLM peut clarifier (ask) ou relire la fiche (get_fund_details) avant de creer."
+
+- id: case_016
+  message: "Cree-moi un nouveau dossier de candidature pour ce fonds."
+  current_page: "/candidatures"
+  node_name: "application"
+  expected_tool: "create_fund_application"
+  expected_payload_partial: {}
+  accepted_alternatives:
+    - "ask_interactive_question"
+  notes: "Creation dossier explicite depuis /candidatures. Alt accepte : 'ce fonds' est ambigu sans UUID -> LLM clarifie via ask."
+
+- id: case_017
+  message: "Je veux deposer une demande de financement pour le fonds 7c9e6679-7425-40de-944b-e07fc1f90ae7."
+  current_page: "/financing"
+  node_name: "financing"
+  expected_tool: "create_fund_application"
+  expected_payload_partial: {}
+  accepted_alternatives:
+    - "get_fund_details"
+  notes: "Creation dossier avec UUID explicite. Alt accepte : LLM peut verifier que le fonds existe avant de creer (read-before-write)."
+
+- id: case_018
+  message: "J'ai fini mon evaluation ESG. Enregistre les 30 scores que je viens de te donner."
+  current_page: "/esg"
+  node_name: "esg_scoring"
+  expected_tool: "batch_save_esg_criteria"
+  expected_payload_partial: {}
+  accepted_alternatives:
+    - "get_esg_assessment"
+    - "ask_interactive_question"
+  notes: "Batch save ESG. Alt accepte : LLM peut lire l'evaluation en cours (get) avant batch save, ou clarifier (ask) si scores ambigus."
+
+- id: case_019
+  message: "Sauvegarde tous les criteres ESG d'un coup pour mon evaluation en cours."
+  current_page: "/esg"
+  node_name: "esg_scoring"
+  expected_tool: "batch_save_esg_criteria"
+  expected_payload_partial: {}
+  accepted_alternatives:
+    - "get_esg_assessment"
+    - "ask_interactive_question"
+  notes: "Batch save formulation alternative. Alt accepte : read-before-write."
+
+- id: case_020
+  message: "Enregistre en lot les notes E1, E2, S1, S2, G1, G2 que je viens de saisir."
+  current_page: "/esg/results"
+  node_name: "esg_scoring"
+  expected_tool: "batch_save_esg_criteria"
+  expected_payload_partial: {}
+  accepted_alternatives:
+    - "get_esg_assessment"
+    - "ask_interactive_question"
+  notes: "Batch save ESG sur /esg/results. Alt accepte : read-before-write."
+
+- id: case_021
+  message: "Demarre mon bilan carbone pour l'annee 2025."
+  current_page: "/carbon"
+  node_name: "carbon"
+  expected_tool: "create_carbon_assessment"
+  expected_payload_partial:
+    year: 2025
+  notes: "Mutation carbone : creation bilan annuel."
+
+- id: case_022
+  message: "Je veux faire un bilan carbone pour 2024."
+  current_page: "/carbon"
+  node_name: "carbon"
+  expected_tool: "create_carbon_assessment"
+  expected_payload_partial:
+    year: 2024
+  notes: "Mutation carbone : annee differente."
+
+- id: case_023
+  message: "Montre-moi visuellement comment lire mes resultats ESG, je suis perdu dans cette page."
+  current_page: "/esg/results"
+  node_name: "esg_scoring"
+  expected_tool: "trigger_guided_tour"
+  expected_payload_partial: {}
+  notes: "Tool transverse (whitelist globale story 10.2)."
+
+- id: case_024
+  message: "Quel est mon profil entreprise ? Donne-moi un resume rapide."
+  current_page: "/profile"
+  node_name: "chat"
+  expected_tool: "get_company_profile_chat"
+  expected_payload_partial: {}
+  accepted_alternatives:
+    - "get_company_profile"
+  notes: "Lecture profil depuis chat. Alt accepte : variante quasi-identique disponible dans le meme catalogue."
+
+- id: case_025
+  message: "Fais-moi un resume de mes scores et bilans actuels."
+  current_page: "/dashboard"
+  node_name: "chat"
+  expected_tool: "get_user_dashboard_summary"
+  expected_payload_partial: {}
+  notes: "Lecture dashboard transverse."
+
+- id: case_026
+  message: "Bonjour, comment vas-tu aujourd'hui ?"
+  current_page: "/"
+  node_name: "chat"
+  expected_tool: null
+  expected_payload_partial: {}
+  notes: "Piege salutation : pas de tool."
+
+- id: case_027
+  message: "Quelle est la capitale du Bresil ?"
+  current_page: "/"
+  node_name: "chat"
+  expected_tool: null
+  expected_payload_partial: {}
+  notes: "Piege off-topic geographie."
+
+- id: case_028
+  message: "Que penses-tu de la finance verte en Afrique de l'Ouest ?"
+  current_page: "/"
+  node_name: "chat"
+  expected_tool: null
+  expected_payload_partial: {}
+  notes: "Piege opinion ouverte sur le domaine."
+
+- id: case_029
+  message: "Merci."
+  current_page: "/"
+  node_name: "chat"
+  expected_tool: null
+  expected_payload_partial: {}
+  notes: "Piege message court de remerciement."
+
+- id: case_030
+  message: "Explique-moi rapidement la difference entre ESG et RSE."
+  current_page: "/"
+  node_name: "chat"
+  expected_tool: null
+  expected_payload_partial: {}
+  notes: "Piege question pedagogique : reponse en texte libre attendue."

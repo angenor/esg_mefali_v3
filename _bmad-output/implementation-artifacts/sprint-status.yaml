@@ -35,9 +35,9 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: 2026-04-12
-last_updated: '2026-04-29' (Story 10.2 done : selecteur de tools par contexte de page mergé, 1260 tests verts)
-last_review_completed: '10-2-tool-filtering-by-page-context'
-last_story_created: '10-2-tool-filtering-by-page-context'
+last_updated: '2026-04-29' (Story 10.3 done : baseline initiale Sonnet 4.6 generee, golden set v2 avec accepted_alternatives, 3-run avg 93.3% bon_tool / 5.6% fallback / 100% payload)
+last_review_completed: '10-3-eval-set-30-cas'
+last_story_created: '10-3-eval-set-30-cas'
 project: esg_mefali
 project_key: NOKEY
 tracking_system: file-system
@@ -111,7 +111,7 @@ development_status:
   epic-10: in-progress
   10-1-tool-descriptions-pydantic-strict: done
   10-2-tool-filtering-by-page-context: done
-  10-3-eval-set-30-cas: backlog
+  10-3-eval-set-30-cas: done
   10-4-pydantic-retry-loop: backlog
   10-5-post-mvp-backlog: backlog
   epic-10-retrospective: optional
