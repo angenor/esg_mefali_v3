@@ -17,7 +17,7 @@ from langchain_core.tools import tool
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from sqlalchemy import update
 
-from app.graph.tools.common import get_db_and_user, log_tool_call
+from app.graph.tools.common import _tools_offered_from_config, get_db_and_user, log_tool_call
 from app.models.interactive_question import (
     InteractiveQuestion,
     InteractiveQuestionState,
@@ -183,6 +183,7 @@ async def ask_interactive_question(
                 },
                 tool_result={"question_id": str(question.id), "state": "pending"},
                 status="success",
+                tools_offered=_tools_offered_from_config(config),
             )
         except Exception:  # pragma: no cover
             logger.debug("Echec journalisation tool ask_interactive_question", exc_info=True)

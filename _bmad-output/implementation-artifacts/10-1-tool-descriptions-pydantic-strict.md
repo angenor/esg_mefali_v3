@@ -1,6 +1,6 @@
 # Story 10.1 : Tool descriptions beton + schemas Pydantic stricts
 
-Status: review
+Status: done
 
 <!-- Source planning :
   - _bmad-output/planning-artifacts/module-10-tool-use-reliability/story-1-tool-descriptions-pydantic-strict.md
@@ -212,7 +212,7 @@ Les prompts modules (`backend/app/prompts/`) referencent les tools avec leurs no
   - [x] 7.1 `pytest backend/` : 1219 passed (3 echecs guided_tour pre-existants sur main, hors perimetre AC8).
   - [x] 7.2 `python -c "from app.main import app"` demarre sans warning LangChain.
   - [x] 7.3 Smoke test : import app + 77 routes detectees + 14 tools chargent leur args_schema.
-  - [ ] 7.4 PR vers `main` avec rapport tokens (a creer apres review).
+  - [x] 7.4 PR vers `main` ouverte avec rapport tokens.
 
 ## Dev Notes
 

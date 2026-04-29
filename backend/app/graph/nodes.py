@@ -4,14 +4,33 @@ import logging
 import re
 
 from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_core.runnables import RunnableConfig
 from langchain_openai import ChatOpenAI
 
 from app.core.config import settings
 from app.graph.state import ConversationState
+from app.graph.tool_selector import select_tools_for_node
 from app.modules.company.service import FIELD_LABELS, IDENTITY_FIELDS
 from app.prompts.system import build_system_prompt
 
 logger = logging.getLogger(__name__)
+
+
+def _propagate_tools_offered(
+    config: RunnableConfig | None,
+    tools_offered: list[str],
+) -> None:
+    """Stocker `tools_offered` dans le RunnableConfig pour que log_tool_call
+    le retrouve au moment d'ecrire dans tool_call_logs (story 10.2).
+
+    Remplace `configurable` par un nouveau dict pour eviter toute mutation
+    in-place qui pourrait corrompre le RunnableConfig partage entre tours.
+    """
+    if config is None:
+        return
+    existing = config.get("configurable", {}) or {}  # type: ignore[union-attr]
+    config["configurable"] = {**existing, "tools_offered": tools_offered}  # type: ignore[index]
+
 
 TITLE_PROMPT = (
     "Résume cette conversation en un titre court (5 mots maximum) en français. "
@@ -551,7 +570,10 @@ async def _fetch_rag_context_for_esg(
         return ""
 
 
-async def esg_scoring_node(state: ConversationState) -> ConversationState:
+async def esg_scoring_node(
+    state: ConversationState,
+    config: RunnableConfig | None = None,
+) -> ConversationState:
     """Noeud d'evaluation ESG : conduit l'evaluation conversationnelle avec tool calling.
 
     Gere l'etat de l'evaluation (creation, progression, finalisation)
@@ -671,7 +693,15 @@ async def esg_scoring_node(state: ConversationState) -> ConversationState:
 
     from app.graph.tools.guided_tour_tools import GUIDED_TOUR_TOOLS
     from app.graph.tools.interactive_tools import INTERACTIVE_TOOLS
-    llm_with_tools = llm.bind_tools(ESG_TOOLS + INTERACTIVE_TOOLS + GUIDED_TOUR_TOOLS)
+    full_catalog = ESG_TOOLS + INTERACTIVE_TOOLS + GUIDED_TOUR_TOOLS
+    filtered_tools, debug_info = select_tools_for_node(
+        node_name="esg_scoring",
+        current_page=state.get("current_page"),
+        all_tools=full_catalog,
+        active_entities=state.get("active_entities"),
+    )
+    _propagate_tools_offered(config, debug_info["tools_offered"])
+    llm_with_tools = llm.bind_tools(filtered_tools)
     response = await llm_with_tools.ainvoke(chat_messages)
 
     # Incrementer le compteur de tool calls si le LLM a demande des tools
@@ -706,7 +736,10 @@ async def esg_scoring_node(state: ConversationState) -> ConversationState:
     }
 
 
-async def carbon_node(state: ConversationState) -> ConversationState:
+async def carbon_node(
+    state: ConversationState,
+    config: RunnableConfig | None = None,
+) -> ConversationState:
     """Noeud de bilan carbone : conduit le questionnaire conversationnel.
 
     Gere l'etat du bilan (creation, progression par categorie, finalisation)
@@ -836,7 +869,14 @@ async def carbon_node(state: ConversationState) -> ConversationState:
     ]]
 
     all_carbon_tools = (CARBON_TOOLS or []) + INTERACTIVE_TOOLS + GUIDED_TOUR_TOOLS
-    llm_with_tools = llm.bind_tools(all_carbon_tools)
+    filtered_tools, debug_info = select_tools_for_node(
+        node_name="carbon",
+        current_page=state.get("current_page"),
+        all_tools=all_carbon_tools,
+        active_entities=state.get("active_entities"),
+    )
+    _propagate_tools_offered(config, debug_info["tools_offered"])
+    llm_with_tools = llm.bind_tools(filtered_tools)
     response = await llm_with_tools.ainvoke(chat_messages)
 
     # Gestion du cycle de vie active_module
@@ -880,7 +920,10 @@ async def _fetch_rag_context_for_financing(query: str) -> str:
         return ""
 
 
-async def financing_node(state: ConversationState) -> ConversationState:
+async def financing_node(
+    state: ConversationState,
+    config: RunnableConfig | None = None,
+) -> ConversationState:
     """Noeud de conseil en financement vert avec tool calling.
 
     Utilise les tools search_compatible_funds, save_fund_interest, get_fund_details
@@ -894,8 +937,16 @@ async def financing_node(state: ConversationState) -> ConversationState:
 
     llm = get_llm()
 
-    # Lier les tools financement + interactif + guidage au LLM
-    llm = llm.bind_tools((FINANCING_TOOLS or []) + INTERACTIVE_TOOLS + GUIDED_TOUR_TOOLS)
+    # Lier les tools financement + interactif + guidage au LLM (filtres par contexte)
+    full_catalog = (FINANCING_TOOLS or []) + INTERACTIVE_TOOLS + GUIDED_TOUR_TOOLS
+    filtered_tools, debug_info = select_tools_for_node(
+        node_name="financing",
+        current_page=state.get("current_page"),
+        all_tools=full_catalog,
+        active_entities=state.get("active_entities"),
+    )
+    _propagate_tools_offered(config, debug_info["tools_offered"])
+    llm = llm.bind_tools(filtered_tools)
 
     user_profile = state.get("user_profile") or {}
     financing_data = state.get("financing_data")
@@ -1056,7 +1107,10 @@ async def _fetch_credit_scoring_context(user_id: str | None) -> tuple[str, list[
         return "Erreur lors de la recuperation du score.", []
 
 
-async def credit_node(state: ConversationState) -> ConversationState:
+async def credit_node(
+    state: ConversationState,
+    config: RunnableConfig | None = None,
+) -> ConversationState:
     """Noeud scoring credit vert avec tool calling.
 
     Utilise les tools generate_credit_score, get_credit_score et
@@ -1069,8 +1123,16 @@ async def credit_node(state: ConversationState) -> ConversationState:
 
     llm = get_llm()
 
-    # Lier les tools credit + interactif + guidage au LLM
-    llm = llm.bind_tools((CREDIT_TOOLS or []) + INTERACTIVE_TOOLS + GUIDED_TOUR_TOOLS)
+    # Lier les tools credit + interactif + guidage au LLM (filtres par contexte)
+    full_catalog = (CREDIT_TOOLS or []) + INTERACTIVE_TOOLS + GUIDED_TOUR_TOOLS
+    filtered_tools, debug_info = select_tools_for_node(
+        node_name="credit",
+        current_page=state.get("current_page"),
+        all_tools=full_catalog,
+        active_entities=state.get("active_entities"),
+    )
+    _propagate_tools_offered(config, debug_info["tools_offered"])
+    llm = llm.bind_tools(filtered_tools)
 
     user_profile = state.get("user_profile") or {}
     credit_data = state.get("credit_data")
@@ -1125,7 +1187,10 @@ async def credit_node(state: ConversationState) -> ConversationState:
     }
 
 
-async def chat_node(state: ConversationState) -> ConversationState:
+async def chat_node(
+    state: ConversationState,
+    config: RunnableConfig | None = None,
+) -> ConversationState:
     """Noeud principal avec tool calling : profilage + lecture temps reel.
 
     Lie les tools de profilage ET les tools de lecture (dashboard, ESG, carbone)
@@ -1143,7 +1208,14 @@ async def chat_node(state: ConversationState) -> ConversationState:
     # Combiner les tools de profilage, lecture, documents, widgets interactifs et guidage
     all_tools = PROFILING_TOOLS + CHAT_TOOLS + DOCUMENT_TOOLS + INTERACTIVE_TOOLS + GUIDED_TOUR_TOOLS
     if all_tools:
-        llm = llm.bind_tools(all_tools)
+        filtered_tools, debug_info = select_tools_for_node(
+            node_name="chat",
+            current_page=state.get("current_page"),
+            all_tools=all_tools,
+            active_entities=state.get("active_entities"),
+        )
+        _propagate_tools_offered(config, debug_info["tools_offered"])
+        llm = llm.bind_tools(filtered_tools)
 
     user_profile = state.get("user_profile")
     context_memory = state.get("context_memory", [])
@@ -1227,7 +1299,10 @@ async def profiling_node(state: ConversationState) -> ConversationState:
     return {"profile_updates": profile_updates}
 
 
-async def application_node(state: ConversationState) -> ConversationState:
+async def application_node(
+    state: ConversationState,
+    config: RunnableConfig | None = None,
+) -> ConversationState:
     """Noeud dossiers de candidature avec tool calling.
 
     Utilise les tools generate_application_section, update_application_section,
@@ -1239,8 +1314,16 @@ async def application_node(state: ConversationState) -> ConversationState:
 
     llm = get_llm()
 
-    # Lier les tools application + interactif au LLM
-    llm = llm.bind_tools((APPLICATION_TOOLS or []) + INTERACTIVE_TOOLS)
+    # Lier les tools application + interactif au LLM (filtres par contexte)
+    full_catalog = (APPLICATION_TOOLS or []) + INTERACTIVE_TOOLS
+    filtered_tools, debug_info = select_tools_for_node(
+        node_name="application",
+        current_page=state.get("current_page"),
+        all_tools=full_catalog,
+        active_entities=state.get("active_entities"),
+    )
+    _propagate_tools_offered(config, debug_info["tools_offered"])
+    llm = llm.bind_tools(filtered_tools)
 
     user_profile = state.get("user_profile") or {}
     application_data = state.get("application_data")
@@ -1288,7 +1371,10 @@ async def application_node(state: ConversationState) -> ConversationState:
     }
 
 
-async def action_plan_node(state: ConversationState) -> ConversationState:
+async def action_plan_node(
+    state: ConversationState,
+    config: RunnableConfig | None = None,
+) -> ConversationState:
     """Noeud plan d'action avec tool calling.
 
     Utilise les tools generate_action_plan, update_action_item et get_action_plan
@@ -1301,8 +1387,16 @@ async def action_plan_node(state: ConversationState) -> ConversationState:
 
     llm = get_llm()
 
-    # Lier les tools action plan + interactif + guidage au LLM
-    llm = llm.bind_tools((ACTION_PLAN_TOOLS or []) + INTERACTIVE_TOOLS + GUIDED_TOUR_TOOLS)
+    # Lier les tools action plan + interactif + guidage au LLM (filtres par contexte)
+    full_catalog = (ACTION_PLAN_TOOLS or []) + INTERACTIVE_TOOLS + GUIDED_TOUR_TOOLS
+    filtered_tools, debug_info = select_tools_for_node(
+        node_name="action_plan",
+        current_page=state.get("current_page"),
+        all_tools=full_catalog,
+        active_entities=state.get("active_entities"),
+    )
+    _propagate_tools_offered(config, debug_info["tools_offered"])
+    llm = llm.bind_tools(filtered_tools)
 
     user_profile = state.get("user_profile") or {}
     action_plan_data = state.get("action_plan_data")

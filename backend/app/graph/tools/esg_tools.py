@@ -7,15 +7,11 @@ from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import tool
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.graph.tools.common import get_db_and_user
+from app.graph.tools.common import UUID_PATTERN, get_db_and_user
 
 logger = logging.getLogger(__name__)
 
 
-_UUID_PATTERN = (
-    r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-"
-    r"[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
-)
 _CRITERION_CODE_PATTERN = r"^[ESG][0-9]{1,3}$"
 
 
@@ -30,7 +26,7 @@ class SaveESGCriterionScoreArgs(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    assessment_id: str = Field(..., min_length=36, max_length=36, pattern=_UUID_PATTERN)
+    assessment_id: str = Field(..., min_length=36, max_length=36, pattern=UUID_PATTERN)
     criterion_code: str = Field(..., pattern=_CRITERION_CODE_PATTERN)
     score: int = Field(..., ge=0, le=10)
     justification: str = Field(..., min_length=1, max_length=2000)
@@ -51,7 +47,7 @@ class BatchSaveESGCriteriaArgs(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    assessment_id: str = Field(..., min_length=36, max_length=36, pattern=_UUID_PATTERN)
+    assessment_id: str = Field(..., min_length=36, max_length=36, pattern=UUID_PATTERN)
     criteria: list[_CriterionItem] = Field(..., min_length=1, max_length=30)
 
 
@@ -60,7 +56,7 @@ class FinalizeESGAssessmentArgs(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    assessment_id: str = Field(..., min_length=36, max_length=36, pattern=_UUID_PATTERN)
+    assessment_id: str = Field(..., min_length=36, max_length=36, pattern=UUID_PATTERN)
 
 
 class GetESGAssessmentArgs(BaseModel):
@@ -69,7 +65,7 @@ class GetESGAssessmentArgs(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     assessment_id: str | None = Field(
-        None, min_length=36, max_length=36, pattern=_UUID_PATTERN,
+        None, min_length=36, max_length=36, pattern=UUID_PATTERN,
     )
 
 

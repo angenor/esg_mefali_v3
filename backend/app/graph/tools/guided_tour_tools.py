@@ -14,7 +14,7 @@ import uuid
 from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import tool
 
-from app.graph.tools.common import get_db_and_user, log_tool_call
+from app.graph.tools.common import _tools_offered_from_config, get_db_and_user, log_tool_call
 
 logger = logging.getLogger(__name__)
 
@@ -94,6 +94,7 @@ async def trigger_guided_tour(
             tool_args={"tour_id": tour_id, "context": context},
             tool_result={"tour_id": tour_id, "status": "triggered"},
             status="success",
+            tools_offered=_tools_offered_from_config(config),
         )
     except Exception:  # pragma: no cover - journalisation defensive
         logger.debug("Echec journalisation tool trigger_guided_tour", exc_info=True)

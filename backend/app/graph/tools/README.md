@@ -120,3 +120,35 @@ strict, choix fermes en Enum).
 `backend/scripts/measure_tools_token_budget.py` totalise la longueur des
 descriptions des 14 tools et compare a un baseline
 (`backend/tools/_tokens_baseline.json`). Gate strict : variation `<= +25%` (AC6).
+
+## 8. Filtrage par contexte (story 10.2)
+
+Le LLM ne voit jamais plus de `MAX_TOOLS_PER_TURN` (= 10) tools par tour.
+La selection est realisee par `app/graph/tool_selector.select_tools_for_node`
+en fonction de `(current_page, node_name)`. Le `ToolNode` cote graphe garde
+la liste complete : on filtre uniquement ce qui est expose au LLM via
+`bind_tools(...)`.
+
+### Comment ajouter une nouvelle page
+
+1. Ajouter le slug dans `PAGE_TOOL_MAPPING` (`app/graph/tool_selector_config.py`)
+   avec la liste exacte des `tool.name` autorises.
+2. Ajouter le mapping path Nuxt -> slug dans `_PATH_TO_SLUG_PATTERNS` de la
+   meme configuration (premier pattern matchant gagne). Cette table est
+   consommee par `normalize_page(current_page)` ; pour valider, exporter
+   `normalize_page` depuis un REPL et tester le path attendu.
+3. Verifier que `len(PAGE_TOOL_MAPPING[slug] | GLOBAL_WHITELIST) <= 10` —
+   sinon le test `test_invariant_max_tools_per_turn_for_all_pages` echoue.
+4. Ajouter le test exact-match dans `tests/graph/test_tool_selector.py`
+   (parametre `page_slug` du test `test_select_tools_by_page_exact_match`).
+
+### Audit en production
+
+```
+python backend/scripts/audit_tools_offered.py --conversations 50
+```
+
+Lit les 50 dernieres conversations de `tool_call_logs.tools_offered`, agrege
+par noeud LangGraph et ecrit un rapport markdown dans
+`backend/tools/_tools_offered_report.md`. Code de sortie 1 si une conversation
+depasse `MAX_TOOLS_PER_TURN`.

@@ -69,6 +69,12 @@ class ToolCallLog(Base):
         nullable=False,
         default=0,
     )
+    # Story 10.2 : liste des tools effectivement exposes au LLM lors de ce tour.
+    # Permet d'auditer le filtrage par contexte de page.
+    tools_offered: Mapped[list[str] | None] = mapped_column(
+        JSON,
+        nullable=True,
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),

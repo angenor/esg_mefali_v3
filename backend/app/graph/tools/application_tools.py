@@ -17,16 +17,12 @@ from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import tool
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.graph.tools.common import get_db_and_user
+from app.graph.tools.common import UUID_PATTERN, get_db_and_user
 from app.models.application import TargetType
 
 logger = logging.getLogger(__name__)
 
 
-_UUID_PATTERN = (
-    r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-"
-    r"[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
-)
 _SECTION_KEY_PATTERN = r"^[a-z][a-z0-9_]{0,63}$"
 
 
@@ -46,7 +42,7 @@ class CreateFundApplicationArgs(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    fund_id: str = Field(..., min_length=36, max_length=36, pattern=_UUID_PATTERN)
+    fund_id: str = Field(..., min_length=36, max_length=36, pattern=UUID_PATTERN)
     target_type: TargetType | None = None
 
 
@@ -55,7 +51,7 @@ class GenerateApplicationSectionArgs(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    application_id: str = Field(..., min_length=36, max_length=36, pattern=_UUID_PATTERN)
+    application_id: str = Field(..., min_length=36, max_length=36, pattern=UUID_PATTERN)
     section_key: str = Field(..., pattern=_SECTION_KEY_PATTERN)
     instructions: str | None = Field(None, min_length=1, max_length=2000)
 
@@ -65,7 +61,7 @@ class UpdateApplicationSectionArgs(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    application_id: str = Field(..., min_length=36, max_length=36, pattern=_UUID_PATTERN)
+    application_id: str = Field(..., min_length=36, max_length=36, pattern=UUID_PATTERN)
     section_key: str = Field(..., pattern=_SECTION_KEY_PATTERN)
     content: str = Field(..., min_length=1, max_length=50_000)
 
@@ -75,7 +71,7 @@ class GetApplicationChecklistArgs(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    application_id: str = Field(..., min_length=36, max_length=36, pattern=_UUID_PATTERN)
+    application_id: str = Field(..., min_length=36, max_length=36, pattern=UUID_PATTERN)
 
 
 class SimulateFinancingArgs(BaseModel):
@@ -83,7 +79,7 @@ class SimulateFinancingArgs(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    application_id: str = Field(..., min_length=36, max_length=36, pattern=_UUID_PATTERN)
+    application_id: str = Field(..., min_length=36, max_length=36, pattern=UUID_PATTERN)
 
 
 class ExportApplicationArgs(BaseModel):
@@ -91,7 +87,7 @@ class ExportApplicationArgs(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    application_id: str = Field(..., min_length=36, max_length=36, pattern=_UUID_PATTERN)
+    application_id: str = Field(..., min_length=36, max_length=36, pattern=UUID_PATTERN)
     format: ExportFormat
 
 
