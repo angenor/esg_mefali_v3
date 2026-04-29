@@ -1,6 +1,6 @@
 """État de la conversation LangGraph."""
 
-from typing import Annotated
+from typing import Annotated, Any
 
 from langgraph.graph.message import add_messages
 from typing_extensions import TypedDict
@@ -36,3 +36,5 @@ class ConversationState(TypedDict):
     current_page: str | None
     # Compteurs frontend transmis pour moduler la frequence des propositions de guidage (FR17)
     guidance_stats: dict | None
+    # Entites actives (story 10.2) — cabled-only backend, ignore par le selecteur en V1
+    active_entities: dict[str, Any] | None

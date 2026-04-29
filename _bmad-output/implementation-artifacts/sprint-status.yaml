@@ -35,9 +35,9 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: 2026-04-12
-last_updated: '2026-04-15' (Story 8.3 review : parcours Aminata implemente, AC1-AC10 valides + non-regression Playwright/Vitest verts)
-last_story_created: '8-3-tests-e2e-parcours-aminata'
-last_review_completed: '7-3-resilience-sse-et-indicateur-de-reconnexion'
+last_updated: '2026-04-29' (Story 10.2 done : selecteur de tools par contexte de page mergé, 1260 tests verts)
+last_review_completed: '10-2-tool-filtering-by-page-context'
+last_story_created: '10-2-tool-filtering-by-page-context'
 project: esg_mefali
 project_key: NOKEY
 tracking_system: file-system
@@ -106,3 +106,12 @@ development_status:
   8-5-tests-e2e-parcours-aissatou: backlog
   8-6-tests-de-non-regression-globaux: backlog
   epic-8-retrospective: optional
+
+  # Epic 10 : Refonte fiabilite tool-use LLM (Module 10)
+  epic-10: in-progress
+  10-1-tool-descriptions-pydantic-strict: done
+  10-2-tool-filtering-by-page-context: done
+  10-3-eval-set-30-cas: backlog
+  10-4-pydantic-retry-loop: backlog
+  10-5-post-mvp-backlog: backlog
+  epic-10-retrospective: optional

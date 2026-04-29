@@ -116,6 +116,30 @@ def _parse_guidance_stats(raw: str | None) -> dict | None:
     }
 
 
+# Story 10.2 : taille max du Form field active_entities (defense en profondeur).
+MAX_ACTIVE_ENTITIES_RAW_LEN = 2000
+
+
+def _parse_active_entities(raw: str | None) -> dict | None:
+    """Parser le Form field active_entities (JSON) avec fallback None.
+
+    Story 10.2 — cabled-only backend. Accepte un objet plat ; toute autre
+    structure ou JSON invalide -> None (pas de 5xx).
+    """
+    if not raw:
+        return None
+    raw = raw.strip()[:MAX_ACTIVE_ENTITIES_RAW_LEN]
+    if not raw:
+        return None
+    try:
+        parsed = json.loads(raw)
+    except (ValueError, TypeError):
+        return None
+    if not isinstance(parsed, dict):
+        return None
+    return parsed
+
+
 async def stream_graph_events(
     content: str,
     conversation_id: str,
@@ -128,6 +152,7 @@ async def stream_graph_events(
     widget_response: dict | None = None,
     current_page: str | None = None,
     guidance_stats: dict | None = None,
+    active_entities: dict | None = None,
 ) -> AsyncGenerator[dict, None]:
     """Streamer les événements du graphe LangGraph via astream_events().
 
@@ -169,6 +194,7 @@ async def stream_graph_events(
         "tool_call_count": 0,
         "current_page": current_page,
         "guidance_stats": guidance_stats,
+        "active_entities": active_entities,
     }
 
     config = {
@@ -669,6 +695,7 @@ async def send_message(
     interactive_question_justification: str | None = Form(None),
     current_page: str | None = Form(None),
     guidance_stats: str | None = Form(None),
+    active_entities: str | None = Form(None),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> StreamingResponse:
@@ -685,6 +712,9 @@ async def send_message(
 
     # Parsing du Form field guidance_stats (FR17 — modulation adaptative)
     parsed_guidance_stats = _parse_guidance_stats(guidance_stats)
+
+    # Parsing du Form field active_entities (story 10.2 — cabled-only backend)
+    parsed_active_entities = _parse_active_entities(active_entities)
 
     conversation = await get_user_conversation(conversation_id, current_user, db)
 
@@ -856,6 +886,7 @@ async def send_message(
                     widget_response=widget_response_payload,
                     current_page=current_page,
                     guidance_stats=parsed_guidance_stats,
+                    active_entities=parsed_active_entities,
                 ):
                     event_type = event.get("type")
 

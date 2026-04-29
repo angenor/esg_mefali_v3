@@ -62,10 +62,13 @@ async def log_tool_call(
     status: str = "success",
     error_message: str | None = None,
     retry_count: int = 0,
+    tools_offered: list[str] | None = None,
 ) -> None:
     """Journaliser un appel de tool dans la table tool_call_logs.
 
     Appelé après chaque exécution de tool (succès, erreur, retry).
+    `tools_offered` (story 10.2) journalise la liste des tools exposes
+    au LLM lors du tour ayant declenche cet appel.
     """
     from app.models.tool_call_log import ToolCallLog
 
@@ -80,9 +83,21 @@ async def log_tool_call(
         status=status,
         error_message=error_message,
         retry_count=retry_count,
+        tools_offered=tools_offered,
     )
     db.add(log_entry)
     await db.flush()
+
+
+def _tools_offered_from_config(config: RunnableConfig | None) -> list[str] | None:
+    """Lire `tools_offered` depuis le RunnableConfig (story 10.2)."""
+    if not config:
+        return None
+    configurable = config.get("configurable", {}) or {}
+    value = configurable.get("tools_offered")
+    if isinstance(value, list) and all(isinstance(v, str) for v in value):
+        return value
+    return None
 
 
 def with_retry(
@@ -125,6 +140,7 @@ def with_retry(
                             duration_ms=int((time.monotonic() - start) * 1000),
                             status="retry_success" if attempt > 0 else "success",
                             retry_count=attempt,
+                            tools_offered=_tools_offered_from_config(config),
                         )
                     except Exception:
                         logger.debug("Erreur lors de la journalisation du tool call", exc_info=True)
@@ -155,6 +171,7 @@ def with_retry(
                                 status="error",
                                 error_message=str(e)[:500],
                                 retry_count=attempt,
+                                tools_offered=_tools_offered_from_config(config),
                             )
                         except Exception:
                             logger.debug("Erreur journalisation retry", exc_info=True)
@@ -176,6 +193,7 @@ def with_retry(
                             status="error",
                             error_message=str(e)[:500],
                             retry_count=attempt,
+                            tools_offered=_tools_offered_from_config(config),
                         )
                     except Exception:
                         logger.debug("Erreur journalisation erreur finale", exc_info=True)
