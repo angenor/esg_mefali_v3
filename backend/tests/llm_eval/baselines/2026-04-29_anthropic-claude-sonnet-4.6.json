@@ -1,0 +1,650 @@
+{
+  "metadata": {
+    "timestamp": "2026-04-29T19:40:03.705242+00:00",
+    "model_id": "anthropic/claude-sonnet-4.6",
+    "golden_hash": "40cb0740d74fb6c6fda5e118725e108c82ff91490b7b7e88be195bc6e5253871",
+    "golden_path": "/Users/mac/Documents/projets/2025/esg_mefali_v3/backend/tests/llm_eval/golden_set_v1.yaml"
+  },
+  "summary": {
+    "total": 30,
+    "bon_tool_rate": 0.9,
+    "payload_valide_rate": 1.0,
+    "payload_partial_match_rate": 0.9333333333333333,
+    "fallback_text_rate": 0.06666666666666667
+  },
+  "cases": [
+    {
+      "id": "case_001",
+      "expected_tool": "ask_interactive_question",
+      "got_tool": "get_company_profile",
+      "got_args": {},
+      "bon_tool": true,
+      "payload_valide": null,
+      "payload_partial_match": null,
+      "fallback_texte": false,
+      "error": null,
+      "notes": "QCU classique : choix d'un secteur unique. Alt accepte : LLM peut prudemment lire le profil avant de poser la question (read-before-ask).",
+      "matched_alternative": true
+    },
+    {
+      "id": "case_002",
+      "expected_tool": "ask_interactive_question",
+      "got_tool": "get_company_profile",
+      "got_args": {},
+      "bon_tool": true,
+      "payload_valide": null,
+      "payload_partial_match": null,
+      "fallback_texte": false,
+      "error": null,
+      "notes": "QCU : forme juridique exclusive. Alt accepte : read-before-ask.",
+      "matched_alternative": true
+    },
+    {
+      "id": "case_003",
+      "expected_tool": "ask_interactive_question",
+      "got_tool": "ask_interactive_question",
+      "got_args": {
+        "question_type": "qcu",
+        "prompt": "Quelle est la taille de votre entreprise ?",
+        "options": [
+          {
+            "id": "micro",
+            "label": "Micro-entreprise",
+            "emoji": "🌱",
+            "description": "Moins de 10 employés"
+          },
+          {
+            "id": "petite",
+            "label": "Petite entreprise",
+            "emoji": "🏪",
+            "description": "Entre 10 et 49 employés"
+          },
+          {
+            "id": "moyenne",
+            "label": "Moyenne entreprise",
+            "emoji": "🏢",
+            "description": "Entre 50 et 249 employés"
+          },
+          {
+            "id": "grande",
+            "label": "Grande entreprise",
+            "emoji": "🏭",
+            "description": "250 employés et plus"
+          }
+        ]
+      },
+      "bon_tool": true,
+      "payload_valide": true,
+      "payload_partial_match": true,
+      "fallback_texte": false,
+      "error": null,
+      "notes": "QCU : tranche de taille (PME/TPE/...)",
+      "matched_alternative": false
+    },
+    {
+      "id": "case_004",
+      "expected_tool": "ask_interactive_question",
+      "got_tool": "ask_interactive_question",
+      "got_args": {
+        "question_type": "qcu",
+        "prompt": "🌍 Quel est votre pays principal d'activité ?",
+        "options": [
+          {
+            "id": "senegal",
+            "label": "Sénégal",
+            "emoji": "🇸🇳"
+          },
+          {
+            "id": "cote_divoire",
+            "label": "Côte d'Ivoire",
+            "emoji": "🇨🇮"
+          },
+          {
+            "id": "mali",
+            "label": "Mali",
+            "emoji": "🇲🇱"
+          },
+          {
+            "id": "burkina_faso",
+            "label": "Burkina Faso",
+            "emoji": "🇧🇫"
+          },
+          {
+            "id": "niger",
+            "label": "Niger",
+            "emoji": "🇳🇪"
+          },
+          {
+            "id": "guinee",
+            "label": "Guinée",
+            "emoji": "🇬🇳"
+          },
+          {
+            "id": "togo",
+            "label": "Togo",
+            "emoji": "🇹🇬"
+          },
+          {
+            "id": "autre",
+            "label": "Autre pays",
+            "emoji": "🌐",
+            "description": "Mon pays ne figure pas dans la liste"
+          }
+        ]
+      },
+      "bon_tool": true,
+      "payload_valide": true,
+      "payload_partial_match": true,
+      "fallback_texte": false,
+      "error": null,
+      "notes": "QCU : pays principal.",
+      "matched_alternative": false
+    },
+    {
+      "id": "case_005",
+      "expected_tool": "ask_interactive_question",
+      "got_tool": "ask_interactive_question",
+      "got_args": {
+        "question_type": "qcu",
+        "prompt": "Quel est votre niveau de maturité ESG actuel ?",
+        "options": [
+          {
+            "id": "debutant",
+            "label": "Débutant",
+            "emoji": "🌱",
+            "description": "Nous n'avons pas encore de démarche ESG formalisée."
+          },
+          {
+            "id": "en_cours",
+            "label": "En cours d'initiation",
+            "emoji": "🚀",
+            "description": "Nous avons commencé à structurer quelques actions ESG."
+          },
+          {
+            "id": "intermediaire",
+            "label": "Intermédiaire",
+            "emoji": "📊",
+            "description": "Nous avons une politique ESG en place avec des indicateurs suivis."
+          },
+          {
+            "id": "avance",
+            "label": "Avancé",
+            "emoji": "🏆",
+            "description": "Notre démarche ESG est mature, intégrée à la stratégie et auditée."
+          }
+        ]
+      },
+      "bon_tool": true,
+      "payload_valide": true,
+      "payload_partial_match": true,
+      "fallback_texte": false,
+      "error": null,
+      "notes": "QCU module ESG.",
+      "matched_alternative": false
+    },
+    {
+      "id": "case_006",
+      "expected_tool": "ask_interactive_question",
+      "got_tool": "ask_interactive_question",
+      "got_args": {
+        "question_type": "qcm",
+        "prompt": "Sélectionnez les Objectifs de Développement Durable (ODD) auxquels votre organisation contribue :",
+        "options": [
+          {
+            "id": "odd1",
+            "emoji": "🤝",
+            "label": "ODD 1 – Pas de pauvreté",
+            "description": "Éliminer la pauvreté sous toutes ses formes et partout dans le monde."
+          },
+          {
+            "id": "odd2",
+            "emoji": "🌾",
+            "label": "ODD 2 – Faim zéro",
+            "description": "Éliminer la faim, assurer la sécurité alimentaire et promouvoir l'agriculture durable."
+          },
+          {
+            "id": "odd3",
+            "emoji": "❤️",
+            "label": "ODD 3 – Bonne santé et bien-être",
+            "description": "Permettre à tous de vivre en bonne santé et promouvoir le bien-être."
+          },
+          {
+            "id": "odd4",
+            "emoji": "📚",
+            "label": "ODD 4 – Éducation de qualité",
+            "description": "Assurer une éducation équitable, inclusive et de qualité pour tous."
+          },
+          {
+            "id": "odd5",
+            "emoji": "♀️",
+            "label": "ODD 5 – Égalité entre les sexes",
+            "description": "Parvenir à l'égalité des sexes et autonomiser toutes les femmes et les filles."
+          },
+          {
+            "id": "odd6",
+            "emoji": "💧",
+            "label": "ODD 6 – Eau propre et assainissement",
+            "description": "Garantir l'accès à l'eau potable et à l'assainissement pour tous."
+          },
+          {
+            "id": "odd7",
+            "emoji": "⚡",
+            "label": "ODD 7 – Énergie propre et d'un coût abordable",
+            "description": "Garantir l'accès à une énergie fiable, durable et renouvelable pour tous."
+          },
+          {
+            "id": "odd8",
+            "emoji": "💼",
+            "label": "ODD 8 – Travail décent et croissance économique",
+            "description": "Promouvoir une croissance économique inclusive et le travail décent pour tous."
+          }
+        ],
+        "min_selections": 1,
+        "max_selections": 8
+      },
+      "bon_tool": true,
+      "payload_valide": true,
+      "payload_partial_match": true,
+      "fallback_texte": false,
+      "error": null,
+      "notes": "QCM : multi-selection ODD.",
+      "matched_alternative": false
+    },
+    {
+      "id": "case_007",
+      "expected_tool": "ask_interactive_question",
+      "got_tool": "get_company_profile",
+      "got_args": {},
+      "bon_tool": true,
+      "payload_valide": null,
+      "payload_partial_match": null,
+      "fallback_texte": false,
+      "error": null,
+      "notes": "QCM : certifications multiples. Alt accepte : read-before-ask sur le profil.",
+      "matched_alternative": true
+    },
+    {
+      "id": "case_008",
+      "expected_tool": "ask_interactive_question",
+      "got_tool": "ask_interactive_question",
+      "got_args": {
+        "question_type": "qcu_justification",
+        "prompt": "Quelle est votre priorité ESG principale pour cette année ?",
+        "options": [
+          {
+            "id": "environmental",
+            "label": "Environnement (E)",
+            "emoji": "🌱",
+            "description": "Réduction des émissions, gestion des ressources naturelles, biodiversité."
+          },
+          {
+            "id": "social",
+            "label": "Social (S)",
+            "emoji": "🤝",
+            "description": "Conditions de travail, diversité & inclusion, impact sur les communautés."
+          },
+          {
+            "id": "governance",
+            "label": "Gouvernance (G)",
+            "emoji": "🏛️",
+            "description": "Transparence, éthique des affaires, structure de direction."
+          }
+        ],
+        "justification_prompt": "Expliquez brièvement pourquoi ce pilier est votre priorité (contexte, enjeux spécifiques, objectifs stratégiques...)."
+      },
+      "bon_tool": true,
+      "payload_valide": true,
+      "payload_partial_match": true,
+      "fallback_texte": false,
+      "error": null,
+      "notes": "QCU avec justification obligatoire.",
+      "matched_alternative": false
+    },
+    {
+      "id": "case_009",
+      "expected_tool": "update_company_profile",
+      "got_tool": "update_company_profile",
+      "got_args": {
+        "employee_count": 12,
+        "sector": "agroalimentaire"
+      },
+      "bon_tool": true,
+      "payload_valide": true,
+      "payload_partial_match": true,
+      "fallback_texte": false,
+      "error": null,
+      "notes": "Mutation profil 3 champs canoniques.",
+      "matched_alternative": false
+    },
+    {
+      "id": "case_010",
+      "expected_tool": "update_company_profile",
+      "got_tool": "update_company_profile",
+      "got_args": {
+        "employee_count": 25
+      },
+      "bon_tool": true,
+      "payload_valide": true,
+      "payload_partial_match": true,
+      "fallback_texte": false,
+      "error": null,
+      "notes": "Mutation profil un champ.",
+      "matched_alternative": false
+    },
+    {
+      "id": "case_011",
+      "expected_tool": "update_company_profile",
+      "got_tool": "update_company_profile",
+      "got_args": {
+        "company_name": "Solar Niger SA",
+        "city": "Niamey",
+        "country": "Niger"
+      },
+      "bon_tool": true,
+      "payload_valide": true,
+      "payload_partial_match": true,
+      "fallback_texte": false,
+      "error": null,
+      "notes": "Mutation profil nom + ville.",
+      "matched_alternative": false
+    },
+    {
+      "id": "case_012",
+      "expected_tool": "update_company_profile",
+      "got_tool": "update_company_profile",
+      "got_args": {
+        "sector": "energie"
+      },
+      "bon_tool": true,
+      "payload_valide": true,
+      "payload_partial_match": true,
+      "fallback_texte": false,
+      "error": null,
+      "notes": "Mutation profil enum sector.",
+      "matched_alternative": false
+    },
+    {
+      "id": "case_013",
+      "expected_tool": "update_company_profile",
+      "got_tool": "update_company_profile",
+      "got_args": {
+        "has_waste_management": true
+      },
+      "bon_tool": true,
+      "payload_valide": true,
+      "payload_partial_match": true,
+      "fallback_texte": false,
+      "error": null,
+      "notes": "Mutation profil flag booleen.",
+      "matched_alternative": false
+    },
+    {
+      "id": "case_014",
+      "expected_tool": "update_company_profile",
+      "got_tool": "update_company_profile",
+      "got_args": {
+        "year_founded": 2018,
+        "country": "Sénégal"
+      },
+      "bon_tool": true,
+      "payload_valide": true,
+      "payload_partial_match": false,
+      "fallback_texte": false,
+      "error": null,
+      "notes": "Mutation profil annee + pays.",
+      "matched_alternative": false
+    },
+    {
+      "id": "case_015",
+      "expected_tool": "create_fund_application",
+      "got_tool": "search_compatible_funds",
+      "got_args": {},
+      "bon_tool": false,
+      "payload_valide": null,
+      "payload_partial_match": null,
+      "fallback_texte": false,
+      "error": null,
+      "notes": "Creation dossier depuis fiche fonds. Alt accepte : LLM peut clarifier (ask) ou relire la fiche (get_fund_details) avant de creer.",
+      "matched_alternative": false
+    },
+    {
+      "id": "case_016",
+      "expected_tool": "create_fund_application",
+      "got_tool": "ask_interactive_question",
+      "got_args": {
+        "question_type": "qcu_justification",
+        "prompt": "Quel est le fonds pour lequel vous souhaitez créer un dossier de candidature ?",
+        "options": [
+          {
+            "id": "gcf",
+            "label": "Green Climate Fund (GCF)",
+            "emoji": "🌍",
+            "description": "Fonds vert pour le climat des Nations Unies"
+          },
+          {
+            "id": "gef",
+            "label": "Global Environment Facility (GEF)",
+            "emoji": "🌱",
+            "description": "Fonds mondial pour l'environnement"
+          },
+          {
+            "id": "af",
+            "label": "Adaptation Fund (AF)",
+            "emoji": "💧",
+            "description": "Fonds d'adaptation au changement climatique"
+          },
+          {
+            "id": "afd",
+            "label": "Agence Française de Développement (AFD)",
+            "emoji": "🇫🇷",
+            "description": "Financement pour le développement durable"
+          },
+          {
+            "id": "other",
+            "label": "Autre fonds",
+            "emoji": "🔎",
+            "description": "Précisez le nom du fonds"
+          }
+        ],
+        "justification_prompt": "Veuillez préciser l'identifiant (UUID) ou le nom exact du fonds si vous le connaissez."
+      },
+      "bon_tool": true,
+      "payload_valide": null,
+      "payload_partial_match": null,
+      "fallback_texte": false,
+      "error": null,
+      "notes": "Creation dossier explicite depuis /candidatures. Alt accepte : 'ce fonds' est ambigu sans UUID -> LLM clarifie via ask.",
+      "matched_alternative": true
+    },
+    {
+      "id": "case_017",
+      "expected_tool": "create_fund_application",
+      "got_tool": "get_fund_details",
+      "got_args": {
+        "fund_id": "7c9e6679-7425-40de-944b-e07fc1f90ae7"
+      },
+      "bon_tool": true,
+      "payload_valide": null,
+      "payload_partial_match": null,
+      "fallback_texte": false,
+      "error": null,
+      "notes": "Creation dossier avec UUID explicite. Alt accepte : LLM peut verifier que le fonds existe avant de creer (read-before-write).",
+      "matched_alternative": true
+    },
+    {
+      "id": "case_018",
+      "expected_tool": "batch_save_esg_criteria",
+      "got_tool": null,
+      "got_args": null,
+      "bon_tool": false,
+      "payload_valide": null,
+      "payload_partial_match": null,
+      "fallback_texte": true,
+      "error": null,
+      "notes": "Batch save ESG. Alt accepte : LLM peut lire l'evaluation en cours (get) avant batch save, ou clarifier (ask) si scores ambigus.",
+      "matched_alternative": false
+    },
+    {
+      "id": "case_019",
+      "expected_tool": "batch_save_esg_criteria",
+      "got_tool": "get_esg_assessment",
+      "got_args": {},
+      "bon_tool": true,
+      "payload_valide": null,
+      "payload_partial_match": null,
+      "fallback_texte": false,
+      "error": null,
+      "notes": "Batch save formulation alternative. Alt accepte : read-before-write.",
+      "matched_alternative": true
+    },
+    {
+      "id": "case_020",
+      "expected_tool": "batch_save_esg_criteria",
+      "got_tool": null,
+      "got_args": null,
+      "bon_tool": false,
+      "payload_valide": null,
+      "payload_partial_match": null,
+      "fallback_texte": true,
+      "error": null,
+      "notes": "Batch save ESG sur /esg/results. Alt accepte : read-before-write.",
+      "matched_alternative": false
+    },
+    {
+      "id": "case_021",
+      "expected_tool": "create_carbon_assessment",
+      "got_tool": "create_carbon_assessment",
+      "got_args": {
+        "year": 2025
+      },
+      "bon_tool": true,
+      "payload_valide": true,
+      "payload_partial_match": true,
+      "fallback_texte": false,
+      "error": null,
+      "notes": "Mutation carbone : creation bilan annuel.",
+      "matched_alternative": false
+    },
+    {
+      "id": "case_022",
+      "expected_tool": "create_carbon_assessment",
+      "got_tool": "create_carbon_assessment",
+      "got_args": {
+        "year": 2024
+      },
+      "bon_tool": true,
+      "payload_valide": true,
+      "payload_partial_match": true,
+      "fallback_texte": false,
+      "error": null,
+      "notes": "Mutation carbone : annee differente.",
+      "matched_alternative": false
+    },
+    {
+      "id": "case_023",
+      "expected_tool": "trigger_guided_tour",
+      "got_tool": "trigger_guided_tour",
+      "got_args": {
+        "tour_id": "show_esg_results"
+      },
+      "bon_tool": true,
+      "payload_valide": true,
+      "payload_partial_match": true,
+      "fallback_texte": false,
+      "error": null,
+      "notes": "Tool transverse (whitelist globale story 10.2).",
+      "matched_alternative": false
+    },
+    {
+      "id": "case_024",
+      "expected_tool": "get_company_profile_chat",
+      "got_tool": "get_company_profile",
+      "got_args": {},
+      "bon_tool": true,
+      "payload_valide": null,
+      "payload_partial_match": null,
+      "fallback_texte": false,
+      "error": null,
+      "notes": "Lecture profil depuis chat. Alt accepte : variante quasi-identique disponible dans le meme catalogue.",
+      "matched_alternative": true
+    },
+    {
+      "id": "case_025",
+      "expected_tool": "get_user_dashboard_summary",
+      "got_tool": "get_user_dashboard_summary",
+      "got_args": {},
+      "bon_tool": true,
+      "payload_valide": true,
+      "payload_partial_match": true,
+      "fallback_texte": false,
+      "error": null,
+      "notes": "Lecture dashboard transverse.",
+      "matched_alternative": false
+    },
+    {
+      "id": "case_026",
+      "expected_tool": null,
+      "got_tool": null,
+      "got_args": null,
+      "bon_tool": true,
+      "payload_valide": null,
+      "payload_partial_match": null,
+      "fallback_texte": false,
+      "error": null,
+      "notes": "Piege salutation : pas de tool.",
+      "matched_alternative": false
+    },
+    {
+      "id": "case_027",
+      "expected_tool": null,
+      "got_tool": null,
+      "got_args": null,
+      "bon_tool": true,
+      "payload_valide": null,
+      "payload_partial_match": null,
+      "fallback_texte": false,
+      "error": null,
+      "notes": "Piege off-topic geographie.",
+      "matched_alternative": false
+    },
+    {
+      "id": "case_028",
+      "expected_tool": null,
+      "got_tool": null,
+      "got_args": null,
+      "bon_tool": true,
+      "payload_valide": null,
+      "payload_partial_match": null,
+      "fallback_texte": false,
+      "error": null,
+      "notes": "Piege opinion ouverte sur le domaine.",
+      "matched_alternative": false
+    },
+    {
+      "id": "case_029",
+      "expected_tool": null,
+      "got_tool": null,
+      "got_args": null,
+      "bon_tool": true,
+      "payload_valide": null,
+      "payload_partial_match": null,
+      "fallback_texte": false,
+      "error": null,
+      "notes": "Piege message court de remerciement.",
+      "matched_alternative": false
+    },
+    {
+      "id": "case_030",
+      "expected_tool": null,
+      "got_tool": null,
+      "got_args": null,
+      "bon_tool": true,
+      "payload_valide": null,
+      "payload_partial_match": null,
+      "fallback_texte": false,
+      "error": null,
+      "notes": "Piege question pedagogique : reponse en texte libre attendue.",
+      "matched_alternative": false
+    }
+  ]
+}
