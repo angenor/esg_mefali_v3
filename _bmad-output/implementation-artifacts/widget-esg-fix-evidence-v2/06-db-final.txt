@@ -1,0 +1,8 @@
+                  id                  | module |  state   | response_values | has_answered_at 
+--------------------------------------+--------+----------+-----------------+-----------------
+ e3183458-c944-4a0e-afd2-792c995a8b16 | chat   | answered | ["agri"]        | t
+ 7f697754-d86f-4f63-8bc6-d85a9793ca4e | chat   | pending  |                 | f
+ c7f6f150-7f6b-4811-8467-fe1cdf65f5a0 | chat   | answered | ["agriculture"] | t
+ 58eea397-e2fd-4741-a8c6-c63b921d8eb1 | chat   | answered | ["micro"]       | t
+(4 rows)
+

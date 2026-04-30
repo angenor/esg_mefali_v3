@@ -15,7 +15,7 @@ related_pr: fix/interactive-widget-module-persist
 ## Contexte
 
 Suite a la PR `fix/interactive-widget-module-persist` (avril 2026) qui a corrige
-deux bugs du widget interactif :
+trois bugs du widget interactif :
 
 1. **Race condition stream** (frontend) : un clic sur widget pendant le streaming
    ne tombait plus dans un early-return silencieux ; il abort le stream en cours
@@ -25,8 +25,14 @@ deux bugs du widget interactif :
    au tool `ask_interactive_question` de stocker `interactive_questions.module`
    correctement (`esg_scoring`, `carbon`, etc.) au lieu de toujours tomber sur
    `chat`.
+3. **Commit manquant dans `_resolve_interactive_question`** (backend) : un
+   `await db.commit()` explicite est ajoute apres le `db.flush()` pour eviter
+   que le commit final de `get_db` echoue avec `InterfaceError: cannot call
+   Transaction.commit(): the underlying connection is closed` lorsque le
+   streaming SSE en aval ferme la connexion asyncpg sous-jacente. Sans ce fix,
+   la question restait `pending` meme apres un clic NORMAL post-stream.
 
-**Constat residuel** : meme avec ces deux fixes, lorsqu'un node specialiste
+**Constat residuel** : meme avec ces trois fixes, lorsqu'un node specialiste
 (typiquement `esg_scoring_node`) pose une question via widget et que l'utilisateur
 y repond, la reponse est bien persistee dans `interactive_questions` (avec le bon
 `module`), mais **aucun chainage existant ne la propage vers le scoring ESG**.
