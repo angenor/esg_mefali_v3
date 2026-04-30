@@ -33,12 +33,26 @@ _EXPECTED_TOOLNODE_GUIDED = [
 
 
 def _tool_names_of_toolnode(graph, toolnode_name: str) -> list[str]:
-    """Extraire les noms des tools enregistres dans un ToolNode du graphe."""
-    node = graph.nodes[toolnode_name].runnable
-    if hasattr(node, "tools_by_name"):
-        return list(node.tools_by_name.keys())
-    if hasattr(node, "tools"):
-        return [t.name for t in node.tools]
+    """Extraire les noms des tools enregistres dans un (Validating)ToolNode du graphe.
+
+    Story 10.4 : `ToolNode` a ete substitue par `ValidatingToolNode` (composition).
+    Quand LangGraph enveloppe un callable instance, il l'expose via `runnable.afunc`.
+    On suit donc deux chemins : direct sur `runnable`, ou via `runnable.afunc`/`func`.
+    """
+    runnable = graph.nodes[toolnode_name].runnable
+    candidates = [runnable]
+    afunc = getattr(runnable, "afunc", None)
+    if afunc is not None:
+        candidates.append(afunc)
+    func = getattr(runnable, "func", None)
+    if func is not None:
+        candidates.append(func)
+
+    for node in candidates:
+        if hasattr(node, "tools_by_name"):
+            return list(node.tools_by_name.keys())
+        if hasattr(node, "tools"):
+            return [t.name for t in node.tools]
     raise AssertionError(f"ToolNode {toolnode_name} expose ni tools_by_name ni tools")
 
 

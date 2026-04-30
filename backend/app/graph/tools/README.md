@@ -152,3 +152,29 @@ Lit les 50 dernieres conversations de `tool_call_logs.tools_offered`, agrege
 par noeud LangGraph et ecrit un rapport markdown dans
 `backend/tools/_tools_offered_report.md`. Code de sortie 1 si une conversation
 depasse `MAX_TOOLS_PER_TURN`.
+
+## Eval set v1 — 30 cas (story 10.3)
+
+Golden set deterministe `(message_utilisateur, current_page) -> (tool_attendu,
+payload_attendu)` pour la non-regression du tool-calling LLM. Voir
+`backend/tests/llm_eval/README.md` pour les commandes, l'ajout de cas et les
+verrous a respecter.
+
+## Validation Pydantic stricte (story 10.4)
+
+Le pipeline tool-calling utilise `ValidatingToolNode`
+(`backend/app/graph/validating_tool_node.py`) — composition autour de
+`langgraph.prebuilt.ToolNode` substituee dans `graph.py:create_tool_loop` —
+qui ajoute une boucle de correction Pydantic **bornee a 1 retry** :
+
+- 1er payload `tool_call` invalide -> `ToolMessage` structure FR injectee au LLM
+  (format `Le tool X a rejete ton appel. Erreurs : - field "..." ...`).
+- 2eme payload invalide consecutif (meme `tool_call_id`) -> `ToolMessage`
+  fallback FR utilisateur + `validation_failed=True` + force la sortie de la
+  boucle (`tool_call_count = MAX_TOOL_CALLS_PER_TURN`).
+- Disjoint de `with_retry` (`tools/common.py`) qui gere les exceptions runtime.
+
+Tracabilite : la table `tool_call_logs` expose `validation_status`
+(`valid` / `valid_after_retry` / `failed_after_retry` / `NULL`) et
+`pydantic_errors` (JSONB filtre, sans `input` pour ne pas leaker de secrets).
+Migration : `alembic/versions/10c0_add_pydantic_validation_to_tool_call_logs.py`.

@@ -35,9 +35,9 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: 2026-04-12
-last_updated: '2026-04-29' (Story 10.2 done : selecteur de tools par contexte de page mergé, 1260 tests verts)
-last_review_completed: '10-2-tool-filtering-by-page-context'
-last_story_created: '10-2-tool-filtering-by-page-context'
+last_updated: '2026-04-29' (Story 10.4 done : 2e passe review verte, 5 tests ajoutes (couverture 95%), 1298 tests verts, AC10 §10.3 waiver acte (LLM filtre l'invalide en amont, smoke UI impraticable - valide par tests integration scenarios A/B/C), 2 tickets infra ouverts (P0 alembic orphan + P1 defense en profondeur log_tool_call). Epic M10 boucle 4/4 stories MVP livrees.)
+last_review_completed: '10-4-pydantic-retry-loop'
+last_story_created: '10-3-eval-set-30-cas'
 project: esg_mefali
 project_key: NOKEY
 tracking_system: file-system
@@ -111,7 +111,7 @@ development_status:
   epic-10: in-progress
   10-1-tool-descriptions-pydantic-strict: done
   10-2-tool-filtering-by-page-context: done
-  10-3-eval-set-30-cas: backlog
-  10-4-pydantic-retry-loop: backlog
+  10-3-eval-set-30-cas: done
+  10-4-pydantic-retry-loop: done
   10-5-post-mvp-backlog: backlog
   epic-10-retrospective: optional
