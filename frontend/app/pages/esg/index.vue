@@ -2,6 +2,7 @@
 import { useEsg } from '~/composables/useEsg'
 import { useEsgStore } from '~/stores/esg'
 import { useUiStore } from '~/stores/ui'
+import { useToast } from '~/composables/useToast'
 
 definePageMeta({
   layout: 'default',
@@ -9,11 +10,40 @@ definePageMeta({
 
 const esgStore = useEsgStore()
 const uiStore = useUiStore()
-const { fetchAssessments, loading, error } = useEsg()
+const { fetchAssessments, createAssessment, loading, error, sessionExpired } = useEsg()
+const toast = useToast()
+
+// Patch E : guard synchrone contre le double-clic (le flag asynchrone `loading`
+// ne se met a true qu'apres la resolution de la microtache).
+const isCreating = ref(false)
 
 onMounted(() => {
   fetchAssessments()
 })
+
+// Spec fix-esg-scoring-node-routing : avant d'ouvrir le chat, creer une row
+// draft cote backend pour eviter le scenario « 6 confirmations widget acceptees
+// sans aucune row creee ». En cas d'echec API, ne pas ouvrir le chat et notifier.
+async function startNewAssessment(): Promise<void> {
+  if (isCreating.value) return
+  isCreating.value = true
+  try {
+    const assessment = await createAssessment()
+    if (!assessment) {
+      // Patch F : si la session a expire, useEsg.handleAuthFailure() a deja
+      // declenche la redirection /login — on n'affiche pas de toast d'erreur
+      // (evite un flash juste avant la redirection, NFR9).
+      if (!sessionExpired.value) {
+        toast.error(error.value || 'Impossible de créer l\'évaluation. Réessayez.')
+      }
+      return
+    }
+    await fetchAssessments()
+    uiStore.openChatWidget()
+  } finally {
+    isCreating.value = false
+  }
+}
 
 function formatDate(dateStr: string): string {
   return new Date(dateStr).toLocaleDateString('fr-FR', {
@@ -63,8 +93,9 @@ function scoreColor(score: number | null): string {
       </div>
       <button
         type="button"
-        class="inline-flex items-center gap-2 px-4 py-2 bg-brand-green text-white rounded-lg hover:bg-emerald-600 transition-colors text-sm font-medium"
-        @click="uiStore.openChatWidget()"
+        class="inline-flex items-center gap-2 px-4 py-2 bg-brand-green text-white rounded-lg hover:bg-emerald-600 transition-colors text-sm font-medium disabled:opacity-60"
+        :disabled="loading || isCreating"
+        @click="startNewAssessment"
       >
         <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 20 20" fill="currentColor">
           <path fill-rule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clip-rule="evenodd" />
@@ -106,8 +137,9 @@ function scoreColor(score: number | null): string {
         </p>
         <button
           type="button"
-          class="inline-flex items-center gap-2 px-6 py-3 bg-brand-green text-white rounded-lg hover:bg-emerald-600 transition-colors font-medium"
-          @click="uiStore.openChatWidget()"
+          class="inline-flex items-center gap-2 px-6 py-3 bg-brand-green text-white rounded-lg hover:bg-emerald-600 transition-colors font-medium disabled:opacity-60"
+          :disabled="loading || isCreating"
+          @click="startNewAssessment"
         >
           Demarrer dans le chat
         </button>

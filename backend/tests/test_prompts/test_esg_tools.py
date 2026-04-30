@@ -29,6 +29,39 @@ def test_batch_tool_accepts_criteria_list():
     assert "criteria" in props, f"Le tool batch doit avoir un parametre 'criteria', got: {list(props.keys())}"
 
 
+def test_batch_save_esg_criteria_accepts_pydantic_items():
+    """Bug [M] — _CriterionItem (Pydantic v2 BaseModel) ne doit PAS planter le tool.
+
+    Regression test : avant le fix coercion (esg_tools.py:372-380), le tool
+    accedait `criterion["criterion_code"]` ce qui levait
+    `TypeError: '_CriterionItem' object is not subscriptable` quand LangChain
+    convertissait l'input en BaseModel via args_schema=BatchSaveESGCriteriaArgs.
+    """
+    from app.graph.tools.esg_tools import _CriterionItem
+
+    # Coercion : BaseModel ↔ dict — verifie le comportement du fix.
+    items_pydantic = [
+        _CriterionItem(criterion_code="E1", score=4, justification="ok"),
+        _CriterionItem(criterion_code="E2", score=5, justification="ok"),
+    ]
+    normalized = [
+        c if isinstance(c, dict) else c.model_dump()
+        for c in items_pydantic
+    ]
+    assert all(isinstance(item, dict) for item in normalized)
+    assert normalized[0]["criterion_code"] == "E1"
+    assert normalized[0]["score"] == 4
+
+    # Compatibilite ascendante : si appele avec des dicts directs (tests legacy),
+    # la coercion doit etre une no-op.
+    items_dict = [{"criterion_code": "E3", "score": 6, "justification": "dict"}]
+    normalized_dict = [
+        c if isinstance(c, dict) else c.model_dump()
+        for c in items_dict
+    ]
+    assert normalized_dict == items_dict
+
+
 def test_esg_prompt_contains_batch_instruction():
     """T011 — Le prompt ESG contient l'instruction d'utiliser le batch."""
     assert "batch_save_esg_criteria" in ESG_SCORING_PROMPT

@@ -1,0 +1,24 @@
+                  id                  | module |   state   |                                                                                                              prompt                                                                                                               |          created_at           
+--------------------------------------+--------+-----------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+-------------------------------
+ 50561758-34d9-47d4-87f4-289949bba704 | chat   | answered  | Voulez-vous voir vos résultats en détail sur l'écran dédié ?                                                                                                                                                                      | 2026-04-30 03:04:53.047537+00
+ 55a48ad5-d385-448f-a997-824580abad8c | chat   | answered  | Je n'ai pas encore créé votre évaluation ESG dans le système. Souhaitez-vous que je la crée maintenant ?                                                                                                                          | 2026-04-30 03:01:02.870376+00
+ 42d9bc65-d550-4934-a5ca-b3a4347c3d5f | chat   | answered  | Confirmez-vous la finalisation de votre évaluation ESG avec ces 30 scores (incluant les hypothèses prudentes pour Social et Gouvernance) ?                                                                                        | 2026-04-30 02:57:55.723568+00
+ d66e2276-970b-4b3b-be95-04eb3a3249e2 | chat   | answered  | Avant de faire des hypothèses pour les 20+ critères restants (Social et Gouvernance), voulez-vous répondre aux questions ou me laisser estimer avec des hypothèses prudentes (scores modérés de 4-5/10 pour les non-renseignés) ? | 2026-04-30 02:55:49.841859+00
+ c4243ed4-002e-41ed-b00c-5a0175b295da | chat   | abandoned | Combien de personnes travaillent dans Moussa SARL ?                                                                                                                                                                               | 2026-04-30 02:43:29.671195+00
+ 70350b8f-a88e-4dca-bd29-e856c7a1dbc4 | chat   | answered  | Quel est le secteur principal de Moussa SARL ?                                                                                                                                                                                    | 2026-04-30 02:43:05.346956+00
+ b2dbccd8-ea94-4db4-829a-bdea3152f791 | chat   | pending   | Quelle est la taille de Moussa SARL ?                                                                                                                                                                                             | 2026-04-30 02:42:25.701181+00
+ 24a55179-31bd-44ed-abee-37dba17641f5 | chat   | answered  | Quel est le secteur principal de Moussa SARL ?                                                                                                                                                                                    | 2026-04-30 02:41:48.789664+00
+(8 rows)
+
+ module |   state   | count 
+--------+-----------+-------
+ chat   | answered  |     6
+ chat   | abandoned |     1
+ chat   | pending   |     1
+(3 rows)
+
+ esg_assessments_total 
+-----------------------
+                     0
+(1 row)
+

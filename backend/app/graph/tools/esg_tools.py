@@ -369,16 +369,24 @@ async def batch_save_esg_criteria(
         criteria_scores = dict((assessment.assessment_data or {}).get("criteria_scores", {}))
         evaluated_criteria = list(assessment.evaluated_criteria or [])
 
-        for criterion in criteria:
-            code = criterion["criterion_code"]
+        # Pydantic v2 + args_schema=BatchSaveESGCriteriaArgs convertit chaque entree
+        # en _CriterionItem (BaseModel). Si le tool est appele directement avec un
+        # dict (tests, code legacy), on tolere les deux formes.
+        normalized: list[dict] = [
+            c if isinstance(c, dict) else c.model_dump()
+            for c in criteria
+        ]
+
+        for item in normalized:
+            code = item["criterion_code"]
             criteria_scores[code] = {
-                "score": criterion["score"],
-                "justification": criterion["justification"],
+                "score": item["score"],
+                "justification": item["justification"],
             }
             if code not in evaluated_criteria:
                 evaluated_criteria.append(code)
 
-        last_code = criteria[-1]["criterion_code"]
+        last_code = normalized[-1]["criterion_code"]
         current_pillar = assessment.current_pillar
         if last_code.startswith("E"):
             current_pillar = "environment"
@@ -402,7 +410,7 @@ async def batch_save_esg_criteria(
         progress = compute_progress_percent(evaluated_criteria)
         scores = compute_overall_score(criteria_scores, assessment.sector)
 
-        saved_codes = [c["criterion_code"] for c in criteria]
+        saved_codes = [item["criterion_code"] for item in normalized]
         return (
             f"{len(criteria)} criteres enregistres : {', '.join(saved_codes)}.\n"
             f"- Criteres evalues : {len(evaluated_criteria)}/30\n"

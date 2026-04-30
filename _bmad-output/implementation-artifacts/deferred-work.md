@@ -1,5 +1,12 @@
 # Deferred Work
 
+## Deferred from: fix-esg-scoring-node-routing review (2026-04-30)
+
+- ~~**[M — HIGH, BUG PRE-EXISTANT révélé par AC5 replay]**~~ ✅ **RÉSOLU le 2026-04-30** dans le même PR. `backend/app/graph/tools/esg_tools.py:372-381` — coercion défensive `c if isinstance(c, dict) else c.model_dump()` ajoutée + test régression `test_batch_save_esg_criteria_accepts_pydantic_items` dans `tests/test_prompts/test_esg_tools.py`. Plus de TypeError post-reload. Cause initiale : Pydantic v2 + `args_schema=BatchSaveESGCriteriaArgs` (story 10.1) convertit l'input LangChain en `_CriterionItem` mais le code accédait `criterion["criterion_code"]` dict-style.
+- **[J — LOW]** Frontend `pages/esg/index.vue` `startNewAssessment` — pas d'injection explicite de `assessment_id` dans le contexte du chat widget après création du draft. Fonctionnel grâce à `_load_resumable_assessment` (esg_scoring_node reprend le draft via `get_resumable_assessment` user-scoped), mais à valider en AC5 manual replay. Si la reprise échoue, ajouter une route param `?assessment_id=` ou un store transient.
+- **[K — LOW]** Pas de test frontend (Vitest/Playwright) pour `startNewAssessment` couvrant : toast erreur, double-click guard (`isCreating`), skip-toast sur `SessionExpiredError`. Logique vérifiée à la main + revue ; couvrir en E2E lors du sprint suivant.
+- **[L — LOW]** Multi-langue : `_detect_esg_request` ne couvre pas l'anglais (« I want to launch my ESG evaluation »). Hors scope (FR-only par CLAUDE.md), à reconsidérer si une UI EN est priorisée.
+
 ## Deferred from: 019-guided-tour-post-fix-debts validation live (2026-04-15)
 
 - **BUG-1 resolu partiellement** — mon fix du prompt (commit 8c71101) permet

@@ -3,7 +3,7 @@
 from typing import Annotated, Any
 
 from langgraph.graph.message import add_messages
-from typing_extensions import TypedDict
+from typing_extensions import NotRequired, TypedDict
 
 
 class ConversationState(TypedDict):
@@ -38,3 +38,5 @@ class ConversationState(TypedDict):
     guidance_stats: dict | None
     # Entites actives (story 10.2) — cabled-only backend, ignore par le selecteur en V1
     active_entities: dict[str, Any] | None
+    # Identifiant conversation injecte cote tests/anti-boucle widget (Patch G).
+    conversation_id: NotRequired[str]

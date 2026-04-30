@@ -2,10 +2,12 @@
 
 import logging
 import re
+from datetime import datetime, timedelta, timezone
 
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_core.runnables import RunnableConfig
 from langchain_openai import ChatOpenAI
+from sqlalchemy.exc import SQLAlchemyError
 
 from app.core.config import settings
 from app.graph.state import ConversationState
@@ -107,6 +109,13 @@ _ESG_KEYWORDS = [
     r"\bdiagnostic\s+ESG\b", r"\bbilan\s+ESG\b",
     r"\bcontinuer.*[ée]valuation.*ESG\b",
     r"\bfaire.*[ée]valuation.*ESG\b",
+    # Verbes d'intention courants (spec fix-esg-scoring-node-routing) :
+    # « lance / démarre / commence / crée / finalise / évalue / calcule … ESG »
+    # avec tolerance sur l'ordre et accents. .{0,40} borne la distance pour
+    # eviter les faux positifs trop laxistes. _detect_esg_query() retire
+    # ensuite les consultations (« voir mon score ESG » reste False).
+    r"\b(?:lanc|d[ée]marr|commenc|cr[ée][ée]?|finalis|[ée]valu|calcul)\w*\b.{0,40}\b(?:esg|[ée]valuation|scoring|score|conformit[ée]|crit[èe]res?)\b",
+    r"\b(?:esg|[ée]valuation|scoring|score|conformit[ée]|crit[èe]res?)\b.{0,40}\b(?:lanc|d[ée]marr|commenc|cr[ée][ée]?|finalis|[ée]valu|calcul)\w*\b",
 ]
 _ESG_PATTERNS = [re.compile(p, re.IGNORECASE) for p in _ESG_KEYWORDS]
 
@@ -269,14 +278,144 @@ def _detect_esg_query(text: str) -> bool:
     return any(pattern.search(text) for pattern in _ESG_QUERY_PATTERNS)
 
 
+# Patch D : pattern de negation (« ne lance pas d'évaluation ESG »,
+# « sans démarrer », « pas de lancement »). Si un message correspond, on
+# court-circuite la detection ESG positive (defaut securitaire pour eviter
+# les faux positifs sur les phrases negatives).
+_ESG_NEGATION_PATTERN = re.compile(
+    r"\b(?:ne\s+\w+\s+(?:pas|jamais|plus)"
+    r"|sans\s+(?:lancer|d[ée]marrer|cr[ée]er|[ée]valuer|finaliser)"
+    r"|pas\s+de\s+(?:lancement|d[ée]marrage|cr[ée]ation))\b",
+    re.IGNORECASE,
+)
+
+
 def _detect_esg_request(text: str) -> bool:
     """Détecter si un message est une demande d'évaluation ESG (interactive).
 
     Exclut les consultations simples (score actuel, radar, résultats).
+    Exclut aussi les formulations negatives (« ne lance pas », « sans démarrer »).
     """
+    if _ESG_NEGATION_PATTERN.search(text):
+        return False
     if _detect_esg_query(text):
         return False
     return any(pattern.search(text) for pattern in _ESG_PATTERNS)
+
+
+# Regex ESG appliquee au champ `prompt` des widgets repondus (anti-boucle).
+# Couvre les phrases types posees par chat_node lors de la confusion routage :
+# « créer / démarrer / lancer / finaliser / commencer … évaluation/scoring ESG ».
+_WIDGET_ESG_PROMPT_PATTERN = re.compile(
+    r"\b(?:cr[ée][ée]?r?|d[ée]marrer|lancer|finaliser|commencer|faire)\b"
+    r".{0,40}\b(?:[ée]valuation\s+ESG|scoring\s+ESG|ESG)\b",
+    re.IGNORECASE,
+)
+
+# Patch C : pattern de CONSULTATION ESG (passe / verification de l'historique).
+# Ces formulations ne doivent PAS etre considerees comme des intentions
+# de creation : « avez-vous deja cree », « as-tu fini », « as-tu deja ».
+_WIDGET_ESG_CONSULTATION_PATTERN = re.compile(
+    r"\b(?:d[ée]j[àa]"
+    r"|avez-vous"
+    r"|as[-\s]tu(?:\s+d[ée]j[àa]|\s+fini|\s+termin[ée])?"
+    r"|avez-vous\s+d[ée]j[àa])\b",
+    re.IGNORECASE,
+)
+
+# Bornage temporel pour les widgets ESG repondus (Patch A).
+_WIDGET_RECENCY_WINDOW = timedelta(minutes=10)
+
+
+async def _has_unresolved_esg_widget_signal(
+    state: ConversationState,
+    conversation_id: "uuid.UUID | str | None",  # noqa: F821 — uuid importe localement
+) -> bool:
+    """Detecter un widget ESG `state=answered` recent dans la conversation.
+
+    Sert d'anti-boucle quand chat_node a pose une question de confirmation ESG
+    et que l'utilisateur a clique « oui » : le router force alors la transition
+    vers esg_scoring_node au tour suivant, meme sans keyword ESG dans le texte.
+
+    Patch A : ne considere que les widgets repondus depuis moins de 10 minutes
+    (anti-redirect permanent). Si une evaluation ESG est deja `in_progress`
+    dans le state, le signal est inutile (esg_scoring est deja actif via
+    has_active_esg) et la fonction retourne False.
+
+    Patch C : exclut les widgets de consultation (« avez-vous deja cree … »).
+
+    Patch B : capture uniquement SQLAlchemyError (log error). Les autres
+    exceptions sont re-levees pour ne pas masquer des bugs.
+    """
+    import uuid as uuid_mod
+
+    # Patch A — gating : si un assessment ESG est deja in_progress,
+    # esg_scoring_node prendra naturellement la main via has_active_esg.
+    esg_assessment = state.get("esg_assessment") if state else None
+    if esg_assessment and esg_assessment.get("status") == "in_progress":
+        return False
+
+    if conversation_id is None:
+        return False
+
+    if isinstance(conversation_id, str):
+        try:
+            conversation_uuid = uuid_mod.UUID(conversation_id)
+        except (ValueError, AttributeError):
+            return False
+    else:
+        conversation_uuid = conversation_id
+
+    try:
+        from sqlalchemy import select
+
+        from app.core.database import async_session_factory
+        from app.models.interactive_question import (
+            InteractiveQuestion,
+            InteractiveQuestionState,
+        )
+
+        async with async_session_factory() as db:
+            stmt = (
+                select(
+                    InteractiveQuestion.prompt,
+                    InteractiveQuestion.answered_at,
+                    InteractiveQuestion.created_at,
+                )
+                .where(
+                    InteractiveQuestion.conversation_id == conversation_uuid,
+                    InteractiveQuestion.state
+                    == InteractiveQuestionState.ANSWERED.value,
+                )
+                .order_by(InteractiveQuestion.created_at.desc())
+                .limit(20)
+            )
+            rows = (await db.execute(stmt)).all()
+    except SQLAlchemyError:
+        logger.error(
+            "Echec lecture widgets ESG repondus (anti-boucle) — fallback heuristique",
+            exc_info=True,
+        )
+        return False
+
+    now = datetime.now(timezone.utc)
+    for prompt_text, answered_at, created_at in rows:
+        if not prompt_text:
+            continue
+        # Bornage temporel : prefere answered_at, sinon created_at.
+        ts = answered_at or created_at
+        if ts is not None:
+            # Tolerer un timestamp naif (sqlite tests) en le considerant UTC.
+            if ts.tzinfo is None:
+                ts = ts.replace(tzinfo=timezone.utc)
+            if now - ts > _WIDGET_RECENCY_WINDOW:
+                continue
+        # Patch C : ignorer les prompts de consultation (« avez-vous deja … »).
+        if _WIDGET_ESG_CONSULTATION_PATTERN.search(prompt_text):
+            continue
+        if _WIDGET_ESG_PROMPT_PATTERN.search(prompt_text):
+            return True
+    return False
 
 
 def _has_active_esg_assessment(state: dict) -> bool:
@@ -340,7 +479,10 @@ def _detect_profile_info(text: str) -> bool:
     return any(pattern.search(text) for pattern in _PROFILE_PATTERNS)
 
 
-async def router_node(state: ConversationState) -> ConversationState:
+async def router_node(
+    state: ConversationState,
+    config: RunnableConfig | None = None,
+) -> ConversationState:
     """Nœud routeur : analyse le message et décide du routage.
 
     Logique de priorite :
@@ -348,6 +490,9 @@ async def router_node(state: ConversationState) -> ConversationState:
        - Continuation → router vers active_module
        - Changement → reset active_module, classifier normalement
     2. Si active_module est null → classification normale par heuristiques
+    3. Anti-boucle widget : si un widget ESG repondu existe en BDD pour la
+       conversation et active_module ∈ {None, 'chat'}, forcer _route_esg=True
+       (defense contre les widgets de confirmation poses en boucle par chat_node).
     """
     messages = state["messages"]
     user_profile = state.get("user_profile")
@@ -404,6 +549,24 @@ async def router_node(state: ConversationState) -> ConversationState:
     esg_assessment = state.get("esg_assessment")
     is_esg_request = _detect_esg_request(last_user_msg) if last_user_msg else False
     has_active_esg = _has_active_esg_assessment(state)
+
+    # Anti-boucle widget : si chat_node a deja pose une question ESG et que
+    # l'utilisateur y a repondu, force la transition vers esg_scoring meme si
+    # le message courant ne contient aucun keyword ESG (ex : « ok », « oui »).
+    if not is_esg_request and active_module in (None, "chat"):
+        configurable = (config or {}).get("configurable", {}) if config else {}
+        conversation_id = configurable.get("conversation_id") if configurable else None
+        # Tolere aussi le state-injected conversation_id (utile pour les tests
+        # unitaires qui n'instancient pas un RunnableConfig complet).
+        if conversation_id is None:
+            conversation_id = state.get("conversation_id")
+        if conversation_id and await _has_unresolved_esg_widget_signal(state, conversation_id):
+            logger.info(
+                "router_node : signal anti-boucle widget ESG detecte, "
+                "force _route_esg=True pour conversation %s",
+                conversation_id,
+            )
+            is_esg_request = True
 
     carbon_data = state.get("carbon_data")
     is_carbon_request = _detect_carbon_request(last_user_msg) if last_user_msg else False
@@ -1207,6 +1370,24 @@ async def chat_node(
 
     # Combiner les tools de profilage, lecture, documents, widgets interactifs et guidage
     all_tools = PROFILING_TOOLS + CHAT_TOOLS + DOCUMENT_TOOLS + INTERACTIVE_TOOLS + GUIDED_TOUR_TOOLS
+
+    # Anti-boucle ESG (defense in depth, spec fix-esg-scoring-node-routing) :
+    # si le dernier message exprime une intention ESG, retirer
+    # `ask_interactive_question` du toolkit pour empecher chat_node de poser
+    # un widget de confirmation. Le routeur basculera vers esg_scoring_node
+    # qui possede son propre tool `create_esg_assessment`.
+    last_user_msg_chat = ""
+    for _msg in reversed(state["messages"]):
+        if isinstance(_msg, HumanMessage):
+            last_user_msg_chat = _msg.content
+            break
+    if last_user_msg_chat and _detect_esg_request(last_user_msg_chat):
+        _ESG_BLOCKED_TOOL_NAMES = {"ask_interactive_question"}
+        all_tools = [
+            t for t in all_tools
+            if getattr(t, "name", None) not in _ESG_BLOCKED_TOOL_NAMES
+        ]
+
     if all_tools:
         filtered_tools, debug_info = select_tools_for_node(
             node_name="chat",
@@ -1240,7 +1421,12 @@ async def chat_node(
         "- Quand l'utilisateur demande un graphique, radar ou visuel de ses scores ESG/carbone/credit : "
         "appelle d'abord get_esg_assessment_chat (ou get_carbon_summary_chat) pour recuperer les scores "
         "existants, puis genere le bloc visuel avec les VRAIS scores. Ne relance JAMAIS une nouvelle "
-        "evaluation juste pour afficher un graphique."
+        "evaluation juste pour afficher un graphique.\n\n"
+        "ANTI-BOUCLE ESG : Tu ne dois JAMAIS poser de widget interactif pour les confirmations "
+        "de type « voulez-vous créer/démarrer/finaliser une évaluation ESG ». Si l'utilisateur "
+        "exprime une intention ESG, réponds en texte libre en l'invitant à dire littéralement "
+        "« lance mon évaluation ESG » — le routeur basculera automatiquement vers le module "
+        "d'évaluation qui créera l'assessment et posera les vraies questions métier."
     )
 
     from app.prompts.widget import WIDGET_INSTRUCTION

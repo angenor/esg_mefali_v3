@@ -14,12 +14,16 @@ export function useEsg() {
 
   const loading = ref(false)
   const error = ref('')
+  // Patch F : flag expose au consommateur pour suppresser le toast d'erreur
+  // quand handleAuthFailure() a deja declenche la redirection /login.
+  const sessionExpired = ref(false)
 
   // Propage un message FR et declenche handleAuthFailure si la session a expire.
   // Skip error.value sur SessionExpiredError pour eviter un flash d'erreur juste
   // avant la redirection vers /login (UX NFR9).
   async function handleError(e: unknown, fallback: string): Promise<void> {
     if (e instanceof SessionExpiredError) {
+      sessionExpired.value = true
       await handleAuthFailure()
       return
     }
@@ -29,6 +33,7 @@ export function useEsg() {
   async function createAssessment(conversationId?: string): Promise<ESGAssessment | null> {
     loading.value = true
     error.value = ''
+    sessionExpired.value = false
     try {
       const body = conversationId ? { conversation_id: conversationId } : undefined
       const options: RequestInit = { method: 'POST' }
@@ -104,6 +109,7 @@ export function useEsg() {
   return {
     loading,
     error,
+    sessionExpired,
     createAssessment,
     fetchAssessments,
     fetchAssessment,
