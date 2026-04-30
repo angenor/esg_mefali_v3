@@ -804,3 +804,117 @@ class TestOtherNodesActiveModule:
 
         assert result.get("active_module") == "action_plan"
         assert result.get("active_module_data") is not None
+
+
+# ── Phase 7: Propagation active_module vers le RunnableConfig (bug widget interactif) ─
+
+
+class TestActiveModulePropagationToConfigurable:
+    """Verifie que les nodes specialistes injectent active_module dans
+    `configurable` du RunnableConfig avant l'invocation du LLM avec tools.
+
+    Bug : `interactive_questions.module` etait toujours 'chat' meme quand
+    la question venait du node esg_scoring, parce que `_propagate_tools_offered`
+    n'injectait que `tools_offered`. Le tool `ask_interactive_question` lit
+    `configurable.get("active_module")` (interactive_tools.py:116) -> sans
+    propagation, fallback "chat".
+    """
+
+    def test_helper_propagates_active_module_in_configurable(self) -> None:
+        """Le helper de propagation doit ecrire active_module + active_module_data."""
+        from app.graph.nodes import _propagate_node_context  # type: ignore[attr-defined]
+
+        config: dict = {"configurable": {"db": "fake-db", "user_id": "u1"}}
+
+        _propagate_node_context(
+            config,
+            tools_offered=["ask_interactive_question"],
+            active_module="esg_scoring",
+            active_module_data={"assessment_id": "a1"},
+        )
+
+        cfg = config["configurable"]
+        assert cfg["active_module"] == "esg_scoring"
+        assert cfg["active_module_data"] == {"assessment_id": "a1"}
+        assert cfg["tools_offered"] == ["ask_interactive_question"]
+        # Les valeurs preexistantes ne doivent pas etre supprimees
+        assert cfg["db"] == "fake-db"
+        assert cfg["user_id"] == "u1"
+
+    def test_helper_handles_none_config(self) -> None:
+        """Robustesse : config=None ne doit pas lever."""
+        from app.graph.nodes import _propagate_node_context  # type: ignore[attr-defined]
+
+        # Ne doit pas raise
+        _propagate_node_context(
+            None,
+            tools_offered=[],
+            active_module="esg_scoring",
+            active_module_data=None,
+        )
+
+    @pytest.mark.asyncio
+    async def test_esg_scoring_node_writes_active_module_in_configurable(self) -> None:
+        """esg_scoring_node doit injecter active_module='esg_scoring' dans le configurable
+        AVANT l'invocation du LLM, pour que ask_interactive_question le lise correctement.
+        """
+        from app.graph.nodes import esg_scoring_node
+
+        mock_response = AIMessage(content="Question posee")
+        mock_response.tool_calls = []
+
+        state = _make_state(
+            messages=[HumanMessage(content="lance mon evaluation ESG")],
+            active_module=None,
+            active_module_data=None,
+            esg_assessment=None,
+        )
+        config: dict = {"configurable": {"db": "fake-db", "user_id": "u1"}}
+
+        with patch("app.graph.nodes.get_llm") as mock_llm_factory:
+            mock_llm = MagicMock()
+            mock_llm.bind_tools.return_value = mock_llm
+            mock_llm.ainvoke = AsyncMock(return_value=mock_response)
+            mock_llm_factory.return_value = mock_llm
+
+            with patch(
+                "app.graph.nodes._fetch_rag_context_for_esg",
+                new_callable=AsyncMock,
+                return_value="",
+            ):
+                await esg_scoring_node(state, config)
+
+        cfg = config["configurable"]
+        assert cfg.get("active_module") == "esg_scoring", (
+            "esg_scoring_node doit propager active_module='esg_scoring' "
+            f"dans configurable; got: {cfg!r}"
+        )
+
+    @pytest.mark.asyncio
+    async def test_carbon_node_writes_active_module_in_configurable(self) -> None:
+        """carbon_node doit injecter active_module='carbon' dans le configurable."""
+        from app.graph.nodes import carbon_node
+
+        mock_response = AIMessage(content="Bilan carbone")
+        mock_response.tool_calls = []
+
+        state = _make_state(
+            messages=[HumanMessage(content="je veux faire un bilan carbone")],
+            active_module=None,
+            active_module_data=None,
+            carbon_data=None,
+        )
+        config: dict = {"configurable": {"db": "fake-db", "user_id": "u1"}}
+
+        with patch("app.graph.nodes.get_llm") as mock_llm_factory:
+            mock_llm = MagicMock()
+            mock_llm.bind_tools.return_value = mock_llm
+            mock_llm.ainvoke = AsyncMock(return_value=mock_response)
+            mock_llm_factory.return_value = mock_llm
+
+            await carbon_node(state, config)
+
+        cfg = config["configurable"]
+        assert cfg.get("active_module") == "carbon", (
+            f"carbon_node doit propager active_module='carbon'; got: {cfg!r}"
+        )

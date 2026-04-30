@@ -5,11 +5,12 @@ from typing import Any
 
 from langchain_core.messages import AIMessage
 from langgraph.graph import END, StateGraph
-from langgraph.prebuilt import ToolNode
+from langgraph.prebuilt import ToolNode  # conserve : utilise par ValidatingToolNode (composition)
 
 from app.graph.checkpointer import create_checkpointer
 from app.graph.nodes import action_plan_node, application_node, carbon_node, chat_node, credit_node, document_node, esg_scoring_node, financing_node, router_node
 from app.graph.state import ConversationState
+from app.graph.validating_tool_node import ValidatingToolNode
 
 logger = logging.getLogger(__name__)
 
@@ -81,7 +82,9 @@ def create_tool_loop(
     graph.add_node(node_name, node_fn)
 
     if tools:
-        tool_node = ToolNode(tools)
+        # Story 10.4 : substitution ToolNode -> ValidatingToolNode pour la boucle
+        # de correction Pydantic bornee (1 retry + fallback FR).
+        tool_node = ValidatingToolNode(tools, node_name=node_name)
         graph.add_node(tool_node_name, tool_node)
 
         graph.add_conditional_edges(

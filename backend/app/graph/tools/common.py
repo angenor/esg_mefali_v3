@@ -63,12 +63,17 @@ async def log_tool_call(
     error_message: str | None = None,
     retry_count: int = 0,
     tools_offered: list[str] | None = None,
+    validation_status: str | None = None,
+    pydantic_errors: list[dict] | None = None,
 ) -> None:
     """Journaliser un appel de tool dans la table tool_call_logs.
 
     Appelé après chaque exécution de tool (succès, erreur, retry).
     `tools_offered` (story 10.2) journalise la liste des tools exposes
     au LLM lors du tour ayant declenche cet appel.
+    `validation_status` et `pydantic_errors` (story 10.4) tracent la boucle
+    de correction Pydantic ; restent NULL pour les logs runtime non-Pydantic
+    (couche `with_retry`).
     """
     from app.models.tool_call_log import ToolCallLog
 
@@ -84,6 +89,8 @@ async def log_tool_call(
         error_message=error_message,
         retry_count=retry_count,
         tools_offered=tools_offered,
+        validation_status=validation_status,
+        pydantic_errors=pydantic_errors,
     )
     db.add(log_entry)
     await db.flush()

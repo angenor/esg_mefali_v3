@@ -75,6 +75,19 @@ class ToolCallLog(Base):
         JSON,
         nullable=True,
     )
+    # Story 10.4 : statut de la boucle de validation Pydantic.
+    # Valeurs canoniques : "valid", "valid_after_retry", "failed_after_retry".
+    # NULL pour les logs runtime non-Pydantic (couche with_retry).
+    validation_status: Mapped[str | None] = mapped_column(
+        String(30),
+        nullable=True,
+    )
+    # Story 10.4 : erreurs Pydantic filtrees (loc, msg, type) — sans `input`
+    # qui peut contenir des secrets.
+    pydantic_errors: Mapped[list | None] = mapped_column(
+        JSON,
+        nullable=True,
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
@@ -85,4 +98,5 @@ class ToolCallLog(Base):
         Index("ix_tool_call_logs_user_created", "user_id", created_at.desc()),
         Index("ix_tool_call_logs_conversation", "conversation_id"),
         Index("ix_tool_call_logs_tool_status", "tool_name", "status"),
+        Index("ix_tool_call_logs_validation_status", "validation_status"),
     )

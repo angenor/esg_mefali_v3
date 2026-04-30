@@ -16,12 +16,22 @@ from app.prompts.system import build_system_prompt
 logger = logging.getLogger(__name__)
 
 
-def _propagate_tools_offered(
+def _propagate_node_context(
     config: RunnableConfig | None,
+    *,
     tools_offered: list[str],
+    active_module: str | None = None,
+    active_module_data: dict | None = None,
 ) -> None:
-    """Stocker `tools_offered` dans le RunnableConfig pour que log_tool_call
-    le retrouve au moment d'ecrire dans tool_call_logs (story 10.2).
+    """Propager le contexte du noeud dans le RunnableConfig avant l'invocation LLM.
+
+    Stocke :
+    - `tools_offered` (story 10.2) : pour que log_tool_call le retrouve au moment
+      d'ecrire dans tool_call_logs.
+    - `active_module` + `active_module_data` (fix bug widget interactif) : pour
+      que le tool `ask_interactive_question` (interactive_tools.py) lise le bon
+      module et persiste `interactive_questions.module` correctement, au lieu de
+      tomber dans le fallback "chat".
 
     Remplace `configurable` par un nouveau dict pour eviter toute mutation
     in-place qui pourrait corrompre le RunnableConfig partage entre tours.
@@ -29,7 +39,22 @@ def _propagate_tools_offered(
     if config is None:
         return
     existing = config.get("configurable", {}) or {}  # type: ignore[union-attr]
-    config["configurable"] = {**existing, "tools_offered": tools_offered}  # type: ignore[index]
+    config["configurable"] = {  # type: ignore[index]
+        **existing,
+        "tools_offered": tools_offered,
+        "active_module": active_module,
+        "active_module_data": active_module_data,
+    }
+
+
+# Alias retro-compatible : conserve la signature historique pour tout code
+# qui aurait pu importer _propagate_tools_offered (aucun aujourd'hui mais
+# le helper avait ete introduit en story 10.2 avec ce nom).
+def _propagate_tools_offered(
+    config: RunnableConfig | None,
+    tools_offered: list[str],
+) -> None:  # pragma: no cover - alias de transition
+    _propagate_node_context(config, tools_offered=tools_offered)
 
 
 TITLE_PROMPT = (
@@ -700,7 +725,12 @@ async def esg_scoring_node(
         all_tools=full_catalog,
         active_entities=state.get("active_entities"),
     )
-    _propagate_tools_offered(config, debug_info["tools_offered"])
+    _propagate_node_context(
+        config,
+        tools_offered=debug_info["tools_offered"],
+        active_module="esg_scoring",
+        active_module_data=state.get("active_module_data"),
+    )
     llm_with_tools = llm.bind_tools(filtered_tools)
     response = await llm_with_tools.ainvoke(chat_messages)
 
@@ -875,7 +905,12 @@ async def carbon_node(
         all_tools=all_carbon_tools,
         active_entities=state.get("active_entities"),
     )
-    _propagate_tools_offered(config, debug_info["tools_offered"])
+    _propagate_node_context(
+        config,
+        tools_offered=debug_info["tools_offered"],
+        active_module="carbon",
+        active_module_data=state.get("active_module_data"),
+    )
     llm_with_tools = llm.bind_tools(filtered_tools)
     response = await llm_with_tools.ainvoke(chat_messages)
 
@@ -945,7 +980,12 @@ async def financing_node(
         all_tools=full_catalog,
         active_entities=state.get("active_entities"),
     )
-    _propagate_tools_offered(config, debug_info["tools_offered"])
+    _propagate_node_context(
+        config,
+        tools_offered=debug_info["tools_offered"],
+        active_module="financing",
+        active_module_data=state.get("active_module_data"),
+    )
     llm = llm.bind_tools(filtered_tools)
 
     user_profile = state.get("user_profile") or {}
@@ -1131,7 +1171,12 @@ async def credit_node(
         all_tools=full_catalog,
         active_entities=state.get("active_entities"),
     )
-    _propagate_tools_offered(config, debug_info["tools_offered"])
+    _propagate_node_context(
+        config,
+        tools_offered=debug_info["tools_offered"],
+        active_module="credit",
+        active_module_data=state.get("active_module_data"),
+    )
     llm = llm.bind_tools(filtered_tools)
 
     user_profile = state.get("user_profile") or {}
@@ -1214,7 +1259,12 @@ async def chat_node(
             all_tools=all_tools,
             active_entities=state.get("active_entities"),
         )
-        _propagate_tools_offered(config, debug_info["tools_offered"])
+        _propagate_node_context(
+            config,
+            tools_offered=debug_info["tools_offered"],
+            active_module="chat",
+            active_module_data=state.get("active_module_data"),
+        )
         llm = llm.bind_tools(filtered_tools)
 
     user_profile = state.get("user_profile")
@@ -1322,7 +1372,12 @@ async def application_node(
         all_tools=full_catalog,
         active_entities=state.get("active_entities"),
     )
-    _propagate_tools_offered(config, debug_info["tools_offered"])
+    _propagate_node_context(
+        config,
+        tools_offered=debug_info["tools_offered"],
+        active_module="application",
+        active_module_data=state.get("active_module_data"),
+    )
     llm = llm.bind_tools(filtered_tools)
 
     user_profile = state.get("user_profile") or {}
@@ -1395,7 +1450,12 @@ async def action_plan_node(
         all_tools=full_catalog,
         active_entities=state.get("active_entities"),
     )
-    _propagate_tools_offered(config, debug_info["tools_offered"])
+    _propagate_node_context(
+        config,
+        tools_offered=debug_info["tools_offered"],
+        active_module="action_plan",
+        active_module_data=state.get("active_module_data"),
+    )
     llm = llm.bind_tools(filtered_tools)
 
     user_profile = state.get("user_profile") or {}
