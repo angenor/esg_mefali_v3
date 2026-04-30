@@ -1,0 +1,6 @@
+                  id                  | module |  state   | response_values |          answered_at          |                       prompt                        
+--------------------------------------+--------+----------+-----------------+-------------------------------+-----------------------------------------------------
+ c7f6f150-7f6b-4811-8467-fe1cdf65f5a0 | chat   | answered | ["agriculture"] | 2026-04-30 02:08:58.338183+00 | Quel est le secteur principal de Moussa SARL ?
+ 7f697754-d86f-4f63-8bc6-d85a9793ca4e | chat   | pending  |                 |                               | Combien de personnes travaillent chez Moussa SARL ?
+(2 rows)
+

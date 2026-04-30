@@ -1,0 +1,11 @@
+=== count pending ===
+ count 
+-------
+     0
+(1 row)
+
+=== rows ===
+ id | module | state | created_at 
+----+--------+-------+------------
+(0 rows)
+

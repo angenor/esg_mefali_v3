@@ -589,7 +589,14 @@ export function useChat() {
     questionId: string,
     answer: InteractiveQuestionAnswer,
   ): Promise<void> {
-    if (!currentConversation.value || isStreaming.value) return
+    if (!currentConversation.value) return
+
+    // Le widget peut être cliqué AVANT la fin du stream qui l'a produit
+    // (le SSE `interactive_question` arrive avant le `done`). On avorte
+    // ce stream pour libérer le slot et envoyer la réponse immédiatement.
+    if (isStreaming.value && abortController.value) {
+      abortController.value.abort()
+    }
 
     error.value = ''
     isStreaming.value = true

@@ -540,6 +540,14 @@ async def _resolve_interactive_question(
     question.answered_at = datetime.now(timezone.utc)
 
     await db.flush()
+    # Commit immediat de la resolution, AVANT le streaming SSE.
+    # Sans ce commit, la connection asyncpg sous-jacente peut etre fermee
+    # par le streaming en aval (sse_db utilise une session separee), ce qui
+    # fait echouer le commit final de get_db avec :
+    #   InterfaceError: cannot call Transaction.commit(): the underlying
+    #   connection is closed
+    # -> rollback implicite -> la question reste 'pending' en DB.
+    await db.commit()
     return question, synthesized
 
 
