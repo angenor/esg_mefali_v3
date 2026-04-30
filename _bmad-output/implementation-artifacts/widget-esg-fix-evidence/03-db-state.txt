@@ -1,0 +1,7 @@
+                  id                  | module |   state   | response_values |          answered_at          
+--------------------------------------+--------+-----------+-----------------+-------------------------------
+ fe8adf62-17ca-4c53-80db-c5f021edaf98 | chat   | pending   |                 | 
+ 8cdbff8c-31e3-4599-b4fc-05976e8ca503 | chat   | answered  | ["agriculture"] | 2026-04-30 01:11:00.113396+00
+ 2b7c3db5-17ba-448e-a221-c2825f14a0be | chat   | abandoned | ["new"]         | 2026-04-30 00:44:34.503251+00
+(3 rows)
+
