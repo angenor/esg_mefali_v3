@@ -262,7 +262,6 @@ Le coaching sur l'IA responsable nous intéresse particulièrement pour assurer 
 
 
 
-
 >  Bonjour ! je suis Angenor N'GOUANDI — ingénieur, enseignant et formateur technique en informatique, basé en Côte d'Ivoire. Je suis le porteur du projet ESG Mefali.
 
 > ESG Mefali, c'est Un agent conversationnel propulsé par l'intelligence artificielle, entièrement en français, pensé pour la finance verte. 

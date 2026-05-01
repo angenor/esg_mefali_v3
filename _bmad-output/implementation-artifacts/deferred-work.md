@@ -1,5 +1,13 @@
 # Deferred Work
 
+## Deferred from: review of fix-profile-and-routing-regression (2026-04-30)
+
+- **Asymétrie du fix routeur** : la garde défensive (reset `active_module` sur intention explicite) ne traite que ESG. Les modules `carbon`, `financing`, `application`, `credit`, `action_plan` restent vulnérables à la même séquelle si `active_module="chat"` traîne entre deux tours et que le LLM de continuation retourne `True`. À élargir dans une story dédiée — risque de régression cross-module si on l'inclut ici. [backend/app/graph/nodes.py:520-540]
+- **Race condition multi-requêtes même `conversation_id`** : MemorySaver de LangGraph n'est pas transactionnel pour les mutations cross-call. Deux requêtes parallèles peuvent voir un checkpoint stale et écraser `active_module`. Pré-existant ; à traiter avec un lock par conversation_id ou la migration future vers checkpointer Postgres. [backend/app/graph/nodes.py::router_node]
+- **`_has_active_esg_assessment` ne consulte que le state** : si l'`esg_assessment` vit en DB mais n'a pas encore été projeté dans le state, la garde peut considérer `has_active_esg=False` à tort et déclencher une session ESG dupliquée. Cross-check DB à ajouter. [backend/app/graph/nodes.py:421]
+- **`_detect_esg_request` négation locale** : phrases combinant négation et intention positive (« je ne lance pas X, mais lance-le ») peuvent mal classer. Helper pré-existant ; à raffiner avec un fenêtrage local sur les clauses. [backend/app/graph/nodes.py:293]
+- **AC1/AC2 runtime non couverts par tests automatisés** : le verdict final (rows `tool_call_logs` + `company_profiles` peuplés + `esg_assessments` créée) repose sur le replay E2E `agent-browser` à effectuer manuellement (cleanup DB via `/tmp/cleanup-moussa1.sql` puis session `profil-esg-complet-v2`). Décision intentionnelle (CLI sans navigateur headed) documentée dans le Spec Change Log du spec.
+
 ## Deferred from: fix-esg-scoring-node-routing review (2026-04-30)
 
 - ~~**[M — HIGH, BUG PRE-EXISTANT révélé par AC5 replay]**~~ ✅ **RÉSOLU le 2026-04-30** dans le même PR. `backend/app/graph/tools/esg_tools.py:372-381` — coercion défensive `c if isinstance(c, dict) else c.model_dump()` ajoutée + test régression `test_batch_save_esg_criteria_accepts_pydantic_items` dans `tests/test_prompts/test_esg_tools.py`. Plus de TypeError post-reload. Cause initiale : Pydantic v2 + `args_schema=BatchSaveESGCriteriaArgs` (story 10.1) convertit l'input LangChain en `_CriterionItem` mais le code accédait `criterion["criterion_code"]` dict-style.

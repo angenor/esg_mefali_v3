@@ -11,6 +11,7 @@ Tests router_node mockent _is_topic_continuation pour eviter le round-trip LLM.
 
 from __future__ import annotations
 
+import logging
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -144,3 +145,69 @@ def test_detect_esg_request_false_on_negation() -> None:
     """Une formulation negative (« ne lance PAS d'évaluation ESG ») ne doit
     PAS declencher la detection ESG positive."""
     assert _detect_esg_request("ne lance PAS d'évaluation ESG") is False
+
+
+# ─── Spec fix-profile-and-routing-regression : priorité ESG après tour chat ──
+
+
+@pytest.mark.asyncio
+async def test_esg_priority_after_chat_turn() -> None:
+    """Bug 2 : si active_module='chat' (séquelle d'un tour précédent) et que
+    l'utilisateur envoie une intention ESG explicite, le router doit forcer
+    le reset d'active_module et router vers esg_scoring (et non rester en chat
+    via le classifieur de continuation LLM).
+    """
+    state = _make_state("lance mon évaluation ESG")
+    state["active_module"] = "chat"  # type: ignore[typeddict-item]
+
+    # Mock _is_topic_continuation : si on l'appelait avec "chat" comme module,
+    # le LLM par défaut retournerait CONTINUER. La garde défensive doit empêcher
+    # cet appel et forcer le routage ESG normal.
+    mock_continuation = AsyncMock(return_value=True)
+    with patch("app.graph.nodes._is_topic_continuation", new=mock_continuation):
+        result = await router_node(state)
+
+    assert result.get("_route_esg") is True, (
+        "L'intention ESG explicite doit forcer _route_esg=True même si "
+        f"active_module='chat' était présent ; resultat={result}"
+    )
+    assert result.get("active_module") is None, (
+        "active_module doit être réinitialisé à None pour permettre "
+        "esg_scoring_node de prendre la main"
+    )
+    # Patch review (acceptance auditor) : prouver que la garde court-circuite
+    # bien le classifieur LLM de continuation, et pas seulement que le résultat
+    # final converge par hasard.
+    mock_continuation.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_router_debug_logs(caplog: pytest.LogCaptureFixture) -> None:
+    """AC4 : router_node émet un log DEBUG par tour avec les 6 champs requis :
+    last_user_msg, is_esg_request, active_module, has_active_esg, _route_esg,
+    is_continuation. Tronqué à 80 chars (RGPD).
+    """
+    state = _make_state("lance mon évaluation ESG")
+
+    with caplog.at_level(logging.DEBUG, logger="app.graph.nodes"):
+        with patch(
+            "app.graph.nodes._is_topic_continuation",
+            new=AsyncMock(return_value=True),
+        ):
+            await router_node(state)
+
+    debug_records = [
+        r for r in caplog.records
+        if r.levelno == logging.DEBUG and "router_node decision" in r.getMessage()
+    ]
+    assert debug_records, "Aucun log DEBUG router_node decision émis"
+    msg = debug_records[-1].getMessage()
+    for needle in (
+        "last_user_msg=",
+        "is_esg_request=",
+        "active_module=",
+        "has_active_esg=",
+        "_route_esg=",
+        "is_continuation=",
+    ):
+        assert needle in msg, f"Champ {needle!r} manquant dans le log DEBUG : {msg}"

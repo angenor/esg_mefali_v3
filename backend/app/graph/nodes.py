@@ -454,10 +454,21 @@ def _build_profiling_instructions(profile: dict | None) -> str:
     if not missing_fields:
         return ""
 
+    pct = _compute_identity_completion(profile)
+
+    # Renforcement (spec fix-profile-and-routing-regression, Bug 1) :
+    # le LLM doit appeler `update_company_profile` AVANT toute réponse texte
+    # dès que le message contient des informations factuelles extractibles.
     return (
-        "PROFILAGE GUIDÉ : Le profil de l'entreprise est incomplet. "
-        "Intègre naturellement UNE question sur un champ manquant dans ta réponse. "
-        "Ne pose pas la question de façon abrupte, intègre-la dans le fil de la conversation.\n"
+        f"INSTRUCTIONS PROFILAGE — IMPÉRATIF :\n"
+        f"Le profil de l'entreprise est incomplet ({pct:.0f} %). "
+        "Si le message utilisateur contient des informations factuelles "
+        "(nom, secteur, ville, pays, effectif, chiffre d'affaires, année de "
+        "création, ODD ciblés), tu DOIS appeler le tool `update_company_profile` "
+        "avec TOUS les champs détectés AVANT toute autre réponse. "
+        "Ne réponds JAMAIS uniquement en texte si des champs sont extractibles.\n"
+        "Ensuite, intègre naturellement UNE question sur un champ manquant "
+        "dans ta réponse, sans poser la question de façon abrupte.\n"
         "Champs manquants :\n" + "\n".join(missing_fields)
     )
 
@@ -506,6 +517,31 @@ async def router_node(
             last_user_msg = msg.content
             break
 
+    # Garde défensive (spec fix-profile-and-routing-regression, Bug 2) :
+    # si le message exprime une intention ESG explicite ET qu'aucune évaluation
+    # ESG n'est en cours, on force la reclassification normale en réinitialisant
+    # active_module. Cela évite qu'un module précédent (ex. continuation chat)
+    # ne capture une demande ESG via le classifieur de continuation LLM.
+    is_esg_intent_explicit = (
+        bool(last_user_msg) and _detect_esg_request(last_user_msg)
+    )
+    has_active_esg_pre = _has_active_esg_assessment(state)
+    if (
+        active_module
+        and active_module != "esg_scoring"
+        and is_esg_intent_explicit
+        and not has_active_esg_pre
+    ):
+        logger.info(
+            "router_node : intention ESG explicite détectée, reset active_module=%s",
+            active_module,
+        )
+        active_module = None
+        active_module_data = None
+
+    # Variable suivie pour les logs DEBUG (None si on ne passe pas par la branche).
+    is_continuation: bool | None = None
+
     # Si un module est actif, verifier si on continue ou on change de sujet
     if active_module and last_user_msg:
         try:
@@ -523,6 +559,19 @@ async def router_node(
 
             # Décider si on doit extraire des infos de profil
             should_extract = _detect_profile_info(last_user_msg) if last_user_msg else False
+
+            # Log DEBUG diagnostique (spec fix-profile-and-routing-regression, AC4).
+            logger.debug(
+                "router_node decision (continuation) | last_user_msg=%r | "
+                "is_esg_request=%s | active_module=%s | has_active_esg=%s | "
+                "_route_esg=%s | is_continuation=%s",
+                (last_user_msg or "")[:80],
+                is_esg_intent_explicit,
+                active_module,
+                has_active_esg_pre,
+                bool(route_flags.get("_route_esg", False)),
+                is_continuation,
+            )
 
             return {
                 "profile_updates": [] if should_extract else None,
@@ -593,12 +642,26 @@ async def router_node(
         if instructions:
             profiling_instructions = instructions
 
+    # Log DEBUG diagnostique (spec fix-profile-and-routing-regression, AC4).
+    # Tronqué à 80 chars pour défense en profondeur RGPD.
+    final_route_esg = bool(is_esg_request or has_active_esg)
+    logger.debug(
+        "router_node decision | last_user_msg=%r | is_esg_request=%s | "
+        "active_module=%s | has_active_esg=%s | _route_esg=%s | is_continuation=%s",
+        (last_user_msg or "")[:80],
+        is_esg_request,
+        active_module,
+        has_active_esg,
+        final_route_esg,
+        is_continuation,
+    )
+
     return {
         "profile_updates": [] if should_extract else None,
         "profiling_instructions": profiling_instructions,
         "has_document": has_document,
         "esg_assessment": esg_assessment,
-        "_route_esg": is_esg_request or has_active_esg,
+        "_route_esg": final_route_esg,
         "carbon_data": carbon_data,
         "_route_carbon": is_carbon_request or has_active_carbon,
         "financing_data": financing_data,

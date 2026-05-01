@@ -1,0 +1,4 @@
+ id | status | overall_score | environment_score | social_score | governance_score | nb_criteres | created_at | updated_at 
+----+--------+---------------+-------------------+--------------+------------------+-------------+------------+------------
+(0 rows)
+

@@ -182,3 +182,40 @@ class TestChatProfiling:
         event_types = [e.get("type") for e in events]
         assert "profile_update" not in event_types
         assert "token" in event_types
+
+
+# ─── Spec fix-profile-and-routing-regression : Bug 1 (forcing tool call) ──
+
+
+def test_chat_profiling_tool_call_dense_message() -> None:
+    """Bug 1 : pour un profil incomplet, les instructions de profilage doivent
+    contenir l'impératif explicite d'appeler `update_company_profile` AVANT
+    toute réponse texte (cas du message dense « Moussa SARL, agroalimentaire,
+    Dakar, 18 personnes, 85 M FCFA, ODD 8/12/13 »)."""
+    from app.graph.nodes import _build_profiling_instructions
+
+    profile = {"company_name": "Moussa SARL"}  # 1 champ rempli → incomplet
+    instructions = _build_profiling_instructions(profile)
+
+    assert instructions, "Instructions vides pour un profil incomplet"
+    assert "update_company_profile" in instructions, (
+        "Le tool `update_company_profile` doit être nommé explicitement"
+    )
+    assert "DOIS" in instructions or "DOIT" in instructions, (
+        "L'instruction doit contenir un impératif fort (DOIS/DOIT)"
+    )
+    assert "AVANT" in instructions, (
+        "L'instruction doit imposer l'appel du tool AVANT la réponse texte"
+    )
+
+
+def test_chat_no_profile_call_on_esg_request() -> None:
+    """Test négatif : « lance mon évaluation ESG » seul est détecté comme
+    intention ESG. Le router court-circuite alors profiling_instructions
+    (cf. nodes.py l. 591), évitant tout faux positif d'appel update_company_profile.
+    """
+    from app.graph.nodes import _detect_esg_request, _detect_profile_info
+
+    msg = "lance mon évaluation ESG"
+    assert _detect_esg_request(msg) is True
+    assert _detect_profile_info(msg) is False
