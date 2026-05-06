@@ -1,4 +1,6 @@
 import { test, expect } from '@playwright/test'
+import { loginAs } from './fixtures/auth'
+import { setupF01Mocks, F01_PME_USER, F01_SOURCES } from './fixtures/F01-helpers'
 
 /**
  * F01 — Fondations sourcage et catalogue Source (E2E Playwright).
@@ -11,17 +13,21 @@ import { test, expect } from '@playwright/test'
  * - US2 : test API mockee sur le chat — reponse contenant "0,41 kgCO2e/kWh"
  *         sans citation : verifier substitution par fallback texte.
  *
- * Note : ces tests assument que la migration 020 a tourne et que le seed
- * des 30+ sources est en place. La Phase B' s'occupe d'orchestrer
- * l'environnement (postgres, backend, frontend, alembic upgrade head).
+ * Auth : la page /sources est protegee par le middleware global `auth.global.ts`.
+ * On utilise `loginAs()` pour injecter les tokens en localStorage AVANT le
+ * page.goto, et `setupF01Mocks()` pour mocker `/api/sources*` + `/api/auth/me`
+ * (aucune dependance Postgres / migrations cote test).
  */
 
 test.describe('F01 — Catalogue de sources et picto cliquable', () => {
   test.skip(({ browserName }) => browserName === 'webkit', 'Sourcing tests skipped on webkit')
 
   test('US5 — PME ouvre /sources et explore le catalogue verifie', async ({ page }) => {
-    // Auth mockee si necessaire (la page /sources requiert middleware auth).
-    // On charge directement la page du catalogue.
+    // Authentification : injecte tokens + auth_user dans localStorage AVANT page.goto.
+    await loginAs(page, F01_PME_USER)
+    // Mocks /api/sources + /api/auth/me — aucune dependance backend reel.
+    await setupF01Mocks(page)
+
     await page.goto('/sources')
 
     // La page doit afficher le titre.
@@ -34,9 +40,16 @@ test.describe('F01 — Catalogue de sources et picto cliquable', () => {
     const select = page.locator('select[aria-label="Filtre par editeur"]')
     await expect(select).toBeVisible()
     await expect(select.locator('option', { hasText: 'ADEME' })).toHaveCount(1)
+
+    // Smoke supplementaire : au moins une fixture verified doit etre rendue.
+    await expect(page.locator(`text=${F01_SOURCES[0]!.title}`)).toBeVisible()
   })
 
   test('US1 — Le picto SourceLink ouvre la modal detail', async ({ page }) => {
+    // Auth requise (middleware global) meme si la page est skip-friendly.
+    await loginAs(page, F01_PME_USER)
+    await setupF01Mocks(page)
+
     // Naviguer vers une page contenant un picto SourceLink (exemple : /esg).
     await page.goto('/esg')
     // Si un picto existe, cliquer dessus ; sinon, le test est skip
