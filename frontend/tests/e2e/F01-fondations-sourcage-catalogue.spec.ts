@@ -50,13 +50,44 @@ test.describe('F01 — Catalogue de sources et picto cliquable', () => {
     await loginAs(page, F01_PME_USER)
     await setupF01Mocks(page)
 
-    // Naviguer vers une page contenant un picto SourceLink (exemple : /esg).
+    // Naviguer vers la page /esg — point d'entree principal pour la consultation
+    // du score ESG, ou le picto SourceLink est cense apparaitre a cote des
+    // recommandations / criteres / points forts (cf. specs F01).
     await page.goto('/esg')
-    // Si un picto existe, cliquer dessus ; sinon, le test est skip
-    // (l'integration <SourceLink> sur /esg est en cours).
+
+    // Si aucun SourceLink n'est rendu, on skip avec une justification precise :
+    //
+    // STATUT D'INTEGRATION SourceLink (verifie iteration 3) :
+    //   - Le composant <SourceLink> est bien importe dans :
+    //       app/components/esg/Recommendations.vue
+    //       app/components/esg/StrengthsBadges.vue
+    //       app/components/esg/CriteriaProgress.vue
+    //   - MAIS chacun de ces composants conditionne le rendu sur
+    //     `v-if="sourceIdByCriteria && sourceIdByCriteria[code]"`.
+    //   - La page parent app/pages/esg/results.vue NE TRANSMET PAS encore
+    //     la prop `sourceIdByCriteria` aux composants enfants. Resultat :
+    //     aucun picto rendu, meme avec une evaluation completee.
+    //   - Sur app/pages/esg/index.vue (point d'entree teste ici), les
+    //     composants Recommendations/StrengthsBadges/CriteriaProgress ne
+    //     sont jamais montes (la page liste les assessments uniquement).
+    //   - SourceLink est entierement cable uniquement dans /carbon/results
+    //     (via `ademeSourceId` resolu dynamiquement) et dans les cards
+    //     dashboard. Tester ce flow demanderait de mocker tous les
+    //     endpoints carbon (assessments, summary, benchmark) — hors scope
+    //     d'un fix de mock E2E F01.
+    //
+    // ACTION REQUISE pour reactiver ce test :
+    //   1. Wiring `sourceIdByCriteria` dans app/pages/esg/results.vue
+    //      (fetch `/api/sources/by-criteria` ou mapping local), OU
+    //   2. Re-cibler le test sur /carbon/results et etendre setupF01Mocks
+    //      avec les fixtures carbon (assessments + summary + benchmark).
     const sourceLink = page.locator('button[aria-label*="source"]').first()
     if (await sourceLink.count() === 0) {
-      test.skip(true, 'Aucun SourceLink presents sur /esg pour ce test (integration en cours)')
+      test.skip(
+        true,
+        'SourceLink integre dans esg/* mais sourceIdByCriteria non transmis ' +
+          'par /esg(/results). Voir bloc commentaire ci-dessus pour la marche a suivre.',
+      )
     }
     await sourceLink.click()
 

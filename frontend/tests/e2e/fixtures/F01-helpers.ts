@@ -189,12 +189,21 @@ export async function setupF01Mocks(
   // GET /api/auth/me — minimal, evite que le store auth tombe en erreur 404
   // au premier render. Pas besoin du Bearer token (loginAs a deja injecte
   // l'objet `auth_user` complet dans localStorage).
-  await page.route('**/api/auth/me', (route) => {
+  // Regex anchored sur fin de path (pas de query string envoyee par /auth/me).
+  await page.route(/.*\/api\/auth\/me$/, (route) => {
     return jsonResponse(route, F01_PME_USER)
   })
 
-  // GET /api/sources?... — liste paginee, filtre par publisher / search
-  await page.route('**/api/sources', async (route) => {
+  // GET /api/sources?... — liste paginee, filtre par publisher / search.
+  //
+  // IMPORTANT : on utilise une regex (et non un glob `**/api/sources`) car le
+  // composable `useSources.searchSources()` construit l'URL avec query string
+  // (`?page=1&page_size=20`). Le pattern glob `**/api/sources` (sans wildcard
+  // final) ne match que l'URL exacte sans QS — la requete tombait en erreur
+  // reseau, US5 affichait une liste vide. Le motif `(\?.*)?$` autorise la QS
+  // optionnelle tout en bornant la fin (sinon ce handler intercepterait aussi
+  // `/api/sources/<id>`, route reservee au handler detail ci-dessous).
+  await page.route(/.*\/api\/sources(\?.*)?$/, async (route) => {
     if (route.request().method() !== 'GET') {
       return route.continue()
     }
@@ -225,8 +234,10 @@ export async function setupF01Mocks(
     return jsonResponse(route, response)
   })
 
-  // GET /api/sources/:id — detail (404 si introuvable)
-  await page.route('**/api/sources/*', async (route) => {
+  // GET /api/sources/:id — detail (404 si introuvable). On accepte la QS
+  // optionnelle par precaution, meme si SourceModal n'en envoie pas
+  // actuellement. Le segment id est `[^/]+` (pas de slash dans l'identifiant).
+  await page.route(/.*\/api\/sources\/[^/]+(\?.*)?$/, async (route) => {
     if (route.request().method() !== 'GET') {
       return route.continue()
     }
