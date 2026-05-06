@@ -18,12 +18,18 @@ from tests.conftest import make_unique_email
 
 
 async def create_test_user(db: AsyncSession) -> User:
-    """Creer un utilisateur de test."""
+    """Creer un utilisateur de test (F02 : Account requis)."""
+    from app.models.account import Account
+
+    account = Account(name="GreenTech SARL")
+    db.add(account)
+    await db.flush()
     user = User(
         email=make_unique_email(),
         hashed_password="fakehash",
         full_name="Aminata Toure",
         company_name="GreenTech SARL",
+        account_id=account.id,
     )
     db.add(user)
     await db.flush()

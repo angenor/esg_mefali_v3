@@ -91,6 +91,13 @@ class FundApplication(UUIDMixin, TimestampMixin, Base):
         nullable=False,
         index=True,
     )
+    # F02 — multi-tenant
+    account_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("accounts.id", ondelete="RESTRICT"),
+        nullable=True,
+        index=True,
+    )
     match_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("fund_matches.id", ondelete="SET NULL"),

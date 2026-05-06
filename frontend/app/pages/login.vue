@@ -4,6 +4,21 @@ definePageMeta({
 })
 
 const { login } = useAuth()
+const route = useRoute()
+
+// F02 — si un token d'invitation est present dans l'URL et que
+// l'utilisateur n'est pas encore connecte, on l'oriente vers /register
+// pour finaliser l'inscription via le flux invitation.
+const inviteToken = computed<string | null>(() => {
+  const value = route.query.invite
+  if (typeof value === 'string' && value.length > 0) return value
+  return null
+})
+
+if (import.meta.client && inviteToken.value) {
+  // Redirection client-side pour preserver le token dans la query string.
+  await navigateTo({ path: '/register', query: { invite: inviteToken.value } })
+}
 
 const email = ref('')
 const password = ref('')

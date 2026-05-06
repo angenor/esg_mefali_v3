@@ -117,15 +117,20 @@ class TestGetOrCreateProfile:
         self, db_session: AsyncSession, user_id: uuid.UUID
     ) -> None:
         """Crée un profil initialisé avec le company_name de l'utilisateur."""
-        # Créer un utilisateur d'abord
+        # Créer un utilisateur d'abord (F02 : Account requis)
+        from app.models.account import Account
         from app.models.user import User
 
+        account = Account(name="Test Co")
+        db_session.add(account)
+        await db_session.flush()
         user = User(
             id=user_id,
             email="test@example.com",
             hashed_password="hashed",
             full_name="Test User",
             company_name="Test Co",
+            account_id=account.id,
         )
         db_session.add(user)
         await db_session.flush()
@@ -145,14 +150,19 @@ class TestGetOrCreateProfile:
         self, db_session: AsyncSession, user_id: uuid.UUID
     ) -> None:
         """Retourne le profil existant sans en créer un nouveau."""
+        from app.models.account import Account
         from app.models.user import User
 
+        account = Account(name="Test Co")
+        db_session.add(account)
+        await db_session.flush()
         user = User(
             id=user_id,
             email="test2@example.com",
             hashed_password="hashed",
             full_name="Test User",
             company_name="Test Co",
+            account_id=account.id,
         )
         db_session.add(user)
         await db_session.flush()
@@ -177,14 +187,19 @@ class TestUpdateProfile:
         self, db_session: AsyncSession, user_id: uuid.UUID
     ) -> None:
         """Seuls les champs non-null sont mis à jour."""
+        from app.models.account import Account
         from app.models.user import User
 
+        account = Account(name="Test")
+        db_session.add(account)
+        await db_session.flush()
         user = User(
             id=user_id,
             email="test3@example.com",
             hashed_password="hashed",
             full_name="Test",
             company_name="Test",
+            account_id=account.id,
         )
         db_session.add(user)
         await db_session.flush()
@@ -210,14 +225,19 @@ class TestUpdateProfile:
         self, db_session: AsyncSession, user_id: uuid.UUID
     ) -> None:
         """Pas de changement quand la valeur est identique."""
+        from app.models.account import Account
         from app.models.user import User
 
+        account = Account(name="Test")
+        db_session.add(account)
+        await db_session.flush()
         user = User(
             id=user_id,
             email="test4@example.com",
             hashed_password="hashed",
             full_name="Test",
             company_name="Test",
+            account_id=account.id,
         )
         db_session.add(user)
         await db_session.flush()

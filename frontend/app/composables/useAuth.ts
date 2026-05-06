@@ -203,6 +203,8 @@ export function useAuth() {
     full_name: string
     company_name: string
     country?: string | null
+    // F02 — token d'invitation team (rejoint un Account existant si fourni).
+    invite_token?: string | null
   }): Promise<User> {
     return apiFetch<User>('/auth/register', {
       method: 'POST',
@@ -285,9 +287,21 @@ export function useAuth() {
     return authFailurePromise
   }
 
-  function logout(): void {
+  // F02 — logout cote serveur : revoque tous les refresh tokens via
+  // POST /auth/logout puis vide le store local. Erreurs reseau silencieuses
+  // (le user est deconnecte cote frontend dans tous les cas).
+  async function logout(): Promise<void> {
+    if (authStore.accessToken) {
+      try {
+        await apiFetch('/auth/logout', { method: 'POST' })
+      } catch (err) {
+        if (import.meta.dev) {
+          console.warn('[logout] revocation serveur echouee', err)
+        }
+      }
+    }
     authStore.clearAuth()
-    router.push('/login')
+    await router.push('/login')
   }
 
   return {
@@ -301,5 +315,7 @@ export function useAuth() {
     logout,
     handleAuthFailure,
     isAuthenticated: authStore.isAuthenticated,
+    // F02 — exposer isAdmin pour les middlewares et composants du back-office.
+    isAdmin: authStore.isAdmin,
   }
 }

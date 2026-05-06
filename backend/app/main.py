@@ -69,6 +69,9 @@ from app.modules.applications.router import router as applications_router  # noq
 from app.modules.credit.router import router as credit_router  # noqa: E402
 from app.modules.dashboard.router import router as dashboard_router  # noqa: E402
 from app.modules.action_plan.router import router as action_plan_router  # noqa: E402
+# F02 — modules account (invitations équipe) et admin (back-office Mefali).
+from app.modules.account.router import router as account_router  # noqa: E402
+from app.modules.admin.router import router as admin_router  # noqa: E402
 
 app.include_router(auth_router, prefix="/api/auth", tags=["auth"])
 app.include_router(chat_router, prefix="/api/chat", tags=["chat"])
@@ -82,4 +85,6 @@ app.include_router(applications_router, prefix="/api/applications", tags=["appli
 app.include_router(credit_router, prefix="/api/credit", tags=["credit"])
 app.include_router(dashboard_router, prefix="/api/dashboard", tags=["dashboard"])
 app.include_router(action_plan_router, prefix="/api/action-plan", tags=["action-plan"])
+app.include_router(account_router, prefix="/api/account", tags=["account"])
+app.include_router(admin_router, prefix="/api/admin", tags=["admin"])
 app.include_router(health_router, prefix="/api", tags=["health"])

@@ -17,8 +17,13 @@ class Settings(BaseSettings):
     # Sécurité JWT
     secret_key: str = "changez-cette-cle-en-production"
     jwt_algorithm: str = "HS256"
-    access_token_expire_minutes: int = 480
+    # F02: durée passée à 24 h (1440 min) pour réduire la fréquence des refresh.
+    access_token_expire_minutes: int = 1440
     refresh_token_expire_days: int = 30
+
+    # F02: configuration des invitations d'équipe PME et de la rotation refresh.
+    invite_token_ttl_days: int = 7
+    refresh_token_grace_window_seconds: int = 5
 
     # OpenRouter / LLM
     openrouter_api_key: str = ""

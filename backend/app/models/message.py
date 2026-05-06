@@ -2,7 +2,7 @@
 
 import uuid
 
-from sqlalchemy import ForeignKey, String, Text
+from sqlalchemy import ForeignKey, Index, String, Text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -24,6 +24,12 @@ class Message(UUIDMixin, Base):
         nullable=False,
         index=True,
     )
+    # F02 — multi-tenant (dupliqué depuis Conversation pour RLS direct)
+    account_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("accounts.id", ondelete="RESTRICT"),
+        nullable=True,
+    )
     role: Mapped[str] = mapped_column(
         String(20), nullable=False
     )
@@ -37,4 +43,8 @@ class Message(UUIDMixin, Base):
     # Relations
     conversation: Mapped["Conversation"] = relationship(
         "Conversation", back_populates="messages"
+    )
+
+    __table_args__ = (
+        Index("idx_messages_account_id", "account_id"),
     )

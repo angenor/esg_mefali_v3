@@ -167,7 +167,7 @@ def test_guided_tour_instruction_unchanged():
     """
     # Valeur de reference au moment de la story 6.3 — toute derive > 5 %
     # indique une modification non intentionnelle du contrat cible par les
-    # 16+17 tests existants. Relevee a 7000 le 2026-04-15 pour accueillir
-    # la section « Cles context par tour_id » (BUG-1 post-fix guided_tour).
-    assert 3500 <= len(GUIDED_TOUR_INSTRUCTION) <= 7000
+    # 16+17 tests existants. Relevee a 7500 le 2026-05-06 pour accueillir
+    # les ameliorations documentaires post story 8.3 (commit 8fd8979).
+    assert 3500 <= len(GUIDED_TOUR_INSTRUCTION) <= 7500
     assert GUIDED_TOUR_INSTRUCTION.startswith("## OUTIL GUIDAGE VISUEL")

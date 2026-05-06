@@ -77,6 +77,58 @@ def make_unique_email() -> str:
     return f"test-{uuid.uuid4().hex[:8]}@example.com"
 
 
+# --- Helpers F02 multi-tenant ----------------------------------------
+# Les tests legacy créaient des `User(...)` directement sans `account_id`.
+# F02 ajoute la contrainte CHECK `users_role_account_consistency` qui
+# impose `account_id` NOT NULL pour un PME et NULL pour un ADMIN.
+# Ces helpers permettent aux tests legacy de continuer à fonctionner sans
+# avoir à réécrire chaque création de User.
+
+
+async def make_account(db_session, name: str | None = None):
+    """Créer un Account pour les tests legacy.
+
+    Usage::
+
+        account = await make_account(db_session, name="Test Corp")
+    """
+    from app.models.account import Account
+
+    account = Account(name=name or f"TestAccount-{uuid.uuid4().hex[:6]}")
+    db_session.add(account)
+    await db_session.flush()
+    return account
+
+
+async def make_pme_user(
+    db_session,
+    *,
+    email: str | None = None,
+    password_hash: str = "x",
+    full_name: str = "Test",
+    company_name: str = "TestCo",
+    account=None,
+):
+    """Créer un User PME avec un Account associé pour les tests legacy.
+
+    Si ``account`` est None, un Account neuf est créé automatiquement.
+    """
+    from app.models.user import User
+
+    if account is None:
+        account = await make_account(db_session, name=company_name)
+    user = User(
+        email=email or f"test-{uuid.uuid4().hex[:6]}@test.com",
+        hashed_password=password_hash,
+        full_name=full_name,
+        company_name=company_name,
+        account_id=account.id,
+    )
+    db_session.add(user)
+    await db_session.flush()
+    return user
+
+
 # --- Fixture auth partagé (T001) ---
 
 @pytest.fixture

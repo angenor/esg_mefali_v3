@@ -295,7 +295,11 @@ class TestGetActivePlan:
         """T026-26 : Retourne le plan actif existant."""
         from app.models.user import User
 
-        user = User(email=f"test-{uuid.uuid4().hex[:6]}@test.com", hashed_password="x", full_name="Test", company_name="TestCo")
+        from app.models.account import Account as _AccountForTest
+        _account = _AccountForTest(name="TestCo")
+        db_session.add(_account)
+        await db_session.flush()
+        user = User(email=f"test-{uuid.uuid4().hex[:6]}@test.com", hashed_password="x", full_name="Test", company_name="TestCo", account_id=_account.id)
         db_session.add(user)
         await db_session.flush()
 
@@ -324,7 +328,11 @@ class TestGetPlanItems:
         """Helper pour créer un plan avec des items."""
         from app.models.user import User
 
-        user = User(email=f"test-{uuid.uuid4().hex[:6]}@test.com", hashed_password="x", full_name="Test", company_name="TestCo")
+        from app.models.account import Account as _AccountForTest
+        _account = _AccountForTest(name="TestCo")
+        db_session.add(_account)
+        await db_session.flush()
+        user = User(email=f"test-{uuid.uuid4().hex[:6]}@test.com", hashed_password="x", full_name="Test", company_name="TestCo", account_id=_account.id)
         db_session.add(user)
         await db_session.flush()
 
@@ -412,7 +420,11 @@ class TestUpdateActionItem:
         """Helper pour créer un plan avec un item."""
         from app.models.user import User
 
-        user = User(email=f"test-{uuid.uuid4().hex[:6]}@test.com", hashed_password="x", full_name="Test", company_name="TestCo")
+        from app.models.account import Account as _AccountForTest
+        _account = _AccountForTest(name="TestCo")
+        db_session.add(_account)
+        await db_session.flush()
+        user = User(email=f"test-{uuid.uuid4().hex[:6]}@test.com", hashed_password="x", full_name="Test", company_name="TestCo", account_id=_account.id)
         db_session.add(user)
         await db_session.flush()
 
@@ -531,7 +543,11 @@ class TestGenerateActionPlan:
         from app.models.user import User
         from app.modules.action_plan.service import generate_action_plan
 
-        user = User(email=f"test-{uuid.uuid4().hex[:6]}@test.com", hashed_password="x", full_name="Test", company_name="TestCo")
+        from app.models.account import Account as _AccountForTest
+        _account = _AccountForTest(name="TestCo")
+        db_session.add(_account)
+        await db_session.flush()
+        user = User(email=f"test-{uuid.uuid4().hex[:6]}@test.com", hashed_password="x", full_name="Test", company_name="TestCo", account_id=_account.id)
         db_session.add(user)
         await db_session.flush()
 
@@ -584,7 +600,11 @@ class TestGenerateActionPlan:
         from app.models.user import User
         from app.modules.action_plan.service import generate_action_plan
 
-        user = User(email=f"test-{uuid.uuid4().hex[:6]}@test.com", hashed_password="x", full_name="Test", company_name="TestCo")
+        from app.models.account import Account as _AccountForTest
+        _account = _AccountForTest(name="TestCo")
+        db_session.add(_account)
+        await db_session.flush()
+        user = User(email=f"test-{uuid.uuid4().hex[:6]}@test.com", hashed_password="x", full_name="Test", company_name="TestCo", account_id=_account.id)
         db_session.add(user)
         await db_session.flush()
 
@@ -625,7 +645,11 @@ class TestGenerateActionPlan:
         from app.models.user import User
         from app.modules.action_plan.service import generate_action_plan
 
-        user = User(email=f"test-{uuid.uuid4().hex[:6]}@test.com", hashed_password="x", full_name="Test", company_name="TestCo")
+        from app.models.account import Account as _AccountForTest
+        _account = _AccountForTest(name="TestCo")
+        db_session.add(_account)
+        await db_session.flush()
+        user = User(email=f"test-{uuid.uuid4().hex[:6]}@test.com", hashed_password="x", full_name="Test", company_name="TestCo", account_id=_account.id)
         db_session.add(user)
         await db_session.flush()
 

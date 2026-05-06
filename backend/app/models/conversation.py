@@ -2,7 +2,7 @@
 
 import uuid
 
-from sqlalchemy import ForeignKey, String, Text
+from sqlalchemy import ForeignKey, Index, String, Text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -20,6 +20,12 @@ class Conversation(UUIDMixin, TimestampMixin, Base):
         nullable=False,
         index=True,
     )
+    # F02 — multi-tenant
+    account_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("accounts.id", ondelete="RESTRICT"),
+        nullable=True,
+    )
     title: Mapped[str] = mapped_column(
         String(255), default="Nouvelle conversation", nullable=False
     )
@@ -34,4 +40,8 @@ class Conversation(UUIDMixin, TimestampMixin, Base):
         back_populates="conversation",
         cascade="all, delete-orphan",
         order_by="Message.created_at",
+    )
+
+    __table_args__ = (
+        Index("idx_conversations_account_id", "account_id"),
     )
