@@ -9,9 +9,10 @@ import { onMounted, ref } from 'vue'
 import { useAccountTeam } from '~/composables/useAccountTeam'
 import { useAuthStore } from '~/stores/auth'
 
-definePageMeta({
-  middleware: 'auth',
-})
+// Le middleware d'authentification est applique globalement via
+// `app/middleware/auth.global.ts` ; il ne doit pas etre reference par nom
+// dans `definePageMeta` (sinon Nuxt leve "Unknown route middleware: 'auth'"
+// car les middlewares globaux ne sont pas exposes au registre nomme).
 
 const auth = useAuthStore()
 const {
