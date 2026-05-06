@@ -3,7 +3,16 @@
 import enum
 import uuid
 
-from sqlalchemy import BigInteger, Boolean, Enum, ForeignKey, Integer, String, Text
+from sqlalchemy import (
+    BigInteger,
+    Boolean,
+    Enum,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+)
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -38,6 +47,16 @@ class CompanyProfile(UUIDMixin, TimestampMixin, Base):
         nullable=False,
         index=True,
     )
+    # F02 — multi-tenant : 1:1 avec Account (UNIQUE partiel WHERE archived = false
+    # défini dans la migration Alembic 019).
+    account_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("accounts.id", ondelete="RESTRICT"),
+        nullable=True,
+    )
+    archived: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
 
     # Identité
     company_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
@@ -68,3 +87,7 @@ class CompanyProfile(UUIDMixin, TimestampMixin, Base):
 
     # Notes qualitatives
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    __table_args__ = (
+        Index("idx_company_profiles_account_id", "account_id"),
+    )

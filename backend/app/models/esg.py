@@ -29,6 +29,13 @@ class ESGAssessment(UUIDMixin, TimestampMixin, Base):
         nullable=False,
         index=True,
     )
+    # F02 — multi-tenant
+    account_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("accounts.id", ondelete="RESTRICT"),
+        nullable=True,
+        index=True,
+    )
     conversation_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("conversations.id", ondelete="SET NULL"),
