@@ -36,6 +36,13 @@ class Report(UUIDMixin, TimestampMixin, Base):
         nullable=False,
         index=True,
     )
+    # F02 — multi-tenant
+    account_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("accounts.id", ondelete="RESTRICT"),
+        nullable=True,
+        index=True,
+    )
     assessment_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("esg_assessments.id", ondelete="CASCADE"),
