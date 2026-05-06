@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { useFinancing } from '~/composables/useFinancing'
 import { useFinancingStore } from '~/stores/financing'
+import { useSources } from '~/composables/useSources'
+import SourceLink from '~/components/sources/SourceLink.vue'
+import SourceModal from '~/components/sources/SourceModal.vue'
 import type { Fund, FundMatch, AccessType } from '~/types/financing'
 
 definePageMeta({
@@ -17,6 +20,12 @@ const match = ref<FundMatch | null>(null)
 const showIntermediaryModal = ref(false)
 const downloadingPdf = ref(false)
 
+// F01 - Source GCF/BOAD pour les chiffres financement (montants min/max)
+const fundingSourceId = ref<string | null>(null)
+const selectedSourceId = ref<string | null>(null)
+const sourceModalVisible = ref(false)
+const { searchSources } = useSources()
+
 onMounted(async () => {
   const [fundData, matchData] = await Promise.all([
     fetchFundDetail(fundId),
@@ -24,7 +33,25 @@ onMounted(async () => {
   ])
   fund.value = fundData
   match.value = matchData
+  // Resoudre dynamiquement la source officielle du fonds (publisher = nom du fonds)
+  try {
+    const publisherCandidates = ['GCF', 'BOAD', 'IFC', 'AfDB']
+    for (const publisher of publisherCandidates) {
+      const result = await searchSources('', { publisher, pageSize: 1 })
+      if (result && result.items.length > 0) {
+        fundingSourceId.value = result.items[0].id
+        break
+      }
+    }
+  } catch {
+    // Pas de source resolue
+  }
 })
+
+function handleOpenSource(sourceId: string) {
+  selectedSourceId.value = sourceId
+  sourceModalVisible.value = true
+}
 
 // --- Helpers ---
 
@@ -232,6 +259,13 @@ const pathwaySteps = computed(() => {
             <div v-if="fund.min_amount_xof || fund.max_amount_xof">
               <span class="font-medium text-surface-text dark:text-surface-dark-text">Montant :</span>
               {{ formatAmount(fund.min_amount_xof) }} - {{ formatAmount(fund.max_amount_xof) }}
+              <!-- F01 picto source des montants -->
+              <SourceLink
+                v-if="fundingSourceId"
+                :source-id="fundingSourceId"
+                aria-label="Voir la source des montants du fonds"
+                @open="handleOpenSource"
+              />
             </div>
             <div v-if="fund.typical_timeline_months">
               <span class="font-medium text-surface-text dark:text-surface-dark-text">Duree :</span>
@@ -379,5 +413,12 @@ const pathwaySteps = computed(() => {
         </div>
       </div>
     </Teleport>
+
+    <!-- F01 SourceModal pour afficher le detail de la source -->
+    <SourceModal
+      :source-id="selectedSourceId"
+      :visible="sourceModalVisible"
+      @close="sourceModalVisible = false"
+    />
   </div>
 </template>

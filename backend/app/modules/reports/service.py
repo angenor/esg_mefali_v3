@@ -144,8 +144,13 @@ def _render_html(
     pillar_bar_charts: dict[str, str],
     benchmark_svg: str | None,
     pillar_criteria: dict[str, list[dict]],
+    mobilized_sources: list[dict] | None = None,
 ) -> str:
-    """Rendre le template HTML du rapport avec les donnees."""
+    """Rendre le template HTML du rapport avec les donnees.
+
+    F01 - mobilized_sources : liste des sources citees par l'agent durant la
+    generation (lookup via tool_call_logs filtre par cite_source).
+    """
     env = Environment(
         loader=FileSystemLoader(str(TEMPLATES_DIR)),
         autoescape=True,
@@ -179,7 +184,90 @@ def _render_html(
         benchmark_position_label=BENCHMARK_POSITION_LABELS.get(
             benchmark.get("position", ""), ""
         ),
+        mobilized_sources=mobilized_sources or [],
     )
+
+
+async def _collect_mobilized_sources(
+    db: AsyncSession,
+    assessment: ESGAssessment,
+) -> list[dict]:
+    """F01 - collecter les sources verifiees citees pour cette evaluation.
+
+    Strategie : on regarde les tool_call_logs liees a la conversation
+    associee a l'evaluation (filter tool_name='cite_source'). Pour chaque
+    source_id distinct, on recupere les metadonnees (verified only).
+
+    Si aucune conversation n'est associee, retourne une liste vide.
+    """
+    from app.models.source import Source, VerificationStatus
+
+    # Best-effort : tool_call_logs peut ne pas exister selon la BDD utilisee.
+    try:
+        from app.models.tool_call_log import ToolCallLog
+    except Exception:
+        return []
+
+    conversation_id = getattr(assessment, "conversation_id", None)
+    if conversation_id is None:
+        return []
+
+    result = await db.execute(
+        select(ToolCallLog).where(
+            ToolCallLog.conversation_id == conversation_id,
+            ToolCallLog.tool_name == "cite_source",
+        )
+    )
+    logs = result.scalars().all()
+
+    # Extraire les UUID source_id depuis les arguments
+    source_ids: list[uuid.UUID] = []
+    for log in logs:
+        args = getattr(log, "arguments", None) or {}
+        sid = args.get("source_id") if isinstance(args, dict) else None
+        if not sid:
+            continue
+        try:
+            source_ids.append(uuid.UUID(sid))
+        except (ValueError, TypeError):
+            continue
+
+    if not source_ids:
+        return []
+
+    # Deduplication en preservant l'ordre d'apparition
+    seen: set[uuid.UUID] = set()
+    ordered_ids: list[uuid.UUID] = []
+    for sid in source_ids:
+        if sid not in seen:
+            seen.add(sid)
+            ordered_ids.append(sid)
+
+    src_result = await db.execute(
+        select(Source).where(
+            Source.id.in_(ordered_ids),
+            Source.verification_status == VerificationStatus.VERIFIED.value,
+        )
+    )
+    src_by_id = {s.id: s for s in src_result.scalars().all()}
+
+    mobilized: list[dict] = []
+    for index, sid in enumerate(ordered_ids, start=1):
+        src = src_by_id.get(sid)
+        if src is None:
+            continue
+        mobilized.append({
+            "index": index,
+            "title": src.title,
+            "publisher": src.publisher,
+            "version": src.version,
+            "date_publi": src.date_publi.isoformat() if src.date_publi else "",
+            "page": src.page,
+            "section": src.section or "",
+            "url": src.url,
+            "verification_status": src.verification_status,
+        })
+    return mobilized
 
 
 async def generate_report(
@@ -290,7 +378,10 @@ async def generate_report(
             benchmark_position=(benchmark or {}).get("position", "unknown"),
         )
 
-        # 6. Rendre le template HTML
+        # 6. F01 - collecter les sources mobilisees (cite_source dans tool_call_logs)
+        mobilized_sources = await _collect_mobilized_sources(db, assessment)
+
+        # 7. Rendre le template HTML
         html_content = _render_html(
             assessment=assessment,
             user=user,
@@ -299,6 +390,7 @@ async def generate_report(
             pillar_bar_charts=pillar_bar_charts,
             benchmark_svg=benchmark_svg,
             pillar_criteria=pillar_criteria,
+            mobilized_sources=mobilized_sources,
         )
 
         # 7. Convertir HTML -> PDF via WeasyPrint (import lazy)

@@ -13,6 +13,7 @@ from app.graph.tool_selector import select_tools_for_node
 from app.graph.tools.esg_tools import ESG_TOOLS
 from app.graph.tools.guided_tour_tools import GUIDED_TOUR_TOOLS
 from app.graph.tools.interactive_tools import INTERACTIVE_TOOLS
+from app.graph.tools.sourcing_tools import SOURCING_TOOLS
 
 pytestmark = pytest.mark.integration
 
@@ -58,14 +59,15 @@ async def test_esg_scoring_node_binds_filtered_tools_only() -> None:
     expected_tools, debug = select_tools_for_node(
         node_name="esg_scoring",
         current_page="/esg/results",
-        all_tools=ESG_TOOLS + INTERACTIVE_TOOLS + GUIDED_TOUR_TOOLS,
+        all_tools=ESG_TOOLS + INTERACTIVE_TOOLS + GUIDED_TOUR_TOOLS + SOURCING_TOOLS,
     )
     expected_names = {t.name for t in expected_tools}
 
     assert bound_names == expected_names, (
         f"Tools binds {bound_names} != attendu {expected_names}"
     )
-    assert len(captured["bind_tools_arg"]) <= 10, "Plus de 10 tools binds"
+    # F01 : la borne est portee a 13 (10 metiers + 3 sourcing globaux).
+    assert len(captured["bind_tools_arg"]) <= 13, "Plus de 13 tools binds"
     assert debug["page_slug"] == "esg"
     assert debug["fallback_used"] is False
 

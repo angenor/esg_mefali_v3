@@ -236,5 +236,26 @@
   </div>
 </section>
 
+<!-- F01 - Section finale : Sources et references mobilisees pour ce rapport -->
+<section>
+  <h2>9. Sources et references</h2>
+  {% if mobilized_sources %}
+    <p>Cette annexe liste les sources officielles mobilisees pour la generation de ce rapport.</p>
+    <ol style="margin-left: 5mm; margin-bottom: 3mm;">
+    {% for src in mobilized_sources %}
+      <li style="margin-bottom: 2mm;">
+        <strong>[{{ src.index }}]</strong>
+        {{ src.title }} - <em>{{ src.publisher }}</em>, version {{ src.version }}{% if src.date_publi %} (publie le {{ src.date_publi }}){% endif %}.{% if src.page %} Page {{ src.page }}.{% endif %}{% if src.section %} Section : {{ src.section }}.{% endif %}
+        <br>
+        <a href="{{ src.url }}">{{ src.url }}</a>
+        <span style="font-size: 9pt; color: #28a745;">- Verifiee</span>
+      </li>
+    {% endfor %}
+    </ol>
+  {% else %}
+    <p><em>Aucune source mobilisee pour ce rapport. Les chiffres et evaluations sont issus du systeme d'analyse interne.</em></p>
+  {% endif %}
+</section>
+
 </body>
 </html>
