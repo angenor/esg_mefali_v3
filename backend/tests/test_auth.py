@@ -99,7 +99,8 @@ class TestLogin:
         assert "access_token" in body
         assert "refresh_token" in body
         assert body["token_type"] == "bearer"
-        assert body["expires_in"] == 3600
+        # F02 : access_token_expire_minutes porté à 1440 (24 h) — 86400 s.
+        assert body["expires_in"] == 86400
 
     async def test_login_wrong_password(self, client: AsyncClient) -> None:
         """La connexion avec un mauvais mot de passe retourne 401."""
