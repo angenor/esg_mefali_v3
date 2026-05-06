@@ -277,6 +277,30 @@ def upgrade() -> None:
     op.create_index("idx_users_account_id", "users", ["account_id"])
     op.create_index("idx_users_role", "users", ["role"])
 
+    # --- 5b. Ajouter colonne account_id (nullable) sur les 14 tables métier ---
+    # SQLAlchemy déclare account_id sur chaque modèle, mais Alembic doit
+    # explicitement ajouter la colonne en BDD AVANT le backfill.
+    for table in METIER_TABLES:
+        op.add_column(
+            table,
+            sa.Column(
+                "account_id",
+                postgresql.UUID(as_uuid=True),
+                sa.ForeignKey("accounts.id", ondelete="RESTRICT"),
+                nullable=True,
+            ),
+        )
+    # Colonne archived sur company_profiles (pour gérer le 1:1 Account/Profile)
+    op.add_column(
+        "company_profiles",
+        sa.Column(
+            "archived",
+            sa.Boolean(),
+            server_default=sa.text("false"),
+            nullable=False,
+        ),
+    )
+
     # --- 6. Backfill : créer 1 Account par company_name distinct, lier users ---
     if is_postgres:
         # 6.a Account par company_name distinct (non vide).
@@ -392,10 +416,14 @@ def upgrade() -> None:
             "ON company_profiles (account_id) WHERE archived = false AND account_id IS NOT NULL"
         )
 
-    # --- 8. ALTER COLUMN account_id NOT NULL sur les tables métier (PME) ---
+    # --- 8. ALTER COLUMN account_id NOT NULL + indexes sur les tables métier ---
     if is_postgres:
         for table in METIER_TABLES:
             op.execute(f"ALTER TABLE {table} ALTER COLUMN account_id SET NOT NULL")
+            op.execute(
+                f"CREATE INDEX IF NOT EXISTS idx_{table}_account_id "
+                f"ON {table} (account_id)"
+            )
 
     # --- 9. CHECK constraint sur users (role/account_id consistency) ---
     op.execute(
@@ -428,8 +456,9 @@ def downgrade() -> None:
     if is_postgres:
         op.execute("DROP INDEX IF EXISTS uq_company_profiles_account_active")
 
-    # --- 4. Drop colonne account_id sur tables métier ---
+    # --- 4. Drop indexes + colonne account_id sur tables métier ---
     for table in METIER_TABLES:
+        op.execute(f"DROP INDEX IF EXISTS idx_{table}_account_id")
         op.execute(f"ALTER TABLE {table} DROP COLUMN IF EXISTS account_id")
 
     # --- 5. Drop colonne archived sur company_profiles ---
