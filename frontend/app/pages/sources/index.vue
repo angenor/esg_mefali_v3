@@ -5,9 +5,10 @@ import SourcesList from '~/components/sources/SourcesList.vue'
 import SourceModal from '~/components/sources/SourceModal.vue'
 import type { PaginatedSources, SourceListItem } from '~/types/source'
 
-definePageMeta({
-  middleware: ['auth'],
-})
+// Le middleware d'authentification est applique globalement via
+// `app/middleware/auth.global.ts` ; il ne doit pas etre reference par nom
+// dans `definePageMeta` (sinon Nuxt leve "Unknown route middleware: 'auth'"
+// car les middlewares globaux ne sont pas exposes au registre nomme).
 
 const { searchSources } = useSources()
 
