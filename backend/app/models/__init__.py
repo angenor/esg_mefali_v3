@@ -1,7 +1,13 @@
 """Modèles SQLAlchemy — importer tous les modèles pour Alembic."""
 
 from app.models.base import Base  # noqa: F401
+
+# F02 — multi-tenant : Account doit être importé avant les modèles qui le
+# référencent via FK (tous les modèles métier).
+from app.models.account import Account  # noqa: F401
 from app.models.user import User  # noqa: F401
+from app.models.refresh_token import RefreshToken  # noqa: F401
+from app.models.account_invitation import AccountInvitation  # noqa: F401
 from app.models.conversation import Conversation  # noqa: F401
 from app.models.message import Message  # noqa: F401
 from app.models.company import CompanyProfile  # noqa: F401
