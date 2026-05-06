@@ -148,6 +148,20 @@ function userByToken(state: F02MockState, token: string | null): TestF02User | n
   return candidates.find((u) => u.fakeAccessToken === token) ?? null
 }
 
+/**
+ * Lit le body JSON d'une requete Playwright sans planter quand le body est
+ * absent ou non-JSON. `route.request().postDataJSON()` est SYNCHRONE et retourne
+ * `object | null` (pas une Promise), donc l'enchainement `.catch()` produit
+ * `TypeError: postDataJSON(...).catch is not a function`.
+ */
+function readJsonBody(route: Route): Record<string, unknown> {
+  try {
+    return (route.request().postDataJSON() as Record<string, unknown> | null) ?? {}
+  } catch {
+    return {}
+  }
+}
+
 // ── Mock backend installation ────────────────────────────────────────
 
 export interface F02MockOptions {
@@ -190,7 +204,7 @@ export async function installF02MockBackend(
 
   // POST /api/auth/login — accepte n'importe quel mdp et renvoie tokens
   await page.route('**/api/auth/login', async (route) => {
-    const body = await route.request().postDataJSON().catch(() => ({}))
+    const body = readJsonBody(route)
     const email = body?.email as string | undefined
     const allUsers: TestF02User[] = [ALICE, BOB, ADMIN_USER, CAROLE_INVITED]
     const user = allUsers.find((u) => u.email === email)
@@ -212,7 +226,7 @@ export async function installF02MockBackend(
 
   // POST /api/auth/register — enregistre via invitation ou creation
   await page.route('**/api/auth/register', async (route) => {
-    const body = await route.request().postDataJSON().catch(() => ({}))
+    const body = readJsonBody(route)
     const inviteToken = body?.invite_token as string | undefined
     const email = body?.email as string | undefined
     if (inviteToken && state.lastInviteToken === inviteToken) {
@@ -269,7 +283,7 @@ export async function installF02MockBackend(
 
   // POST /api/account/invite — cree une invitation et stocke le token
   await page.route('**/api/account/invite', async (route) => {
-    const body = await route.request().postDataJSON().catch(() => ({}))
+    const body = readJsonBody(route)
     const email = (body?.email as string) ?? 'invite@example.com'
     const token = 'mock-invite-token-' + Date.now()
     state.lastInviteToken = token
