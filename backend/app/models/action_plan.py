@@ -133,6 +133,13 @@ class ActionPlan(UUIDMixin, TimestampMixin, Base):
         ForeignKey("users.id", ondelete="CASCADE"),
         nullable=False,
     )
+    # F02 — multi-tenant
+    account_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("accounts.id", ondelete="RESTRICT"),
+        nullable=True,
+        index=True,
+    )
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     timeframe: Mapped[int] = mapped_column(Integer, nullable=False)
     status: Mapped[PlanStatus] = mapped_column(
@@ -170,6 +177,13 @@ class ActionItem(UUIDMixin, TimestampMixin, Base):
         UUID(as_uuid=True),
         ForeignKey("action_plans.id", ondelete="CASCADE"),
         nullable=False,
+    )
+    # F02 — multi-tenant
+    account_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("accounts.id", ondelete="RESTRICT"),
+        nullable=True,
+        index=True,
     )
     title: Mapped[str] = mapped_column(String(500), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -227,12 +241,19 @@ class Reminder(UUIDMixin, Base):
     __tablename__ = "reminders"
     __table_args__ = (
         Index("idx_reminders_upcoming", "user_id", "sent", "scheduled_at"),
+        Index("idx_reminders_account_id", "account_id"),
     )
 
     user_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("users.id", ondelete="CASCADE"),
         nullable=False,
+    )
+    # F02 — multi-tenant
+    account_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("accounts.id", ondelete="RESTRICT"),
+        nullable=True,
     )
     action_item_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),

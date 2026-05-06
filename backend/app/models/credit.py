@@ -54,10 +54,17 @@ class CreditScore(UUIDMixin, Base):
         UniqueConstraint("user_id", "version", name="uq_credit_score_user_version"),
         Index("ix_credit_scores_user_id", "user_id"),
         Index("ix_credit_scores_user_generated", "user_id", "generated_at"),
+        Index("idx_credit_scores_account_id", "account_id"),
     )
 
     user_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id"), nullable=False
+    )
+    # F02 — multi-tenant
+    account_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("accounts.id", ondelete="RESTRICT"),
+        nullable=True,
     )
     version: Mapped[int] = mapped_column(Integer, nullable=False)
     solvability_score: Mapped[float] = mapped_column(Float, nullable=False)

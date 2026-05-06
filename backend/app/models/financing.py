@@ -257,6 +257,7 @@ class FundMatch(UUIDMixin, Base):
     __tablename__ = "fund_matches"
     __table_args__ = (
         UniqueConstraint("user_id", "fund_id", name="uq_user_fund_match"),
+        Index("idx_fund_matches_account_id", "account_id"),
     )
 
     user_id: Mapped[uuid.UUID] = mapped_column(
@@ -264,6 +265,12 @@ class FundMatch(UUIDMixin, Base):
         ForeignKey("users.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
+    )
+    # F02 — multi-tenant
+    account_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("accounts.id", ondelete="RESTRICT"),
+        nullable=True,
     )
     fund_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
