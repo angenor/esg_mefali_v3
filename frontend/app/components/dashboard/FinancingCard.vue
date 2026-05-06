@@ -1,12 +1,20 @@
 <script setup lang="ts">
 // Carte résumé financement vert pour le dashboard
+import SourceLink from '~/components/sources/SourceLink.vue'
 import type { FinancingSummary } from '~/types/dashboard'
 
 interface Props {
   financing: FinancingSummary | null
+  sourceId?: string | null
 }
 
-const props = defineProps<Props>()
+const props = withDefaults(defineProps<Props>(), {
+  sourceId: null,
+})
+
+const emit = defineEmits<{
+  'open-source': [sourceId: string]
+}>()
 
 // Couleur badge statut candidature
 function statusColor(status: string): string {
@@ -57,6 +65,13 @@ function statusLabel(status: string): string {
         <div class="flex flex-col">
           <span class="text-2xl font-bold text-surface-text dark:text-surface-dark-text">
             {{ financing.recommended_funds_count }}
+            <!-- F01 picto source cliquable sur les chiffres financement -->
+            <SourceLink
+              v-if="sourceId"
+              :source-id="sourceId"
+              aria-label="Voir la source des donnees financement"
+              @open="(id) => emit('open-source', id)"
+            />
           </span>
           <span class="text-xs text-gray-500 dark:text-gray-500">Fonds recommandés</span>
         </div>

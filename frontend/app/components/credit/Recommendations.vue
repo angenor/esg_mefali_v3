@@ -1,10 +1,17 @@
 <script setup lang="ts">
+import SourceLink from '~/components/sources/SourceLink.vue'
+
 defineProps<{
   recommendations: Array<{
     action: string
     impact: string
     category: string
+    source_id?: string | null
   }>
+}>()
+
+const emit = defineEmits<{
+  'open-source': [sourceId: string]
 }>()
 
 function impactBadge(impact: string): string {
@@ -37,7 +44,16 @@ function categoryIcon(category: string): string {
     >
       <span class="text-lg shrink-0">{{ categoryIcon(rec.category) }}</span>
       <div class="flex-1 min-w-0">
-        <p class="text-sm text-gray-700 dark:text-gray-300">{{ rec.action }}</p>
+        <p class="text-sm text-gray-700 dark:text-gray-300">
+          {{ rec.action }}
+          <!-- F01 picto source cliquable -->
+          <SourceLink
+            v-if="rec.source_id"
+            :source-id="rec.source_id"
+            aria-label="Voir la source de cette recommandation"
+            @open="(id) => emit('open-source', id)"
+          />
+        </p>
       </div>
       <span
         class="text-xs font-medium px-2 py-0.5 rounded-full shrink-0"

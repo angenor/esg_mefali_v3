@@ -17,8 +17,10 @@ from __future__ import annotations
 
 import re
 
-# Borne dure : le LLM ne doit jamais voir plus de 10 tools par tour.
-MAX_TOOLS_PER_TURN: int = 10
+# Borne dure : le LLM ne doit jamais voir plus de 13 tools par tour.
+# F01 ajoute cite_source/search_source/flag_unsourced en GLOBAL_WHITELIST,
+# d'ou la borne portee a 13 (10 metiers + 3 sourcing).
+MAX_TOOLS_PER_TURN: int = 13
 
 # Whitelist transverse : tools toujours disponibles, ajoutes a chaque selection.
 # Source de verite : seuls les tools EFFECTIVEMENT exposes par le code peuvent
@@ -26,6 +28,11 @@ MAX_TOOLS_PER_TURN: int = 10
 GLOBAL_WHITELIST: frozenset[str] = frozenset({
     "ask_interactive_question",
     "trigger_guided_tour",
+    # F01 — sourcing tools toujours disponibles pour respecter l'invariant
+    # de citation obligatoire de chaque chiffre.
+    "cite_source",
+    "search_source",
+    "flag_unsourced",
 })
 
 

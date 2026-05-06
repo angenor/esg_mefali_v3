@@ -1,8 +1,14 @@
 <script setup lang="ts">
+import SourceLink from '~/components/sources/SourceLink.vue'
 import type { ESGRecommendation } from '~/types/esg'
 
 defineProps<{
   recommendations: ESGRecommendation[]
+  sourceIdByCriteria?: Record<string, string>
+}>()
+
+const emit = defineEmits<{
+  'open-source': [sourceId: string]
 }>()
 
 const impactColors: Record<string, string> = {
@@ -49,6 +55,13 @@ const impactLabels: Record<string, string> = {
           <td class="py-3 px-2">
             <div class="font-medium text-surface-text dark:text-surface-dark-text">
               {{ rec.title }}
+              <!-- F01 picto source cliquable -->
+              <SourceLink
+                v-if="sourceIdByCriteria && sourceIdByCriteria[rec.criteria_code]"
+                :source-id="sourceIdByCriteria[rec.criteria_code] ?? null"
+                aria-label="Voir la source de cette recommandation"
+                @open="(id) => emit('open-source', id)"
+              />
             </div>
             <div class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
               {{ rec.description }}

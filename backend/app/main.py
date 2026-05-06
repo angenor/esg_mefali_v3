@@ -72,6 +72,8 @@ from app.modules.action_plan.router import router as action_plan_router  # noqa:
 # F02 — modules account (invitations équipe) et admin (back-office Mefali).
 from app.modules.account.router import router as account_router  # noqa: E402
 from app.modules.admin.router import router as admin_router  # noqa: E402
+# F01 — Catalogue de sources verifiees.
+from app.modules.sources.router import router as sources_router  # noqa: E402
 
 app.include_router(auth_router, prefix="/api/auth", tags=["auth"])
 app.include_router(chat_router, prefix="/api/chat", tags=["chat"])
@@ -87,4 +89,5 @@ app.include_router(dashboard_router, prefix="/api/dashboard", tags=["dashboard"]
 app.include_router(action_plan_router, prefix="/api/action-plan", tags=["action-plan"])
 app.include_router(account_router, prefix="/api/account", tags=["account"])
 app.include_router(admin_router, prefix="/api/admin", tags=["admin"])
+app.include_router(sources_router, prefix="/api/sources", tags=["sources"])
 app.include_router(health_router, prefix="/api", tags=["health"])

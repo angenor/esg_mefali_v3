@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { useApplications } from '~/composables/useApplications'
 import { useApplicationsStore } from '~/stores/applications'
+import { useSources } from '~/composables/useSources'
+import SourceLink from '~/components/sources/SourceLink.vue'
+import SourceModal from '~/components/sources/SourceModal.vue'
 
 definePageMeta({ layout: 'default' })
 
@@ -24,10 +27,34 @@ const editingSection = ref<string | null>(null)
 const confirmRegenerate = ref<string | null>(null)
 const simulationLoading = ref(false)
 
+// F01 - source officielle du fonds (montants/frais/delais)
+const fundingSourceId = ref<string | null>(null)
+const selectedSourceId = ref<string | null>(null)
+const sourceModalVisible = ref(false)
+const { searchSources } = useSources()
+
 onMounted(async () => {
   const id = route.params.id as string
   await fetchApplication(id)
+  // Resoudre dynamiquement la source officielle (publishers candidates)
+  try {
+    const publisherCandidates = ['GCF', 'BOAD', 'IFC', 'AfDB']
+    for (const publisher of publisherCandidates) {
+      const result = await searchSources('', { publisher, pageSize: 1 })
+      if (result && result.items.length > 0) {
+        fundingSourceId.value = result.items[0].id
+        break
+      }
+    }
+  } catch {
+    // Pas de source resolue
+  }
 })
+
+function handleOpenSource(sourceId: string) {
+  selectedSourceId.value = sourceId
+  sourceModalVisible.value = true
+}
 
 const app = computed(() => appStore.currentApplication)
 const activeTab = computed({
@@ -554,5 +581,12 @@ function formatXOF(amount: number): string {
         </template>
       </div>
     </template>
+
+    <!-- F01 SourceModal pour afficher le detail de la source -->
+    <SourceModal
+      :source-id="selectedSourceId"
+      :visible="sourceModalVisible"
+      @close="sourceModalVisible = false"
+    />
   </div>
 </template>

@@ -283,7 +283,14 @@ def test_module_tool_mapping_keys_are_valid_node_names() -> None:
 
 def test_global_whitelist_is_frozenset() -> None:
     assert isinstance(GLOBAL_WHITELIST, frozenset)
-    assert GLOBAL_WHITELIST == frozenset({"ask_interactive_question", "trigger_guided_tour"})
+    # F01 ajoute les sourcing tools en GLOBAL_WHITELIST.
+    assert GLOBAL_WHITELIST == frozenset({
+        "ask_interactive_question",
+        "trigger_guided_tour",
+        "cite_source",
+        "search_source",
+        "flag_unsourced",
+    })
 
 
 def test_page_tool_mapping_covers_required_slugs() -> None:

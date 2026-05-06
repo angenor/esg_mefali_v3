@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import SourceLink from '~/components/sources/SourceLink.vue'
+
 // Carte de score synthétique pour le dashboard
 interface Props {
   label: string
@@ -7,12 +9,18 @@ interface Props {
   icon: string
   trend?: string | null
   subtitle?: string | null
+  sourceId?: string | null
 }
 
 const props = withDefaults(defineProps<Props>(), {
   trend: null,
   subtitle: null,
+  sourceId: null,
 })
+
+const emit = defineEmits<{
+  'open-source': [sourceId: string]
+}>()
 
 // Couleur du badge de grade
 function gradeColor(grade: string | null): string {
@@ -59,6 +67,13 @@ function scoreColor(score: number | null): string {
       <!-- Tendance -->
       <span v-if="trend === 'up'" class="text-green-500 text-lg mb-1" title="En hausse">↑</span>
       <span v-else-if="trend === 'down'" class="text-red-500 text-lg mb-1" title="En baisse">↓</span>
+      <!-- F01 picto source cliquable -->
+      <SourceLink
+        v-if="sourceId"
+        :source-id="sourceId"
+        :aria-label="`Voir la source du score ${label}`"
+        @open="(id) => emit('open-source', id)"
+      />
     </div>
 
     <!-- État vide -->

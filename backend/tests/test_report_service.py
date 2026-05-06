@@ -171,3 +171,101 @@ class TestGenerateReport:
         fake_id = uuid.uuid4()
         with pytest.raises(ValueError, match="introuvable"):
             await generate_report(db_session, fake_id, user.id)
+
+    @pytest.mark.asyncio
+    async def test_collect_mobilized_sources_returns_empty_without_conversation(
+        self, db_session: AsyncSession
+    ) -> None:
+        """F01 - retourner [] si pas de conversation_id sur l'assessment."""
+        from app.modules.reports.service import _collect_mobilized_sources
+
+        user = await create_test_user(db_session)
+        assessment = ESGAssessment(
+            user_id=user.id,
+            status=ESGStatusEnum.completed,
+            sector="agriculture",
+        )
+        db_session.add(assessment)
+        await db_session.commit()
+
+        sources = await _collect_mobilized_sources(db_session, assessment)
+        assert sources == []
+
+    def test_render_html_includes_sources_appendix_when_provided(self) -> None:
+        """F01 - le template inclut l'annexe Sources si mobilized_sources non vide."""
+        from app.modules.reports.service import _render_html
+
+        # Stub minimal d'assessment et user pour le rendu
+        assessment = MagicMock()
+        assessment.sector = "agriculture"
+        assessment.overall_score = 70
+        assessment.environment_score = 70
+        assessment.social_score = 60
+        assessment.governance_score = 80
+        assessment.strengths = []
+        assessment.gaps = []
+        assessment.recommendations = []
+        assessment.sector_benchmark = {}
+
+        user = MagicMock()
+        user.company_name = "TestCorp"
+
+        mobilized = [
+            {
+                "index": 1,
+                "title": "ADEME Base Carbone v23",
+                "publisher": "ADEME",
+                "version": "v23",
+                "date_publi": "2024-01-15",
+                "page": None,
+                "section": "",
+                "url": "https://example.com/ademe",
+                "verification_status": "verified",
+            }
+        ]
+
+        html = _render_html(
+            assessment=assessment,
+            user=user,
+            executive_summary="Test summary",
+            radar_svg="<svg/>",
+            pillar_bar_charts={"environment": "", "social": "", "governance": ""},
+            benchmark_svg=None,
+            pillar_criteria={"environment": [], "social": [], "governance": []},
+            mobilized_sources=mobilized,
+        )
+        assert "Sources et references" in html
+        assert "ADEME Base Carbone v23" in html
+        assert "[1]" in html
+        assert "https://example.com/ademe" in html
+
+    def test_render_html_shows_no_sources_message_when_empty(self) -> None:
+        """F01 - le template affiche le message vide si mobilized_sources vide."""
+        from app.modules.reports.service import _render_html
+
+        assessment = MagicMock()
+        assessment.sector = "agriculture"
+        assessment.overall_score = 70
+        assessment.environment_score = 70
+        assessment.social_score = 60
+        assessment.governance_score = 80
+        assessment.strengths = []
+        assessment.gaps = []
+        assessment.recommendations = []
+        assessment.sector_benchmark = {}
+
+        user = MagicMock()
+        user.company_name = "TestCorp"
+
+        html = _render_html(
+            assessment=assessment,
+            user=user,
+            executive_summary="Test summary",
+            radar_svg="<svg/>",
+            pillar_bar_charts={"environment": "", "social": "", "governance": ""},
+            benchmark_svg=None,
+            pillar_criteria={"environment": [], "social": [], "governance": []},
+            mobilized_sources=[],
+        )
+        assert "Sources et references" in html
+        assert "Aucune source mobilisee" in html

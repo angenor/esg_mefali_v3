@@ -1,8 +1,14 @@
 <script setup lang="ts">
+import SourceLink from '~/components/sources/SourceLink.vue'
 import type { ESGStrength } from '~/types/esg'
 
 defineProps<{
   strengths: ESGStrength[]
+  sourceIdByCriteria?: Record<string, string>
+}>()
+
+const emit = defineEmits<{
+  'open-source': [sourceId: string]
 }>()
 
 const pillarColors: Record<string, string> = {
@@ -25,6 +31,13 @@ const pillarColors: Record<string, string> = {
       </svg>
       <span>{{ strength.title }}</span>
       <span class="text-xs opacity-75">{{ strength.score }}/10</span>
+      <!-- F01 picto source cliquable -->
+      <SourceLink
+        v-if="sourceIdByCriteria && sourceIdByCriteria[strength.criteria_code]"
+        :source-id="sourceIdByCriteria[strength.criteria_code] ?? null"
+        aria-label="Voir la source de ce point fort"
+        @open="(id) => emit('open-source', id)"
+      />
     </div>
     <p
       v-if="strengths.length === 0"

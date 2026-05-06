@@ -26,6 +26,16 @@ vi.mock('~/composables/useCarbon', () => ({
   }),
 }))
 
+// F01 - mock useSources pour eviter useRuntimeConfig (non defini dans tests Vue)
+vi.mock('~/composables/useSources', () => ({
+  useSources: () => ({
+    store: { error: '', getById: vi.fn(), setSource: vi.fn() },
+    fetchSource: vi.fn().mockResolvedValue(null),
+    searchSources: vi.fn().mockResolvedValue({ items: [], total: 0, page: 1, page_size: 20 }),
+    cacheSource: vi.fn(),
+  }),
+}))
+
 // Stub NuxtLink et Chart.js
 const NuxtLink = defineComponent({
   name: 'NuxtLink',

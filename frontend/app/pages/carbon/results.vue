@@ -12,6 +12,9 @@ import {
 import { useCarbon } from '~/composables/useCarbon'
 import { useCarbonStore } from '~/stores/carbon'
 import { useUiStore } from '~/stores/ui'
+import { useSources } from '~/composables/useSources'
+import SourceLink from '~/components/sources/SourceLink.vue'
+import SourceModal from '~/components/sources/SourceModal.vue'
 import type { CarbonSummary, BenchmarkResponse } from '~/types/carbon'
 
 ChartJS.register(ArcElement, Tooltip, Legend, CategoryScale, LinearScale, BarElement)
@@ -69,6 +72,29 @@ async function loadHistory() {
   const { fetchAssessments } = useCarbon()
   await fetchAssessments('completed', 1, 50)
   allAssessments.value = carbonStore.assessments
+}
+
+// F01 - Recherche dynamique de la source ADEME pour les facteurs d'emission
+const ademeSourceId = ref<string | null>(null)
+const selectedSourceId = ref<string | null>(null)
+const sourceModalVisible = ref(false)
+const { searchSources } = useSources()
+
+onMounted(async () => {
+  // Resoudre dynamiquement l'ID de la source ADEME (Base Carbone v23) pour le picto.
+  try {
+    const result = await searchSources('Base Carbone', { publisher: 'ADEME', pageSize: 1 })
+    if (result && result.items.length > 0) {
+      ademeSourceId.value = result.items[0].id
+    }
+  } catch {
+    // Pas de source resolue - le picto sera masque automatiquement
+  }
+})
+
+function handleOpenSource(sourceId: string) {
+  selectedSourceId.value = sourceId
+  sourceModalVisible.value = true
 }
 
 const categoryLabels: Record<string, string> = {
@@ -205,7 +231,16 @@ function positionColor(position: string): string {
               <p class="text-5xl font-bold text-surface-text dark:text-surface-dark-text">
                 {{ summary.total_emissions_tco2e.toFixed(1) }}
               </p>
-              <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">tCO2e / an</p>
+              <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                tCO2e / an
+                <!-- F01 picto source ADEME pour les facteurs d'emission -->
+                <SourceLink
+                  v-if="ademeSourceId"
+                  :source-id="ademeSourceId"
+                  aria-label="Voir la source des facteurs d'emission ADEME"
+                  @open="handleOpenSource"
+                />
+              </p>
               <!-- Position sectorielle -->
               <p
                 v-if="summary.sector_benchmark"
@@ -386,5 +421,12 @@ function positionColor(position: string): string {
         </div>
       </div>
     </div>
+
+    <!-- F01 SourceModal pour afficher le detail de la source -->
+    <SourceModal
+      :source-id="selectedSourceId"
+      :visible="sourceModalVisible"
+      @close="sourceModalVisible = false"
+    />
   </div>
 </template>

@@ -1,8 +1,14 @@
 <script setup lang="ts">
+import SourceLink from '~/components/sources/SourceLink.vue'
 import type { CriteriaScoreResponse, ESGPillar, PillarScoreResponse } from '~/types/esg'
 
 const props = defineProps<{
   pillars: Record<ESGPillar, PillarScoreResponse>
+  sourceIdByCriteria?: Record<string, string>
+}>()
+
+const emit = defineEmits<{
+  'open-source': [sourceId: string]
 }>()
 
 const pillarConfig: { key: ESGPillar; label: string; color: string; bgColor: string }[] = [
@@ -47,6 +53,13 @@ function barWidth(score: number, max: number): string {
           <span class="text-xs font-medium text-surface-text dark:text-surface-dark-text w-10 text-right">
             {{ criterion.score }}/{{ criterion.max }}
           </span>
+          <!-- F01 picto source cliquable -->
+          <SourceLink
+            v-if="sourceIdByCriteria && sourceIdByCriteria[criterion.code]"
+            :source-id="sourceIdByCriteria[criterion.code] ?? null"
+            aria-label="Voir la source de ce critere"
+            @open="(id) => emit('open-source', id)"
+          />
         </div>
       </div>
     </div>

@@ -919,7 +919,8 @@ async def esg_scoring_node(
 
     from app.graph.tools.guided_tour_tools import GUIDED_TOUR_TOOLS
     from app.graph.tools.interactive_tools import INTERACTIVE_TOOLS
-    full_catalog = ESG_TOOLS + INTERACTIVE_TOOLS + GUIDED_TOUR_TOOLS
+    from app.graph.tools.sourcing_tools import SOURCING_TOOLS
+    full_catalog = ESG_TOOLS + INTERACTIVE_TOOLS + GUIDED_TOUR_TOOLS + SOURCING_TOOLS
     filtered_tools, debug_info = select_tools_for_node(
         node_name="esg_scoring",
         current_page=state.get("current_page"),
@@ -1089,12 +1090,13 @@ async def carbon_node(
     from app.graph.tools.carbon_tools import CARBON_TOOLS
     from app.graph.tools.guided_tour_tools import GUIDED_TOUR_TOOLS
     from app.graph.tools.interactive_tools import INTERACTIVE_TOOLS
+    from app.graph.tools.sourcing_tools import SOURCING_TOOLS
 
     chat_messages = [SystemMessage(content=full_prompt), *[
         m for m in messages if not isinstance(m, SystemMessage)
     ]]
 
-    all_carbon_tools = (CARBON_TOOLS or []) + INTERACTIVE_TOOLS + GUIDED_TOUR_TOOLS
+    all_carbon_tools = (CARBON_TOOLS or []) + INTERACTIVE_TOOLS + GUIDED_TOUR_TOOLS + SOURCING_TOOLS
     filtered_tools, debug_info = select_tools_for_node(
         node_name="carbon",
         current_page=state.get("current_page"),
@@ -1159,12 +1161,13 @@ async def financing_node(
     from app.graph.tools.financing_tools import FINANCING_TOOLS
     from app.graph.tools.guided_tour_tools import GUIDED_TOUR_TOOLS
     from app.graph.tools.interactive_tools import INTERACTIVE_TOOLS
+    from app.graph.tools.sourcing_tools import SOURCING_TOOLS
     from app.prompts.financing import build_financing_prompt
 
     llm = get_llm()
 
     # Lier les tools financement + interactif + guidage au LLM (filtres par contexte)
-    full_catalog = (FINANCING_TOOLS or []) + INTERACTIVE_TOOLS + GUIDED_TOUR_TOOLS
+    full_catalog = (FINANCING_TOOLS or []) + INTERACTIVE_TOOLS + GUIDED_TOUR_TOOLS + SOURCING_TOOLS
     filtered_tools, debug_info = select_tools_for_node(
         node_name="financing",
         current_page=state.get("current_page"),
@@ -1345,12 +1348,13 @@ async def credit_node(
     from app.graph.tools.credit_tools import CREDIT_TOOLS
     from app.graph.tools.guided_tour_tools import GUIDED_TOUR_TOOLS
     from app.graph.tools.interactive_tools import INTERACTIVE_TOOLS
+    from app.graph.tools.sourcing_tools import SOURCING_TOOLS
     from app.prompts.credit import build_credit_prompt
 
     llm = get_llm()
 
     # Lier les tools credit + interactif + guidage au LLM (filtres par contexte)
-    full_catalog = (CREDIT_TOOLS or []) + INTERACTIVE_TOOLS + GUIDED_TOUR_TOOLS
+    full_catalog = (CREDIT_TOOLS or []) + INTERACTIVE_TOOLS + GUIDED_TOUR_TOOLS + SOURCING_TOOLS
     filtered_tools, debug_info = select_tools_for_node(
         node_name="credit",
         current_page=state.get("current_page"),
@@ -1428,11 +1432,12 @@ async def chat_node(
     from app.graph.tools.guided_tour_tools import GUIDED_TOUR_TOOLS
     from app.graph.tools.interactive_tools import INTERACTIVE_TOOLS
     from app.graph.tools.profiling_tools import PROFILING_TOOLS
+    from app.graph.tools.sourcing_tools import SOURCING_TOOLS
 
     llm = get_llm()
 
     # Combiner les tools de profilage, lecture, documents, widgets interactifs et guidage
-    all_tools = PROFILING_TOOLS + CHAT_TOOLS + DOCUMENT_TOOLS + INTERACTIVE_TOOLS + GUIDED_TOUR_TOOLS
+    all_tools = PROFILING_TOOLS + CHAT_TOOLS + DOCUMENT_TOOLS + INTERACTIVE_TOOLS + GUIDED_TOUR_TOOLS + SOURCING_TOOLS
 
     # Anti-boucle ESG (defense in depth, spec fix-esg-scoring-node-routing) :
     # si le dernier message exprime une intention ESG, retirer
@@ -1559,12 +1564,13 @@ async def application_node(
     """
     from app.graph.tools.application_tools import APPLICATION_TOOLS
     from app.graph.tools.interactive_tools import INTERACTIVE_TOOLS
+    from app.graph.tools.sourcing_tools import SOURCING_TOOLS
     from app.prompts.application import build_application_prompt
 
     llm = get_llm()
 
     # Lier les tools application + interactif au LLM (filtres par contexte)
-    full_catalog = (APPLICATION_TOOLS or []) + INTERACTIVE_TOOLS
+    full_catalog = (APPLICATION_TOOLS or []) + INTERACTIVE_TOOLS + SOURCING_TOOLS
     filtered_tools, debug_info = select_tools_for_node(
         node_name="application",
         current_page=state.get("current_page"),
@@ -1632,12 +1638,13 @@ async def action_plan_node(
     from app.graph.tools.action_plan_tools import ACTION_PLAN_TOOLS
     from app.graph.tools.guided_tour_tools import GUIDED_TOUR_TOOLS
     from app.graph.tools.interactive_tools import INTERACTIVE_TOOLS
+    from app.graph.tools.sourcing_tools import SOURCING_TOOLS
     from app.prompts.action_plan import build_action_plan_prompt
 
     llm = get_llm()
 
     # Lier les tools action plan + interactif + guidage au LLM (filtres par contexte)
-    full_catalog = (ACTION_PLAN_TOOLS or []) + INTERACTIVE_TOOLS + GUIDED_TOUR_TOOLS
+    full_catalog = (ACTION_PLAN_TOOLS or []) + INTERACTIVE_TOOLS + GUIDED_TOUR_TOOLS + SOURCING_TOOLS
     filtered_tools, debug_info = select_tools_for_node(
         node_name="action_plan",
         current_page=state.get("current_page"),
