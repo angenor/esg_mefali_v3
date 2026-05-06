@@ -36,3 +36,17 @@ from app.models.interactive_question import (  # noqa: F401
     InteractiveQuestionState,
     InteractiveQuestionType,
 )
+
+# Feature 020 (F01) — Catalogue de sources verifiables.
+from app.models.source import Source, VerificationStatus  # noqa: F401
+from app.models.indicator import (  # noqa: F401
+    Criterion,
+    Formula,
+    Indicator,
+    Threshold,
+)
+from app.models.referential import Referential, ReferentialIndicator  # noqa: F401
+from app.models.emission_factor import EmissionFactor  # noqa: F401
+from app.models.required_document import RequiredDocument  # noqa: F401
+from app.models.simulation_factor import SimulationFactor  # noqa: F401
+from app.models.unsourced_flag import UnsourcedFlag  # noqa: F401

@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user
+from app.api.deps import get_current_admin, get_current_user
 from app.core.database import get_db
 from app.models.user import User
 
@@ -110,15 +110,15 @@ async def get_fund_detail(
 async def create_fund_endpoint(
     body: FundCreate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    # F02 : protection via dépendance get_current_admin (suppression de la
+    # whitelist email statique anti-pattern).
+    current_admin: User = Depends(get_current_admin),
 ) -> FundResponse:
-    """Creer un nouveau fonds (admin uniquement)."""
-    # Protection admin : seuls les comptes admin peuvent creer des fonds
-    # Les fonds sont normalement crees via le seed, pas via l'API
-    admin_emails = {"admin@esg-mefali.com", "admin@mefali.org"}
-    if current_user.email not in admin_emails:
-        raise HTTPException(status_code=403, detail="Acces reserve aux administrateurs")
+    """Créer un nouveau fonds (admin uniquement).
 
+    Les fonds sont normalement créés via le seed, pas via l'API. Cet endpoint
+    est réservé à l'équipe Mefali (rôle ADMIN).
+    """
     from app.modules.financing.service import create_fund
 
     fund = await create_fund(db, body.model_dump())
