@@ -4,6 +4,15 @@ definePageMeta({
 })
 
 const { register, detectCountry, login } = useAuth()
+const route = useRoute()
+
+// F02 — invitation : si un token est passe en query, l'utilisateur rejoint
+// l'Account de l'invitant au lieu de creer un nouvel Account.
+const inviteToken = computed<string | null>(() => {
+  const value = route.query.invite
+  if (typeof value === 'string' && value.length > 0) return value
+  return null
+})
 
 const form = reactive({
   email: '',
@@ -39,6 +48,8 @@ async function handleRegister() {
     await register({
       ...form,
       country: form.country || null,
+      // F02 — relai du token d'invitation, ignore par le backend si null.
+      invite_token: inviteToken.value,
     })
     await login(form.email, form.password)
     await navigateTo('/')
@@ -57,6 +68,15 @@ async function handleRegister() {
         <div class="text-center mb-8">
           <h1 class="text-2xl font-bold text-surface-text dark:text-surface-dark-text">ESG Mefali</h1>
           <p class="text-gray-500 dark:text-gray-400 mt-2">Creer un compte</p>
+        </div>
+
+        <!-- F02 — banniere invitation team -->
+        <div
+          v-if="inviteToken"
+          class="mb-4 rounded-lg border border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-900/30 p-3 text-sm text-emerald-800 dark:text-emerald-200"
+        >
+          Vous rejoignez une equipe existante via une invitation.
+          Votre compte sera rattache a l'entreprise correspondante.
         </div>
 
         <form class="space-y-4" @submit.prevent="handleRegister">

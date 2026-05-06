@@ -204,14 +204,21 @@ class TestUserModel:
 
     async def test_create_user(self, db_session: AsyncSession) -> None:
         """Créer un utilisateur en base de données."""
+        from app.models.account import Account
         from app.models.user import User
         from app.core.security import hash_password
+
+        # F02 : un User PME nécessite un Account associé.
+        account = Account(name="Test Corp")
+        db_session.add(account)
+        await db_session.flush()
 
         user = User(
             email=make_unique_email(),
             hashed_password=hash_password("motdepasse123"),
             full_name="Test User",
             company_name="Test Corp",
+            account_id=account.id,
         )
         db_session.add(user)
         await db_session.commit()
@@ -223,17 +230,23 @@ class TestUserModel:
 
     async def test_password_is_hashed(self, db_session: AsyncSession) -> None:
         """Le mot de passe stocké est hashé, jamais en clair."""
+        from app.models.account import Account
         from app.models.user import User
         from app.core.security import hash_password
 
         password = "motdepasse123"
         hashed = hash_password(password)
 
+        account = Account(name="Test Corp")
+        db_session.add(account)
+        await db_session.flush()
+
         user = User(
             email=make_unique_email(),
             hashed_password=hashed,
             full_name="Test User",
             company_name="Test Corp",
+            account_id=account.id,
         )
         db_session.add(user)
         await db_session.commit()
@@ -245,8 +258,14 @@ class TestUserModel:
         """Deux utilisateurs ne peuvent pas avoir le même email."""
         from sqlalchemy.exc import IntegrityError
 
+        from app.models.account import Account
         from app.models.user import User
         from app.core.security import hash_password
+
+        account1 = Account(name="Corp 1")
+        account2 = Account(name="Corp 2")
+        db_session.add_all([account1, account2])
+        await db_session.flush()
 
         email = make_unique_email()
         user1 = User(
@@ -254,6 +273,7 @@ class TestUserModel:
             hashed_password=hash_password("pass1234"),
             full_name="User 1",
             company_name="Corp 1",
+            account_id=account1.id,
         )
         db_session.add(user1)
         await db_session.commit()
@@ -263,6 +283,7 @@ class TestUserModel:
             hashed_password=hash_password("pass5678"),
             full_name="User 2",
             company_name="Corp 2",
+            account_id=account2.id,
         )
         db_session.add(user2)
 

@@ -22,12 +22,18 @@ pytestmark = pytest.mark.asyncio
 
 
 async def _make_user_and_conversation(db_session) -> tuple[User, Conversation]:
+    from app.models.account import Account
+
+    account = Account(name="Test Co")
+    db_session.add(account)
+    await db_session.flush()
     user = User(
         email=f"u-{uuid.uuid4().hex[:6]}@example.com",
         hashed_password="x",
         full_name="Test User",
         company_name="Test Co",
         is_active=True,
+        account_id=account.id,
     )
     db_session.add(user)
     await db_session.flush()
