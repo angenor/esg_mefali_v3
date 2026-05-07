@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Attestation {{ display_id }}</title>
+<style>
+  @page { size: A4; margin: 1.5cm; }
+  body { font-family: 'Helvetica Neue', Arial, sans-serif; color: #1F2937; line-height: 1.5; font-size: 11pt; }
+  .header { text-align: center; border-bottom: 3px solid #10B981; padding-bottom: 16px; margin-bottom: 20px; }
+  .header h1 { color: #10B981; font-size: 22px; margin: 0; }
+  .header h2 { color: #6B7280; font-size: 13px; font-weight: normal; margin: 5px 0 0; }
+  .display-id-section { display: flex; align-items: center; justify-content: space-between; margin-bottom: 18px; padding: 10px 16px; background: #F0FDF4; border-radius: 8px; }
+  .display-id-section .label { font-size: 10px; color: #065F46; text-transform: uppercase; letter-spacing: 0.05em; }
+  .display-id-section .id-value { font-family: 'Courier New', monospace; font-size: 16px; font-weight: bold; color: #065F46; }
+  .qr-block { text-align: center; margin: 16px 0; padding: 12px; border: 1px solid #E5E7EB; border-radius: 8px; }
+  .qr-block img { width: 140px; height: 140px; }
+  .qr-block .url { font-size: 10px; color: #4B5563; word-break: break-all; margin-top: 4px; font-family: 'Courier New', monospace; }
+  .qr-block .help { font-size: 10px; color: #6B7280; margin-top: 6px; font-style: italic; }
+  .scores-section { margin: 20px 0; }
+  .scores-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .score-card { padding: 12px; background: #F9FAFB; border-radius: 8px; text-align: center; border: 1px solid #E5E7EB; }
+  .score-card .value { font-size: 28px; font-weight: bold; color: #10B981; }
+  .score-card .label { font-size: 11px; color: #6B7280; text-transform: uppercase; letter-spacing: 0.05em; }
+  .score-card.combined { background: #ECFDF5; border-color: #10B981; }
+  .score-card.combined .value { color: #047857; }
+  .referentials { margin: 18px 0; padding: 12px 16px; background: #F3F4F6; border-radius: 6px; font-size: 11px; }
+  .referentials h3 { margin: 0 0 8px; color: #1F2937; font-size: 12px; }
+  .referentials ul { margin: 0; padding-left: 18px; color: #374151; }
+  .validity { margin-top: 16px; padding: 10px 14px; background: #FFFBEB; border: 1px solid #FCD34D; border-radius: 6px; font-size: 11px; }
+  .validity strong { color: #92400E; }
+  .sources-annex { margin-top: 18px; padding: 10px 14px; border-top: 2px dashed #D1D5DB; font-size: 10px; color: #4B5563; }
+  .sources-annex h3 { font-size: 12px; color: #374151; margin: 0 0 6px; }
+  .sources-annex ul { margin: 0; padding-left: 16px; }
+  .footer { margin-top: 18px; padding-top: 12px; border-top: 1px solid #E5E7EB; font-size: 9px; color: #6B7280; }
+  .footer .hash { font-family: 'Courier New', monospace; font-size: 8px; word-break: break-all; color: #9CA3AF; }
+  .footer .disclaimer { margin-top: 6px; padding: 8px; background: #FEF3C7; border-radius: 4px; color: #92400E; }
+</style>
+</head>
+<body>
+  <div class="header">
+    <h1>Attestation Vérifiable</h1>
+    <h2>Plateforme ESG Mefali — Finance durable pour les PME africaines</h2>
+  </div>
+
+  <div class="display-id-section">
+    <div>
+      <div class="label">Identifiant attestation</div>
+      <div class="id-value">{{ display_id }}</div>
+    </div>
+    <div style="text-align: right;">
+      <div class="label">Type</div>
+      <div style="font-weight: bold; font-size: 13px;">{{ type_label }}</div>
+    </div>
+  </div>
+
+  <div class="qr-block">
+    <img src="data:image/png;base64,{{ qr_base64 }}" alt="QR code de vérification">
+    <div class="url">{{ verification_url }}</div>
+    <div class="help">Scannez le QR ou ouvrez l'URL pour vérifier l'authenticité de cette attestation.</div>
+  </div>
+
+  <div class="scores-section">
+    <h3 style="margin: 0 0 10px; color: #1F2937; font-size: 14px;">Scores certifiés</h3>
+    <div class="scores-grid">
+      {% if scores.combined is defined %}
+      <div class="score-card combined">
+        <div class="value">{{ scores.combined }}/100</div>
+        <div class="label">Score combiné</div>
+      </div>
+      {% endif %}
+      {% if scores.solvability is defined %}
+      <div class="score-card">
+        <div class="value">{{ scores.solvability }}/100</div>
+        <div class="label">Solvabilité</div>
+      </div>
+      {% endif %}
+      {% if scores.green_impact is defined %}
+      <div class="score-card">
+        <div class="value">{{ scores.green_impact }}/100</div>
+        <div class="label">Impact vert</div>
+      </div>
+      {% endif %}
+      {% if scores.esg_global is defined %}
+      <div class="score-card">
+        <div class="value">{{ scores.esg_global }}/100</div>
+        <div class="label">ESG global</div>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="referentials">
+    <h3>Référentiels appliqués</h3>
+    {% if referentials %}
+    <ul>
+      {% for ref in referentials %}
+      <li><strong>{{ ref.name }}</strong>{% if ref.version %} v{{ ref.version }}{% endif %}{% if ref.published_at %} (publié le {{ ref.published_at }}){% endif %}</li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p style="margin: 0; font-style: italic;">Référentiels propriétaires ESG Mefali.</p>
+    {% endif %}
+  </div>
+
+  <div class="validity">
+    <strong>Validité :</strong>
+    Délivrée le {{ valid_from_fr }}, valide jusqu'au {{ valid_until_fr }}.
+    Public Key ID : <code>{{ public_key_id }}</code>.
+  </div>
+
+  {% if sources %}
+  <div class="sources-annex">
+    <h3>Sources et références</h3>
+    <ul>
+      {% for src in sources %}
+      <li>{{ src.title }}{% if src.url %} — <a href="{{ src.url }}">{{ src.url }}</a>{% endif %}</li>
+      {% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+
+  <div class="footer">
+    <div class="hash">SHA-256 : {{ pdf_hash_sha256 }}</div>
+    <div class="disclaimer">
+      <strong>Mention légale :</strong> Ce document est signé numériquement (Ed25519, public_key_id={{ public_key_id }})
+      et vérifiable via le QR code ci-dessus. Il atteste des scores au moment de la génération
+      ({{ valid_from_fr }}). Une mise à jour des données peut conduire à révocation par la PME.
+      Ce document n'a pas valeur d'évaluation bancaire ou financière formelle.
+    </div>
+  </div>
+</body>
+</html>

@@ -1,9 +1,22 @@
 import { useAuthStore } from '~/stores/auth'
 
+// F08 — Patterns de pages publiques accessibles sans authentification.
+// /verify/{id} : page de vérification d'attestation (no-auth, scan QR fund officer).
+// /legal/* : pages légales (mentions, conditions).
+const PUBLIC_PATH_PATTERNS = [
+  /^\/verify\/[^/]+\/?$/,
+  /^\/legal(\/|$)/,
+]
+
+const PUBLIC_AUTH_PAGES = ['/login', '/register']
+
+function isPublicPath(path: string): boolean {
+  if (PUBLIC_AUTH_PAGES.includes(path)) return true
+  return PUBLIC_PATH_PATTERNS.some((p) => p.test(path))
+}
+
 export default defineNuxtRouteMiddleware((to) => {
-  // Pages publiques accessibles sans authentification
-  const publicPages = ['/login', '/register']
-  const isPublicPage = publicPages.includes(to.path)
+  const isPublicPage = isPublicPath(to.path)
 
   const authStore = useAuthStore()
 
@@ -17,7 +30,11 @@ export default defineNuxtRouteMiddleware((to) => {
   }
 
   // Rediriger les utilisateurs connectés qui tentent d'accéder au login/register
-  if (isPublicPage && authStore.isAuthenticated) {
+  // (mais pas les pages publiques /verify ou /legal — elles restent accessibles).
+  if (
+    PUBLIC_AUTH_PAGES.includes(to.path) &&
+    authStore.isAuthenticated
+  ) {
     return navigateTo('/')
   }
 })

@@ -89,6 +89,8 @@ AUDITABLE_MODELS: frozenset[str] = frozenset(
         "ActionItem",
         # F06 — Entité Projet Vert
         "Project",
+        # F08 — Attestation Vérifiable Ed25519
+        "Attestation",
     }
 )
 

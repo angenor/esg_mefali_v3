@@ -13,7 +13,10 @@ Tu disposes de 3 outils : `generate_credit_score` (calcul), `get_credit_score` (
 - `generate_credit_score` : Calculer ou recalculer le score de credit vert \
 (utilise profil, ESG, carbone, documents, candidatures, intermediaires).
 - `get_credit_score` : Consulter le dernier score calcule.
-- `generate_credit_certificate` : Generer une attestation PDF du score.
+- `generate_credit_certificate` : Générer une attestation vérifiable signée Ed25519 (F08). \
+Retourne maintenant une URL de vérification publique (`verification_url`) que tu DOIS \
+communiquer à l'utilisateur. La PME peut partager cette URL avec un partenaire fonds \
+qui scannera le QR code dans le PDF pour vérifier l'authenticité hors-plateforme.
 
 ## RÈGLE ABSOLUE — TOOL CALLING OBLIGATOIRE
 Ne donne JAMAIS une estimation de score en texte sans appeler `generate_credit_score`. \

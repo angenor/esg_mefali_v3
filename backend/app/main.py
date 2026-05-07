@@ -94,6 +94,11 @@ from app.modules.admin.middleware import AdminAuditContextMiddleware  # noqa: E4
 
 app.add_middleware(AdminAuditContextMiddleware)
 
+# F08 — Rate limiting middleware sur /api/public/verify/* (10 req/IP/min).
+from app.middleware.rate_limit import RateLimitMiddleware  # noqa: E402
+
+app.add_middleware(RateLimitMiddleware)
+
 # Inclusion des routers
 from app.api.auth import router as auth_router  # noqa: E402
 from app.api.chat import router as chat_router  # noqa: E402
@@ -125,6 +130,17 @@ from app.modules.currency.admin_router import (  # noqa: E402
 )
 # F06 — Entité Projet Vert
 from app.modules.projects.router import router as projects_router  # noqa: E402
+# F08 — Attestations vérifiables Ed25519
+from app.modules.attestations.router import router as attestations_router  # noqa: E402
+from app.modules.attestations.admin_router import (  # noqa: E402
+    router as attestations_admin_router,
+)
+from app.api.public import router as public_router  # noqa: E402
+
+# IMPORTANT : le router public no-auth est monté en premier, AVANT les routers
+# authentifiés, pour que les middlewares (rate limit, CORS) s'appliquent
+# correctement et que ses endpoints n'héritent pas de l'auth.
+app.include_router(public_router, prefix="/api/public", tags=["public"])
 
 app.include_router(auth_router, prefix="/api/auth", tags=["auth"])
 app.include_router(chat_router, prefix="/api/chat", tags=["chat"])
@@ -151,4 +167,13 @@ app.include_router(
 )
 # F06 — Projets verts
 app.include_router(projects_router, prefix="/api/projects", tags=["projects"])
+# F08 — Attestations vérifiables (PME + admin)
+app.include_router(
+    attestations_router, prefix="/api/attestations", tags=["attestations"],
+)
+app.include_router(
+    attestations_admin_router,
+    prefix="/api/admin/attestations",
+    tags=["admin", "attestations"],
+)
 app.include_router(health_router, prefix="/api", tags=["health"])
