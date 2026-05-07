@@ -40,3 +40,5 @@ class ConversationState(TypedDict):
     active_entities: dict[str, Any] | None
     # Identifiant conversation injecte cote tests/anti-boucle widget (Patch G).
     conversation_id: NotRequired[str]
+    # F06 — Projets actifs (statut ≠ cancelled/closed) pour le contexte LLM.
+    user_projects: NotRequired[list[dict[str, Any]] | None]

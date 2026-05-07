@@ -20,6 +20,8 @@ const navItems = [
   { label: 'Rapports', to: '/reports', icon: 'reports' },
   { label: 'Documents', to: '/documents', icon: 'documents' },
   { label: 'Profil', to: '/profile', icon: 'profile' },
+  // F06 — Entité Projet Vert
+  { label: 'Mes Projets', to: '/profile/projects', icon: 'projects' },
 ]
 
 const completionPct = computed(() => Math.round(companyStore.overallCompletion))
@@ -99,6 +101,11 @@ onMounted(() => {
         <!-- Icone profil -->
         <svg v-else-if="item.icon === 'profile'" xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 shrink-0" viewBox="0 0 20 20" fill="currentColor">
           <path fill-rule="evenodd" d="M4 4a2 2 0 012-2h8a2 2 0 012 2v12a1 1 0 110 2H4a1 1 0 010-2V4zm3 1h6v4H7V5zm6 6H7v2h6v-2z" clip-rule="evenodd" />
+        </svg>
+        <!-- F06 — Icone projets verts (feuille/arbre) -->
+        <svg v-else-if="item.icon === 'projects'" xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 shrink-0" viewBox="0 0 20 20" fill="currentColor">
+          <path d="M10 2a8 8 0 00-8 8c0 3.314 2.014 6.166 4.886 7.388A6.973 6.973 0 0010 14c2.485 0 4.687-1.297 5.957-3.247.039-.255.043-.515.043-.753a8 8 0 00-8-8zm0 11a5 5 0 110-10 5 5 0 010 10z" />
+          <path fill-rule="evenodd" d="M9 7a1 1 0 011-1h0a1 1 0 011 1v4a1 1 0 11-2 0V7z" clip-rule="evenodd" />
         </svg>
         <span v-if="uiStore.sidebarOpen" class="flex-1">{{ item.label }}</span>
         <!-- Badge complétion profil -->

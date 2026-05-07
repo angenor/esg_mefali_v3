@@ -123,6 +123,8 @@ from app.modules.currency.router import router as currency_router  # noqa: E402
 from app.modules.currency.admin_router import (  # noqa: E402
     router as currency_admin_router,
 )
+# F06 — Entité Projet Vert
+from app.modules.projects.router import router as projects_router  # noqa: E402
 
 app.include_router(auth_router, prefix="/api/auth", tags=["auth"])
 app.include_router(chat_router, prefix="/api/chat", tags=["chat"])
@@ -147,4 +149,6 @@ app.include_router(currency_router, prefix="/api/currency", tags=["currency"])
 app.include_router(
     currency_admin_router, prefix="/api/admin/currency", tags=["admin", "currency"],
 )
+# F06 — Projets verts
+app.include_router(projects_router, prefix="/api/projects", tags=["projects"])
 app.include_router(health_router, prefix="/api", tags=["health"])

@@ -87,6 +87,8 @@ AUDITABLE_MODELS: frozenset[str] = frozenset(
         "CreditScore",
         "ActionPlan",
         "ActionItem",
+        # F06 — Entité Projet Vert
+        "Project",
     }
 )
 
@@ -151,6 +153,9 @@ EXEMPT_MODELS: frozenset[str] = frozenset(
         # contenu conversationnel). Les logs structurés `message_embedded`
         # couvrent l'observabilité (FR-029, SC-007).
         "MessageChunk",
+        # F06 — Table de jointure pure projet ↔ document. La traçabilité
+        # passe par les mutations de Project (Auditable).
+        "ProjectDocument",
     }
 )
 

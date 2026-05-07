@@ -52,12 +52,27 @@ PAGE_TOOL_MAPPING: dict[str, frozenset[str]] = {
         "get_esg_assessment_chat",
         "get_carbon_summary_chat",
         "list_user_documents",
+        # F06 — accès lecture aux projets depuis le chat global
+        "list_projects",
     }),
     # Profil entreprise : edition de fiche + lecture profil.
     "profile": frozenset({
         "update_company_profile",
         "get_company_profile",
         "get_company_profile_chat",
+        # F06 — accès lecture aux projets depuis /profile
+        "list_projects",
+        "get_project",
+    }),
+    # F06 — Page projets : 7 tools projet exclusifs.
+    "profile_projects": frozenset({
+        "list_projects",
+        "get_project",
+        "create_project",
+        "update_project",
+        "delete_project",
+        "duplicate_project",
+        "link_document_to_project",
     }),
     # Evaluation ESG (pages /esg, /esg/results).
     "esg": frozenset({
@@ -141,6 +156,8 @@ MODULE_TOOL_MAPPING: dict[str, frozenset[str]] = {
         "analyze_uploaded_document",
         "get_document_analysis",
         "list_user_documents",
+        # F06 — lecture projets depuis le noeud chat
+        "list_projects",
     }),
     "esg_scoring": frozenset({
         "create_esg_assessment",
@@ -192,6 +209,8 @@ MODULE_TOOL_MAPPING: dict[str, frozenset[str]] = {
 _PATH_TO_SLUG_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
     (re.compile(r"^/$"), "chat_global"),
     (re.compile(r"^/chat(?:/|$)"), "chat_global"),
+    # F06 — `/profile/projects` doit matcher AVANT `/profile` (l'ordre compte).
+    (re.compile(r"^/profile/projects(?:/|$)"), "profile_projects"),
     (re.compile(r"^/profile(?:/|$)"), "profile"),
     (re.compile(r"^/esg(?:/|$)"), "esg"),
     (re.compile(r"^/carbon(?:/|$)"), "carbon"),
