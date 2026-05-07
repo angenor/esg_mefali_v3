@@ -1,0 +1,106 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "$id": "https://esg-mefali.com/schemas/F22/golden_set.json",
+  "title": "Golden Set F22 — Cas LLM eval",
+  "type": "object",
+  "required": ["version", "cases"],
+  "additionalProperties": false,
+  "properties": {
+    "version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+$",
+      "description": "Version du schéma (semver simplifié)."
+    },
+    "description": {"type": "string"},
+    "generated_at": {"type": "string", "format": "date-time"},
+    "cases": {
+      "type": "array",
+      "minItems": 50,
+      "maxItems": 50,
+      "items": {"$ref": "#/definitions/GoldenCase"}
+    }
+  },
+  "definitions": {
+    "GoldenCase": {
+      "type": "object",
+      "required": ["id", "category", "context", "user_message", "expected"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^\\d{2,3}-[a-z0-9-]+$",
+          "description": "Identifiant unique du cas (ex: '01-profile-set-sector')."
+        },
+        "category": {
+          "type": "string",
+          "enum": [
+            "profilage",
+            "esg",
+            "carbon",
+            "financing",
+            "applications",
+            "credit",
+            "action_plan",
+            "conversational"
+          ]
+        },
+        "context": {
+          "type": "object",
+          "required": [],
+          "additionalProperties": false,
+          "properties": {
+            "current_page": {
+              "type": ["string", "null"],
+              "examples": ["/profile", "/esg", "/carbon", null]
+            },
+            "active_module": {
+              "type": ["string", "null"],
+              "examples": ["esg_scoring", "carbon", "financing", null]
+            },
+            "user_profile": {
+              "type": "object",
+              "description": "Payload partiel du profil utilisateur, optionnel."
+            }
+          }
+        },
+        "user_message": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2000
+        },
+        "expected": {
+          "type": "object",
+          "required": ["tool_called"],
+          "additionalProperties": false,
+          "properties": {
+            "tool_called": {
+              "oneOf": [
+                {"type": "string", "minLength": 1},
+                {
+                  "type": "array",
+                  "minItems": 1,
+                  "items": {"type": "string", "minLength": 1},
+                  "uniqueItems": true
+                }
+              ],
+              "description": "Nom du tool attendu OU whitelist de tools acceptables."
+            },
+            "payload_contains": {
+              "type": "object",
+              "description": "Subset de clés/valeurs qui doivent être présentes dans tool_args."
+            },
+            "fallback_acceptable": {
+              "type": "boolean",
+              "default": false,
+              "description": "Si true, un retour fallback compte comme succès."
+            }
+          }
+        },
+        "tags": {
+          "type": "array",
+          "items": {"type": "string"}
+        }
+      }
+    }
+  }
+}
