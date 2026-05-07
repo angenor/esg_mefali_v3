@@ -103,6 +103,7 @@ class ReminderType(str, enum.Enum):
     assessment_renewal = "assessment_renewal"
     fund_deadline = "fund_deadline"
     intermediary_followup = "intermediary_followup"
+    attestation_renewal = "attestation_renewal"
     custom = "custom"
 
 
@@ -261,12 +262,27 @@ class ActionItem(Auditable, UUIDMixin, TimestampMixin, Base):
 
 
 class Reminder(UUIDMixin, Base):
-    """Rappel programme lie a une action."""
+    """Rappel programme lie a une action.
+
+    F19 — colonnes ``dedup_key``, ``sent_at``, ``archived``, ``read`` ajoutées
+    pour le cron dispatcher (idempotence auto-création + housekeeping +
+    suivi lecture côté UI).
+    """
 
     __tablename__ = "reminders"
     __table_args__ = (
         Index("idx_reminders_upcoming", "user_id", "sent", "scheduled_at"),
         Index("idx_reminders_account_id", "account_id"),
+        # F19 — index unique partiel sur (account_id, dedup_key) — dedup auto-création.
+        Index(
+            "idx_reminders_dedup_key_unique",
+            "account_id",
+            "dedup_key",
+            unique=True,
+            postgresql_where=text("dedup_key IS NOT NULL"),
+        ),
+        # F19 — index secondaire dispatcher (archived=false, sent=false).
+        Index("idx_reminders_archived_pending", "archived", "sent"),
     )
 
     user_id: Mapped[uuid.UUID] = mapped_column(
@@ -294,6 +310,22 @@ class Reminder(UUIDMixin, Base):
         DateTime(timezone=True), nullable=False
     )
     sent: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    # F19 — Horodatage du dispatch effectif.
+    sent_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    # F19 — Soft-purge (housekeeping).
+    archived: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false", nullable=False
+    )
+    # F19 — Suivi lecture côté UI.
+    read: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false", nullable=False
+    )
+    # F19 — Clé d'idempotence pour l'auto-création (ON CONFLICT DO NOTHING).
+    dedup_key: Mapped[str | None] = mapped_column(
+        String(255), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),

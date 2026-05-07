@@ -55,3 +55,6 @@ tiktoken>=0.5.0
 
 # F23 — versioning semver des Skills
 semver>=3.0.0
+
+# F19 — Cron dispatcher rappels (APScheduler MVP single-process)
+apscheduler>=3.10.4

@@ -25,6 +25,35 @@ logger = logging.getLogger(__name__)
 compiled_graph = None
 
 
+def _maybe_start_scheduler(app: FastAPI) -> None:
+    """F19 — Démarre l'AsyncIOScheduler si activé dans la config."""
+    if not settings.apscheduler_enabled:
+        logger.info("Lifespan : APSCHEDULER_ENABLED=false — scheduler désactivé")
+        return
+    try:
+        from app.scheduler.scheduler import start_scheduler
+
+        instance = start_scheduler()
+        if instance is not None:
+            app.state.scheduler = instance
+            logger.info("Lifespan : APScheduler démarré")
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Lifespan : APScheduler indisponible : %s", exc)
+
+
+def _maybe_stop_scheduler(app: FastAPI) -> None:
+    """F19 — Arrête le scheduler proprement (idempotent)."""
+    if getattr(app.state, "scheduler", None) is None:
+        return
+    try:
+        from app.scheduler.scheduler import stop_scheduler
+
+        stop_scheduler()
+        app.state.scheduler = None
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Lifespan : APScheduler shutdown error : %s", exc)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Cycle de vie de l'application : initialisation et nettoyage.
@@ -32,6 +61,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     F12 — Initialise un ``AsyncPostgresSaver`` dans un async context manager
     pour la persistance des conversations LangGraph (survit aux redémarrages
     du backend). Le graphe est compilé avec ce checkpointer.
+
+    F19 — Démarre l'``AsyncIOScheduler`` (cron dispatcher rappels) si
+    ``APSCHEDULER_ENABLED=true``. Arrêt propre au shutdown.
     """
     global compiled_graph
 
@@ -47,7 +79,12 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
                 app.state.checkpointer = checkpointer
                 app.state.compiled_graph = compiled_graph
                 logger.info("Graphe LangGraph initialisé avec AsyncPostgresSaver")
-                yield
+                # F19 — démarre le scheduler AVANT le yield (jobs dispo dès la 1re req).
+                _maybe_start_scheduler(app)
+                try:
+                    yield
+                finally:
+                    _maybe_stop_scheduler(app)
                 # Sortie du with → cleanup checkpointer automatique
                 compiled_graph = None
                 return
@@ -67,7 +104,12 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     else:
         logger.warning("OPENROUTER_API_KEY non configurée — graphe LangGraph désactivé")
 
-    yield
+    # F19 — démarre le scheduler aussi en mode dégradé (sans checkpointer).
+    _maybe_start_scheduler(app)
+    try:
+        yield
+    finally:
+        _maybe_stop_scheduler(app)
 
     # Arrêt
     compiled_graph = None
@@ -215,4 +257,13 @@ app.include_router(
     credit_stub_router,
     prefix="/api/credit",
     tags=["credit", "stub"],
+)
+
+# F19 — Endpoint SSE pour les notifications de rappels (cron dispatcher).
+from app.api.notifications import router as notifications_router  # noqa: E402
+
+app.include_router(
+    notifications_router,
+    prefix="/api/notifications",
+    tags=["notifications"],
 )
