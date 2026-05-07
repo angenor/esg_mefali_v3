@@ -64,5 +64,26 @@ class Settings(BaseSettings):
     app_version: str = "0.1.0"
     debug: bool = False
 
+    # F05 — RGPD Mes Données + Consentements
+    # Clé secrète pour signer URLs temporaires (export download). En prod, doit
+    # être renseignée via secret manager. En dev/tests, fallback sur secret_key.
+    export_url_signing_key: str = ""
+
+    # SMTP (optionnel — si non configuré, mailer logue dans audit_log).
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_user: str = ""
+    smtp_password: str = ""
+    email_from: str = "no-reply@esg-mefali.com"
+
+    # Politique de confidentialité actuelle (mise à jour à chaque changement majeur).
+    privacy_policy_version: str = "v1.0"
+
+    # Délai de grâce avant purge effective d'un compte supprimé (jours).
+    account_deletion_grace_period_days: int = 30
+
 
 settings = Settings()
+# F05 — fallback de la clé de signature export URL sur secret_key si non définie.
+if not settings.export_url_signing_key:
+    settings.export_url_signing_key = settings.secret_key

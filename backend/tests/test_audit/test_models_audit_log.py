@@ -63,11 +63,12 @@ class TestAuditLogModel:
         assert log.actor_metadata == {"tool_name": "create_fund_application"}
 
     @pytest.mark.asyncio
-    async def test_user_id_nullable_false(self, db_session) -> None:
+    async def test_user_id_nullable_after_f05(self, db_session) -> None:
+        """F05 — user_id devient nullable pour permettre l'anonymisation RGPD."""
         user = await make_pme_user(db_session)
         await db_session.commit()
         log = AuditLog(
-            # user_id manquant
+            user_id=None,  # accepté depuis F05
             account_id=user.account_id,
             entity_type="company_profile",
             entity_id=uuid.uuid4(),
@@ -75,24 +76,27 @@ class TestAuditLogModel:
             source_of_change=AuditSourceOfChange.manual,
         )
         db_session.add(log)
-        with pytest.raises(IntegrityError):
-            await db_session.commit()
+        await db_session.commit()
+        await db_session.refresh(log)
+        assert log.user_id is None
 
     @pytest.mark.asyncio
-    async def test_account_id_nullable_false(self, db_session) -> None:
+    async def test_account_id_nullable_after_f05(self, db_session) -> None:
+        """F05 — account_id devient nullable pour permettre l'anonymisation RGPD."""
         user = await make_pme_user(db_session)
         await db_session.commit()
         log = AuditLog(
             user_id=user.id,
-            # account_id manquant
+            account_id=None,  # accepté depuis F05
             entity_type="company_profile",
             entity_id=uuid.uuid4(),
             action=AuditAction.create,
             source_of_change=AuditSourceOfChange.manual,
         )
         db_session.add(log)
-        with pytest.raises(IntegrityError):
-            await db_session.commit()
+        await db_session.commit()
+        await db_session.refresh(log)
+        assert log.account_id is None
 
     @pytest.mark.asyncio
     async def test_field_nullable(self, db_session) -> None:

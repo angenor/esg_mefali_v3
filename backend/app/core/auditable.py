@@ -158,6 +158,13 @@ EXEMPT_MODELS: frozenset[str] = frozenset(
         # F06 — Table de jointure pure projet ↔ document. La traçabilité
         # passe par les mutations de Project (Auditable).
         "ProjectDocument",
+        # F05 — Consentements RGPD. Hors mixin générique : les mutations
+        # (grant/revoke) sont tracées explicitement par
+        # ``app/modules/me/service.py`` avec metadata structurée
+        # (``action_kind=consent_granted/revoked``, version, ip, user_agent)
+        # via ``_audit_event``. L'introspection champ-à-champ générique du
+        # mixin n'apporte pas de valeur ajoutée pour cette entité.
+        "Consent",
     }
 )
 

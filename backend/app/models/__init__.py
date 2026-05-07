@@ -70,3 +70,6 @@ from app.models.project_document import ProjectDocument  # noqa: F401
 
 # F08 — Attestation Vérifiable Ed25519
 from app.models.attestation import Attestation  # noqa: F401
+
+# F05 — RGPD : Consentement granulaire
+from app.models.consent import Consent  # noqa: F401

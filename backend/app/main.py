@@ -137,6 +137,9 @@ from app.modules.attestations.admin_router import (  # noqa: E402
 )
 from app.api.public import router as public_router  # noqa: E402
 
+# F05 — RGPD : Mes Données + Consentements + Suppression de compte
+from app.modules.me.router import router as me_router  # noqa: E402
+
 # IMPORTANT : le router public no-auth est monté en premier, AVANT les routers
 # authentifiés, pour que les middlewares (rate limit, CORS) s'appliquent
 # correctement et que ses endpoints n'héritent pas de l'auth.
@@ -177,3 +180,14 @@ app.include_router(
     tags=["admin", "attestations"],
 )
 app.include_router(health_router, prefix="/api", tags=["health"])
+# F05 — Module RGPD utilisateur (`/api/me/*`)
+app.include_router(me_router, prefix="/api/me", tags=["me", "rgpd"])
+
+# F05 — Test stub pour démontrer le gating require_consent (consent_dependency).
+from app.api.credit_stub import router as credit_stub_router  # noqa: E402
+
+app.include_router(
+    credit_stub_router,
+    prefix="/api/credit",
+    tags=["credit", "stub"],
+)

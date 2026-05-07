@@ -43,9 +43,9 @@ const headerTitle = isEn
         class="max-w-3xl mx-auto px-4 py-3 flex flex-wrap items-center justify-between gap-2"
       >
         <span>&copy; {{ new Date().getFullYear() }} {{ brandLabel }}</span>
-        <a href="/legal" class="hover:underline">{{
-          isEn ? 'Legal' : 'Mentions légales'
-        }}</a>
+        <NuxtLink to="/legal/privacy" class="hover:underline">
+          {{ isEn ? 'Privacy Policy' : 'Politique de confidentialité' }}
+        </NuxtLink>
       </div>
     </footer>
   </div>

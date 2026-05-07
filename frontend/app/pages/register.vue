@@ -20,6 +20,8 @@ const form = reactive({
   full_name: '',
   company_name: '',
   country: '' as string,
+  // F05 — RGPD : case à cocher obligatoire pour la politique de confidentialité.
+  privacy_policy_accepted: false,
 })
 const error = ref('')
 const loading = ref(false)
@@ -50,6 +52,8 @@ async function handleRegister() {
       country: form.country || null,
       // F02 — relai du token d'invitation, ignore par le backend si null.
       invite_token: inviteToken.value,
+      // F05 — RGPD : envoyer le flag d'acceptation de la politique.
+      privacy_policy_accepted: form.privacy_policy_accepted,
     })
     await login(form.email, form.password)
     await navigateTo('/')
@@ -164,9 +168,29 @@ async function handleRegister() {
             />
           </div>
 
+          <!-- F05 — RGPD : checkbox obligatoire politique de confidentialité -->
+          <label class="flex items-start gap-2 text-xs text-gray-700 dark:text-gray-300">
+            <input
+              v-model="form.privacy_policy_accepted"
+              type="checkbox"
+              name="privacy_policy_accepted"
+              required
+              class="mt-0.5 h-4 w-4 rounded border-gray-300 dark:border-dark-border text-brand-green focus:ring-brand-green"
+            />
+            <span>
+              J'ai lu et j'accepte la
+              <NuxtLink
+                to="/legal/privacy"
+                target="_blank"
+                class="text-brand-green hover:underline"
+              >politique de confidentialité v1.0</NuxtLink>
+              (RGPD).
+            </span>
+          </label>
+
           <button
             type="submit"
-            :disabled="loading"
+            :disabled="loading || !form.privacy_policy_accepted"
             class="w-full py-2.5 bg-brand-green text-white font-medium rounded-lg hover:bg-emerald-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {{ loading ? 'Inscription...' : "S'inscrire" }}
