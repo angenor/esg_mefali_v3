@@ -9,6 +9,10 @@ vi.stubGlobal('onMounted', onMounted)
 vi.stubGlobal('computed', computed)
 vi.stubGlobal('ref', ref)
 vi.stubGlobal('definePageMeta', vi.fn())
+// F07 — useRuntimeConfig pour le feature flag USE_OFFER_VIEW
+vi.stubGlobal('useRuntimeConfig', () => ({
+  public: { useOfferView: false },
+}))
 
 import FinancingIndex from '~/pages/financing/index.vue'
 
@@ -18,6 +22,7 @@ vi.mock('~/composables/useFinancing', () => ({
     fetchMatches: vi.fn(),
     fetchFunds: vi.fn(),
     fetchIntermediaries: vi.fn(),
+    listOffers: vi.fn().mockResolvedValue({ items: [], total: 0, limit: 20, offset: 0 }),
     loading: ref(false),
     error: ref(null),
   }),

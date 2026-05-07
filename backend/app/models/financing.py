@@ -2,12 +2,13 @@
 
 import enum
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 
 from sqlalchemy import (
     BigInteger,
     Boolean,
+    CheckConstraint,
     Date,
     DateTime,
     Enum,
@@ -27,6 +28,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.money import Money
 from app.models.base import Base, TimestampMixin, UUIDMixin
+from app.models.source import JSONType, PublicationStatus
 from app.models.versioning_mixin import VersioningMixin
 
 try:
@@ -39,13 +41,21 @@ except ImportError:
 
 
 class FundType(str, enum.Enum):
-    """Type de fonds de financement vert."""
+    """Type de fonds de financement vert.
 
-    international = "international"
+    F07 — valeurs renommées (migration 028) :
+    - ``international`` → ``multilateral``
+    - ``carbon_market`` → ``carbon_marketplace``
+    - ``local_bank_green_line`` → ``private``
+    + ajout ``bilateral``.
+    """
+
+    multilateral = "multilateral"
+    bilateral = "bilateral"
     regional = "regional"
     national = "national"
-    carbon_market = "carbon_market"
-    local_bank_green_line = "local_bank_green_line"
+    private = "private"
+    carbon_marketplace = "carbon_marketplace"
 
 
 class FundStatus(str, enum.Enum):
@@ -170,7 +180,37 @@ class Fund(UUIDMixin, TimestampMixin, VersioningMixin, Base):
     )
     success_tips: Mapped[str | None] = mapped_column(Text, nullable=True)
 
+    # F07 — Enrichissement (migration 028)
+    instruments: Mapped[list[str]] = mapped_column(
+        JSONType, nullable=False, server_default="[]", default=list,
+    )
+    theme: Mapped[list[str]] = mapped_column(
+        JSONType, nullable=False, server_default="[]", default=list,
+    )
+    submission_mode: Mapped[str] = mapped_column(
+        String(30), nullable=False, server_default="rolling", default="rolling",
+    )
+    submission_calendar: Mapped[list[dict] | None] = mapped_column(
+        JSONType, nullable=True,
+    )
+    # F01 — Source obligatoire (NOT NULL post-migration 028).
+    # Nullable=True dans le modèle pour permettre les tests legacy.
+    source_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("sources.id", ondelete="RESTRICT"),
+        nullable=True,
+    )
+    publication_status: Mapped[str] = mapped_column(
+        String(20),
+        nullable=False,
+        default=PublicationStatus.DRAFT.value,
+        server_default=PublicationStatus.DRAFT.value,
+    )
+
     # Relations
+    source: Mapped["Source | None"] = relationship(
+        "Source", lazy="selectin", foreign_keys=[source_id],
+    )
     fund_intermediaries: Mapped[list["FundIntermediary"]] = relationship(
         "FundIntermediary",
         back_populates="fund",
@@ -243,13 +283,67 @@ class Intermediary(UUIDMixin, TimestampMixin, VersioningMixin, Base):
         Boolean, nullable=False, default=True
     )
 
+    # F07 — Enrichissement (migration 028)
+    code: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    """Code unique sparse (ex 'DIRECT' pour le singleton)."""
+    required_documents: Mapped[list[dict]] = mapped_column(
+        JSONType, nullable=False, server_default="[]", default=list,
+    )
+    fees_structured: Mapped[dict | None] = mapped_column(JSONType, nullable=True)
+    processing_time_days_min: Mapped[int | None] = mapped_column(
+        Integer, nullable=True,
+    )
+    processing_time_days_max: Mapped[int | None] = mapped_column(
+        Integer, nullable=True,
+    )
+    disbursement_time_days_min: Mapped[int | None] = mapped_column(
+        Integer, nullable=True,
+    )
+    disbursement_time_days_max: Mapped[int | None] = mapped_column(
+        Integer, nullable=True,
+    )
+    submission_portal_url: Mapped[str | None] = mapped_column(
+        String(500), nullable=True,
+    )
+    success_rate: Mapped[Decimal | None] = mapped_column(
+        Numeric(5, 4), nullable=True,
+    )
+    total_funded_volume_amount: Mapped[Decimal | None] = mapped_column(
+        Numeric(20, 2), nullable=True,
+    )
+    total_funded_volume_currency: Mapped[str | None] = mapped_column(
+        String(3), nullable=True,
+    )
+    # F01 — Source obligatoire (NOT NULL post-migration 028)
+    source_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("sources.id", ondelete="RESTRICT"),
+        nullable=True,
+    )
+    publication_status: Mapped[str] = mapped_column(
+        String(20),
+        nullable=False,
+        default=PublicationStatus.DRAFT.value,
+        server_default=PublicationStatus.DRAFT.value,
+    )
+
     # Relations
+    source: Mapped["Source | None"] = relationship(
+        "Source", lazy="selectin", foreign_keys=[source_id],
+    )
     fund_intermediaries: Mapped[list["FundIntermediary"]] = relationship(
         "FundIntermediary",
         back_populates="intermediary",
         cascade="all, delete-orphan",
         lazy="selectin",
     )
+
+    @property
+    def total_funded_volume_money(self) -> Money | None:
+        """F04 — Reconstruit Money depuis (amount, currency)."""
+        return Money.from_columns(
+            self.total_funded_volume_amount, self.total_funded_volume_currency,
+        )
 
 
 class FundIntermediary(UUIDMixin, VersioningMixin, Base):
@@ -284,11 +378,35 @@ class FundIntermediary(UUIDMixin, VersioningMixin, Base):
     )
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
 
+    # F07 — Enrichissement (migration 028)
+    accredited_from: Mapped[date | None] = mapped_column(Date, nullable=True)
+    """Date de début d'accréditation (NOT NULL post-migration 028)."""
+    accredited_to: Mapped[date | None] = mapped_column(Date, nullable=True)
+    """Date de fin d'accréditation (NULL = encore accréditée)."""
+    max_amount_per_fund_amount: Mapped[Decimal | None] = mapped_column(
+        Numeric(20, 2), nullable=True,
+    )
+    max_amount_per_fund_currency: Mapped[str | None] = mapped_column(
+        String(3), nullable=True,
+    )
+    accreditation_source_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("sources.id", ondelete="RESTRICT"),
+        nullable=True,
+    )
+
     # Relations
     fund: Mapped["Fund"] = relationship("Fund", back_populates="fund_intermediaries")
     intermediary: Mapped["Intermediary"] = relationship(
         "Intermediary", back_populates="fund_intermediaries"
     )
+
+    @property
+    def max_amount_per_fund_money(self) -> Money | None:
+        """F04 — Reconstruit Money depuis (amount, currency)."""
+        return Money.from_columns(
+            self.max_amount_per_fund_amount, self.max_amount_per_fund_currency,
+        )
 
 
 class FundMatch(UUIDMixin, Base):

@@ -135,6 +135,11 @@ from app.modules.attestations.router import router as attestations_router  # noq
 from app.modules.attestations.admin_router import (  # noqa: E402
     router as attestations_admin_router,
 )
+# F07 — Entité Offre = Couple Fonds × Intermédiaire
+from app.modules.offers.router import router as offers_router  # noqa: E402
+from app.modules.offers.admin_router import (  # noqa: E402
+    router as offers_admin_router,
+)
 from app.api.public import router as public_router  # noqa: E402
 
 # F05 — RGPD : Mes Données + Consentements + Suppression de compte
@@ -182,6 +187,9 @@ app.include_router(
 app.include_router(health_router, prefix="/api", tags=["health"])
 # F05 — Module RGPD utilisateur (`/api/me/*`)
 app.include_router(me_router, prefix="/api/me", tags=["me", "rgpd"])
+# F07 — Entité Offre (Couple Fonds × Intermédiaire)
+app.include_router(offers_router, prefix="/api", tags=["offers"])
+app.include_router(offers_admin_router, prefix="/api/admin", tags=["admin", "offers"])
 
 # F05 — Test stub pour démontrer le gating require_consent (consent_dependency).
 from app.api.credit_stub import router as credit_stub_router  # noqa: E402

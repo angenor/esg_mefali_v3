@@ -11,11 +11,14 @@ from pydantic import BaseModel, Field
 
 
 class FundTypeEnum(str, Enum):
-    international = "international"
+    """F07 — valeurs renommées (migration 028)."""
+
+    multilateral = "multilateral"
+    bilateral = "bilateral"
     regional = "regional"
     national = "national"
-    carbon_market = "carbon_market"
-    local_bank_green_line = "local_bank_green_line"
+    private = "private"
+    carbon_marketplace = "carbon_marketplace"
 
 
 class FundStatusEnum(str, Enum):
