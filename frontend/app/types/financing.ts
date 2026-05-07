@@ -178,3 +178,139 @@ export interface MatchListResponse {
   items: FundMatchSummary[]
   total: number
 }
+
+// --- F07 — Offres (Couple Fonds × Intermediaire) ---
+
+export type SubmissionMode = 'rolling' | 'call_for_proposals'
+export type PublicationStatus = 'draft' | 'published'
+
+export interface MoneyAmount {
+  amount: string
+  currency: string
+}
+
+export interface OfferFundSummary {
+  id: string
+  name: string
+  organization: string
+  fund_type?: string | null
+  publication_status?: string | null
+}
+
+export interface OfferIntermediarySummary {
+  id: string
+  name: string
+  code?: string | null
+  country: string
+  organization_type?: string | null
+  success_rate?: number | null
+  publication_status?: string | null
+}
+
+export interface EffectiveDocument {
+  title: string
+  source_id?: string | null
+  mandatory: boolean
+  format_spec?: string | null
+}
+
+export interface OfferEffectiveFees {
+  total_min?: MoneyAmount | null
+  total_max?: MoneyAmount | null
+  breakdown?: Array<Record<string, unknown>>
+}
+
+export interface OfferSummary {
+  id: string
+  name: string
+  fund_id: string
+  intermediary_id: string
+  accepted_languages: string[]
+  publication_status: PublicationStatus
+  is_active: boolean
+  effective_processing_time_days_min?: number | null
+  effective_processing_time_days_max?: number | null
+  effective_disbursement_time_days_min?: number | null
+  effective_disbursement_time_days_max?: number | null
+}
+
+export interface Offer {
+  id: string
+  fund?: OfferFundSummary | null
+  intermediary?: OfferIntermediarySummary | null
+  fund_id: string
+  intermediary_id: string
+  name: string
+  accepted_languages: string[]
+  target_sector?: string[] | null
+  effective_criteria: Record<string, unknown>
+  effective_required_documents: EffectiveDocument[]
+  effective_fees: OfferEffectiveFees
+  effective_processing_time_days_min?: number | null
+  effective_processing_time_days_max?: number | null
+  effective_disbursement_time_days_min?: number | null
+  effective_disbursement_time_days_max?: number | null
+  notes?: string | null
+  is_active: boolean
+  publication_status: PublicationStatus
+  source_id: string
+  version: string
+  valid_from: string
+  valid_to?: string | null
+}
+
+export interface OfferComparison {
+  offer_id: string
+  name: string
+  intermediary_id: string
+  intermediary_name: string
+  intermediary_country: string
+  intermediary_code?: string | null
+  accepted_languages: string[]
+  effective_fees_total_min?: MoneyAmount | null
+  effective_fees_total_max?: MoneyAmount | null
+  effective_processing_time_days_min?: number | null
+  effective_processing_time_days_max?: number | null
+  effective_disbursement_time_days_min?: number | null
+  effective_disbursement_time_days_max?: number | null
+  success_rate?: number | null
+  documents_count: number
+  publication_status: PublicationStatus
+  is_active: boolean
+}
+
+export interface OfferListResponse {
+  items: OfferSummary[]
+  total: number
+  limit: number
+  offset: number
+}
+
+export interface OfferDraft {
+  fund_id: string
+  intermediary_id: string
+  name: string
+  target_sector?: string[] | null
+  effective_criteria: Record<string, unknown>
+  effective_required_documents: EffectiveDocument[]
+  effective_fees: OfferEffectiveFees
+  effective_processing_time_days_min?: number | null
+  effective_processing_time_days_max?: number | null
+  effective_disbursement_time_days_min?: number | null
+  effective_disbursement_time_days_max?: number | null
+  accepted_languages_hint: string[]
+  notes?: string | null
+  suggested_source_id?: string | null
+}
+
+export interface OfferFilters {
+  fund_id?: string
+  intermediary_id?: string
+  theme?: string
+  instrument?: string
+  country?: string
+  language?: string
+  sort?: 'name' | 'processing_time'
+  limit?: number
+  offset?: number
+}

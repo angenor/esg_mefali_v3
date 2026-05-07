@@ -233,8 +233,8 @@ class TestFinancingToolsExport:
     """Tests pour l'export du module."""
 
     def test_tools_list_count(self):
-        """FINANCING_TOOLS contient 4 tools."""
-        assert len(FINANCING_TOOLS) == 4
+        """FINANCING_TOOLS contient 7 tools (F07 ajoute list_offers, get_offer, compare_offers_for_fund)."""
+        assert len(FINANCING_TOOLS) == 7
 
     def test_tool_names(self):
         """Les tools ont les bons noms."""
@@ -244,6 +244,10 @@ class TestFinancingToolsExport:
             "save_fund_interest",
             "get_fund_details",
             "create_fund_application",
+            # F07
+            "list_offers",
+            "get_offer",
+            "compare_offers_for_fund",
         }
 
     def test_tools_have_french_descriptions(self):
@@ -251,5 +255,9 @@ class TestFinancingToolsExport:
         for t in FINANCING_TOOLS:
             assert any(
                 word in t.description.lower()
-                for word in ["financement", "fonds", "candidature", "rechercher", "interet", "detail"]
+                for word in [
+                    "financement", "fonds", "candidature", "rechercher",
+                    "interet", "detail", "offre", "offres", "récupère",
+                    "compare", "publi",
+                ]
             ), f"Description manque de termes francais : {t.description}"

@@ -229,9 +229,143 @@ async def create_fund_application(
         return f"Erreur lors de la creation du dossier : {e}"
 
 
+# --- F07 — Tools Offres (Couple Fonds × Intermédiaire) ---
+
+
+@tool
+async def list_offers(
+    config: RunnableConfig,
+    fund_id: str | None = None,
+    intermediary_id: str | None = None,
+    country: str | None = None,
+    limit: int = 10,
+) -> str:
+    """Liste les offres (couples Fonds × Intermédiaire) publiées et actives.
+
+    Une Offre est l'unité commercialement actionnable côté PME : c'est ce qui
+    peut être candidaté. Filtrable par fonds, intermédiaire ou pays.
+
+    Args:
+        fund_id: Filtre optionnel par UUID de fonds.
+        intermediary_id: Filtre optionnel par UUID d'intermédiaire.
+        country: Filtre optionnel par pays de l'intermédiaire.
+        limit: Nombre maximum d'offres (défaut 10, max 50).
+    """
+    from app.modules.offers.service import list_offers as svc_list_offers
+
+    try:
+        db, _user_id = get_db_and_user(config)
+        fid = uuid.UUID(fund_id) if fund_id else None
+        iid = uuid.UUID(intermediary_id) if intermediary_id else None
+
+        offers, total = await svc_list_offers(
+            db,
+            fund_id=fid,
+            intermediary_id=iid,
+            country=country,
+            include_drafts=False,
+            limit=min(limit, 50),
+        )
+        if not offers:
+            return "Aucune offre publiée trouvée pour ces critères."
+
+        lines = [f"{total} offre(s) trouvée(s) (top {len(offers)}) :"]
+        for o in offers:
+            languages = ",".join(o.accepted_languages or ["FR"])
+            proc = (
+                f"{o.effective_processing_time_days_min}-"
+                f"{o.effective_processing_time_days_max}j"
+                if o.effective_processing_time_days_min else "N/A"
+            )
+            lines.append(
+                f"- {o.name} (id={o.id}) — langues={languages}, délai={proc}"
+            )
+        return "\n".join(lines)
+    except Exception as e:  # noqa: BLE001
+        logger.exception("Erreur lors de la liste des offres")
+        return f"Erreur lors de la liste des offres : {e}"
+
+
+@tool
+async def get_offer(offer_id: str, config: RunnableConfig) -> str:
+    """Récupère le détail d'une offre par son UUID.
+
+    Args:
+        offer_id: UUID de l'offre.
+    """
+    from app.modules.offers.service import get_offer as svc_get_offer
+
+    try:
+        db, _user_id = get_db_and_user(config)
+        offer = await svc_get_offer(db, uuid.UUID(offer_id), include_drafts=False)
+        if offer is None:
+            return f"Offre introuvable ou non publiée (id={offer_id})."
+
+        fund = offer.fund
+        intermediary = offer.intermediary
+        languages = ",".join(offer.accepted_languages or ["FR"])
+        docs_count = len(offer.effective_required_documents or [])
+        return (
+            f"Détail de l'offre :\n"
+            f"- Nom : {offer.name}\n"
+            f"- Fonds : {fund.name if fund else 'N/A'}\n"
+            f"- Intermédiaire : {intermediary.name if intermediary else 'N/A'} "
+            f"({intermediary.country if intermediary else 'N/A'})\n"
+            f"- Langues acceptées : {languages}\n"
+            f"- Documents requis : {docs_count}\n"
+            f"- Délai traitement (jours) : "
+            f"{offer.effective_processing_time_days_min}-"
+            f"{offer.effective_processing_time_days_max}\n"
+            f"- Statut : {offer.publication_status}"
+        )
+    except Exception as e:  # noqa: BLE001
+        logger.exception("Erreur lors de la consultation de l'offre %s", offer_id)
+        return f"Erreur lors de la consultation de l'offre : {e}"
+
+
+@tool
+async def compare_offers_for_fund(fund_id: str, config: RunnableConfig) -> str:
+    """Compare toutes les offres publiées pour un fonds donné (côte-à-côte).
+
+    Args:
+        fund_id: UUID du fonds.
+    """
+    from app.modules.offers.service import (
+        compare_offers_for_fund as svc_compare,
+    )
+
+    try:
+        db, _user_id = get_db_and_user(config)
+        comparisons = await svc_compare(db, fund_id=uuid.UUID(fund_id))
+        if not comparisons:
+            return f"Aucune offre publiée pour le fonds {fund_id}."
+
+        lines = [f"{len(comparisons)} offre(s) à comparer pour ce fonds :"]
+        for c in comparisons:
+            fees_str = "N/A"
+            if c.effective_fees_total_min:
+                fees_str = (
+                    f"{c.effective_fees_total_min.amount} "
+                    f"{c.effective_fees_total_min.currency}"
+                )
+            lines.append(
+                f"- {c.name} via {c.intermediary_name} ({c.intermediary_country}) — "
+                f"frais {fees_str}, délai {c.effective_processing_time_days_min or '?'}-"
+                f"{c.effective_processing_time_days_max or '?'}j, "
+                f"docs {c.documents_count}"
+            )
+        return "\n".join(lines)
+    except Exception as e:  # noqa: BLE001
+        logger.exception("Erreur lors de la comparaison des offres pour %s", fund_id)
+        return f"Erreur lors de la comparaison : {e}"
+
+
 FINANCING_TOOLS = [
     search_compatible_funds,
     save_fund_interest,
     get_fund_details,
     create_fund_application,
+    list_offers,
+    get_offer,
+    compare_offers_for_fund,
 ]

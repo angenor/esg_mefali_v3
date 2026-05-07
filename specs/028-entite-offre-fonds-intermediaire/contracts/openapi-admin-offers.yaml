@@ -1,0 +1,234 @@
+openapi: 3.1.0
+info:
+  title: ESG Mefali — Admin Offers API
+  version: "1.0.0-F07"
+  description: |
+    Endpoints administrateur pour la gestion du catalogue d'offres.
+    Tous les endpoints requièrent un JWT avec rôle `admin` (helper F02 `is_admin`).
+    Réponse 403 Forbidden si rôle insuffisant.
+servers:
+  - url: http://localhost:8000
+    description: Local dev
+  - url: https://api.esg-mefali.com
+    description: Production
+
+paths:
+  /api/admin/offers:
+    get:
+      summary: Liste complète admin (incluant drafts)
+      description: |
+        Retourne toutes les offres y compris drafts. Filtres facultatifs identiques à `/api/offers`.
+        Requiert rôle `admin`.
+      tags: [admin-offers]
+      security:
+        - JWTAdmin: []
+      parameters:
+        - name: include_drafts
+          in: query
+          schema: { type: boolean, default: true }
+        - name: fund_id
+          in: query
+          schema: { type: string, format: uuid }
+        - name: intermediary_id
+          in: query
+          schema: { type: string, format: uuid }
+        - name: publication_status
+          in: query
+          schema: { type: string, enum: [draft, published] }
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
+        - name: offset
+          in: query
+          schema: { type: integer, minimum: 0, default: 0 }
+      responses:
+        '200':
+          description: Liste paginée admin
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  total: { type: integer }
+                  limit: { type: integer }
+                  offset: { type: integer }
+                  items:
+                    type: array
+                    items: { $ref: "openapi-offers.yaml#/components/schemas/OfferDetail" }
+        '401':
+          description: Non authentifié
+        '403':
+          description: Rôle admin requis
+
+    post:
+      summary: Créer une offre depuis draft édité
+      description: |
+        Crée une nouvelle offre à partir d'un payload édité (typiquement issu de `/admin/offers/compute`).
+        Requiert rôle `admin`. La nouvelle offre est créée en `publication_status='draft'` par défaut.
+      tags: [admin-offers]
+      security:
+        - JWTAdmin: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/OfferCreate" }
+      responses:
+        '201':
+          description: Offre créée
+          content:
+            application/json:
+              schema: { $ref: "openapi-offers.yaml#/components/schemas/OfferDetail" }
+        '401': { description: Non authentifié }
+        '403': { description: Rôle admin requis }
+        '422':
+          description: Validation échouée (ex : fund/intermediary non actifs, version dupliquée, source_id invalide)
+
+  /api/admin/offers/{id}:
+    patch:
+      summary: Éditer une offre existante
+      description: |
+        Mise à jour partielle (champs optionnels). Permet la transition `draft → published`
+        (vérification stricte des prérequis : fund.publication_status='published',
+        intermediary.publication_status='published', accreditation valide, source verified).
+      tags: [admin-offers]
+      security:
+        - JWTAdmin: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/OfferUpdate" }
+      responses:
+        '200':
+          description: Offre mise à jour
+          content:
+            application/json:
+              schema: { $ref: "openapi-offers.yaml#/components/schemas/OfferDetail" }
+        '401': { description: Non authentifié }
+        '403': { description: Rôle admin requis }
+        '404': { description: Offre non trouvée }
+        '422':
+          description: Transition invalide ou prérequis publication non satisfaits
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  detail: { type: string }
+                  missing_prerequisites:
+                    type: array
+                    items: { type: string, enum: [fund_not_published, intermediary_not_published, accreditation_expired, source_not_verified] }
+
+  /api/admin/offers/compute:
+    post:
+      summary: Preview du calcul effectif sans persistance
+      description: |
+        Retourne un `OfferDraft` calculé pour la paire (fund, intermediary).
+        Utile pour pré-remplir l'UI admin avant création.
+      tags: [admin-offers]
+      security:
+        - JWTAdmin: []
+      parameters:
+        - name: fund_id
+          in: query
+          required: true
+          schema: { type: string, format: uuid }
+        - name: intermediary_id
+          in: query
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Draft calculé
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OfferDraft" }
+        '401': { description: Non authentifié }
+        '403': { description: Rôle admin requis }
+        '404': { description: Fonds ou intermédiaire non trouvé }
+        '422':
+          description: Pas de fund_intermediary actif pour ce couple (sauf cas DIRECT)
+
+components:
+  securitySchemes:
+    JWTAdmin:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        JWT signé HS256 avec claim `role='admin'` ou présence de l'utilisateur dans la table `account_roles`
+        avec `role='admin'` (helper F02 `is_admin`).
+
+  schemas:
+    OfferCreate:
+      type: object
+      properties:
+        fund_id: { type: string, format: uuid }
+        intermediary_id: { type: string, format: uuid }
+        name: { type: string, minLength: 1, maxLength: 200 }
+        accepted_languages:
+          type: array
+          items: { type: string, minLength: 2, maxLength: 5 }
+          default: ["FR"]
+        target_sector: { type: array, items: { type: string }, nullable: true }
+        effective_criteria: { type: object, default: {} }
+        effective_required_documents:
+          type: array
+          items: { type: object }
+          default: []
+        effective_fees: { type: object, default: {} }
+        effective_processing_time_days_min: { type: integer, nullable: true }
+        effective_processing_time_days_max: { type: integer, nullable: true }
+        effective_disbursement_time_days_min: { type: integer, nullable: true }
+        effective_disbursement_time_days_max: { type: integer, nullable: true }
+        notes: { type: string, nullable: true }
+        source_id: { type: string, format: uuid }
+        publication_status: { type: string, enum: [draft, published], default: draft }
+      required: [fund_id, intermediary_id, name, source_id]
+
+    OfferUpdate:
+      type: object
+      properties:
+        name: { type: string, minLength: 1, maxLength: 200 }
+        accepted_languages: { type: array, items: { type: string } }
+        target_sector: { type: array, items: { type: string }, nullable: true }
+        effective_criteria: { type: object }
+        effective_required_documents: { type: array, items: { type: object } }
+        effective_fees: { type: object }
+        effective_processing_time_days_min: { type: integer, nullable: true }
+        effective_processing_time_days_max: { type: integer, nullable: true }
+        effective_disbursement_time_days_min: { type: integer, nullable: true }
+        effective_disbursement_time_days_max: { type: integer, nullable: true }
+        notes: { type: string, nullable: true }
+        is_active: { type: boolean }
+        publication_status: { type: string, enum: [draft, published] }
+        source_id: { type: string, format: uuid }
+
+    OfferDraft:
+      type: object
+      properties:
+        fund_id: { type: string, format: uuid }
+        intermediary_id: { type: string, format: uuid }
+        name: { type: string }
+        target_sector: { type: array, items: { type: string }, nullable: true }
+        effective_criteria: { type: object }
+        effective_required_documents:
+          type: array
+          items: { type: object }
+        effective_fees: { type: object }
+        effective_processing_time_days_min: { type: integer, nullable: true }
+        effective_processing_time_days_max: { type: integer, nullable: true }
+        effective_disbursement_time_days_min: { type: integer, nullable: true }
+        effective_disbursement_time_days_max: { type: integer, nullable: true }
+        accepted_languages_hint:
+          type: array
+          items: { type: string }
+        notes: { type: string, nullable: true }
+        suggested_source_id: { type: string, format: uuid, nullable: true }
+      required: [fund_id, intermediary_id, name, accepted_languages_hint]

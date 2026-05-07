@@ -115,6 +115,9 @@ EXEMPT_MODELS: frozenset[str] = frozenset(
         "FundIntermediary",
         "FundMatch",
         "FinancingChunk",
+        # F07 — Catalogue offres (admin only). Le cron expiration journalise
+        # explicitement via ``app/core/audit_context`` un événement ``import``.
+        "Offer",
         # Documents : modélisé comme contenu utilisateur, pas comme entité
         # auditée champ-à-champ (l'utilisateur upload puis lit ; les mutations
         # de contenu Document sont rares — tracées via storage si besoin).

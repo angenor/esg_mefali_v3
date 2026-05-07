@@ -1,0 +1,265 @@
+openapi: 3.1.0
+info:
+  title: ESG Mefali — Offers Public API
+  version: "1.0.0-F07"
+  description: |
+    Endpoints publics pour la consultation du catalogue d'offres de financement vert.
+    Les endpoints retournent uniquement les offres `publication_status='published' AND is_active=true`.
+    Auth : optionnelle (JWT PME ou anonyme).
+servers:
+  - url: http://localhost:8000
+    description: Local dev
+  - url: https://api.esg-mefali.com
+    description: Production (post-deploy)
+
+paths:
+  /api/offers:
+    get:
+      summary: Liste paginée des offres publiées
+      description: |
+        Retourne les offres `publication_status='published' AND is_active=true`.
+        Filtres facultatifs : fund_id, intermediary_id, theme (single value ANY-of array), instrument, country, language.
+        Tri par `success_rate DESC` ou `effective_processing_time_days_min ASC`.
+      tags: [offers]
+      parameters:
+        - name: fund_id
+          in: query
+          schema: { type: string, format: uuid }
+        - name: intermediary_id
+          in: query
+          schema: { type: string, format: uuid }
+        - name: theme
+          in: query
+          schema: { type: string, enum: [mitigation, adaptation, biodiversity, circular_economy, mixed] }
+        - name: instrument
+          in: query
+          schema: { type: string, enum: [subvention, pret_concessionnel, garantie, equity, blending] }
+        - name: country
+          in: query
+          schema: { type: string, minLength: 2, maxLength: 100 }
+          description: ISO code (2 lettres) ou nom complet pays intermédiaire.
+        - name: language
+          in: query
+          schema: { type: string, enum: [FR, EN] }
+        - name: sort
+          in: query
+          schema: { type: string, enum: [success_rate, processing_time], default: success_rate }
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+        - name: offset
+          in: query
+          schema: { type: integer, minimum: 0, default: 0 }
+      responses:
+        '200':
+          description: Liste paginée
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  total: { type: integer }
+                  limit: { type: integer }
+                  offset: { type: integer }
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/OfferSummary" }
+                required: [total, limit, offset, items]
+        '422':
+          $ref: "#/components/responses/ValidationError"
+
+  /api/offers/{id}:
+    get:
+      summary: Détail d'une offre
+      description: |
+        Retourne le détail complet d'une offre (fonds, intermédiaire, effective_*, sources F01).
+        404 si l'offre n'existe pas, 404 également si elle est en `publication_status='draft'`
+        (cohérent avec règle « ne pas révéler l'existence des drafts »).
+      tags: [offers]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Détail offre
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OfferDetail" }
+        '404':
+          description: Offre non trouvée ou non publiée
+
+  /api/offers/comparator:
+    get:
+      summary: Comparateur multi-offres pour un fonds
+      description: |
+        Retourne toutes les offres publiées pour un fonds donné, structurées pour comparaison côte-à-côte.
+      tags: [offers]
+      parameters:
+        - name: fund_id
+          in: query
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Liste des offres comparables
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  fund:
+                    $ref: "#/components/schemas/FundSummary"
+                  comparisons:
+                    type: array
+                    items: { $ref: "#/components/schemas/OfferComparison" }
+                required: [fund, comparisons]
+        '404':
+          description: Fonds non trouvé ou non publié
+
+components:
+  schemas:
+    Money:
+      type: object
+      properties:
+        amount: { type: string, description: "Decimal as string (ex: '50000.00')" }
+        currency: { type: string, minLength: 3, maxLength: 3, example: "XOF" }
+      required: [amount, currency]
+
+    SourceRef:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        title: { type: string }
+        url: { type: string, format: uri }
+        publisher: { type: string }
+        verification_status: { type: string, enum: [verified] }
+      required: [id, title, url]
+
+    FundSummary:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        organization: { type: string }
+        fund_type: { type: string, enum: [multilateral, bilateral, regional, national, private, carbon_marketplace] }
+        instruments: { type: array, items: { type: string } }
+        theme: { type: array, items: { type: string } }
+        submission_mode: { type: string, enum: [rolling, call_for_proposals] }
+      required: [id, name, organization, fund_type]
+
+    IntermediarySummary:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        country: { type: string }
+        intermediary_type: { type: string }
+        organization_type: { type: string }
+        success_rate: { type: number, format: float, nullable: true }
+        is_direct: { type: boolean, description: "true si code='DIRECT'" }
+      required: [id, name, country]
+
+    EffectiveCriterion:
+      type: object
+      properties:
+        key: { type: string }
+        value: { oneOf: [ { type: string }, { type: number }, { type: boolean }, { type: array } ] }
+        source_id: { type: string, format: uuid }
+        from: { type: string, enum: [fund, intermediary, intersection], description: "origine" }
+      required: [key, value]
+
+    EffectiveDocument:
+      type: object
+      properties:
+        title: { type: string }
+        source_id: { type: string, format: uuid }
+        mandatory: { type: boolean }
+        format_spec: { type: string, nullable: true }
+        from: { type: string, enum: [fund, intermediary, both], description: "origine" }
+      required: [title, source_id, mandatory]
+
+    EffectiveFees:
+      type: object
+      properties:
+        total_min: { $ref: "#/components/schemas/Money", nullable: true }
+        total_max: { $ref: "#/components/schemas/Money", nullable: true }
+        breakdown:
+          type: array
+          items:
+            type: object
+            properties:
+              label: { type: string }
+              amount: { $ref: "#/components/schemas/Money", nullable: true }
+              rate: { type: number, format: float, nullable: true }
+              source_id: { type: string, format: uuid, nullable: true }
+            required: [label]
+
+    OfferSummary:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        fund: { $ref: "#/components/schemas/FundSummary" }
+        intermediary: { $ref: "#/components/schemas/IntermediarySummary" }
+        accepted_languages: { type: array, items: { type: string } }
+        effective_fees:
+          type: object
+          properties:
+            total_min: { $ref: "#/components/schemas/Money", nullable: true }
+            total_max: { $ref: "#/components/schemas/Money", nullable: true }
+        effective_processing_time_days_min: { type: integer, nullable: true }
+        effective_processing_time_days_max: { type: integer, nullable: true }
+        publication_status: { type: string, enum: [published] }
+        is_active: { type: boolean }
+      required: [id, name, fund, intermediary, accepted_languages, publication_status, is_active]
+
+    OfferDetail:
+      allOf:
+        - $ref: "#/components/schemas/OfferSummary"
+        - type: object
+          properties:
+            target_sector: { type: array, items: { type: string }, nullable: true }
+            effective_criteria: { type: object }
+            effective_required_documents:
+              type: array
+              items: { $ref: "#/components/schemas/EffectiveDocument" }
+            effective_fees: { $ref: "#/components/schemas/EffectiveFees" }
+            effective_disbursement_time_days_min: { type: integer, nullable: true }
+            effective_disbursement_time_days_max: { type: integer, nullable: true }
+            notes: { type: string, nullable: true }
+            source: { $ref: "#/components/schemas/SourceRef" }
+            version: { type: string }
+            valid_from: { type: string, format: date }
+            valid_to: { type: string, format: date, nullable: true }
+
+    OfferComparison:
+      type: object
+      properties:
+        offer_id: { type: string, format: uuid }
+        name: { type: string }
+        intermediary_name: { type: string }
+        intermediary_country: { type: string }
+        accepted_languages: { type: array, items: { type: string } }
+        effective_fees_total_min: { $ref: "#/components/schemas/Money", nullable: true }
+        effective_fees_total_max: { $ref: "#/components/schemas/Money", nullable: true }
+        effective_processing_time_days_min: { type: integer, nullable: true }
+        effective_processing_time_days_max: { type: integer, nullable: true }
+        effective_disbursement_time_days_min: { type: integer, nullable: true }
+        effective_disbursement_time_days_max: { type: integer, nullable: true }
+        success_rate: { type: number, format: float, nullable: true }
+        documents_count: { type: integer }
+        publication_status: { type: string }
+        is_active: { type: boolean }
+      required: [offer_id, name, intermediary_name, intermediary_country, accepted_languages]
+
+  responses:
+    ValidationError:
+      description: Erreur de validation
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              detail: { type: string }

@@ -29,7 +29,7 @@ async def fund_and_user(db_session):
     fund = Fund(
         name="GCF Reco",
         organization="GCF",
-        fund_type=FundType.international,
+        fund_type=FundType.multilateral,
         description="Fonds test",
         eligibility_criteria={},
         sectors_eligible=["agriculture"],
@@ -132,7 +132,7 @@ async def test_recompute_endpoint_409_on_draft(client, db_session) -> None:
     fund = Fund(
         name="GCF API",
         organization="GCF",
-        fund_type=FundType.international,
+        fund_type=FundType.multilateral,
         description="X",
         eligibility_criteria={},
         sectors_eligible=[],

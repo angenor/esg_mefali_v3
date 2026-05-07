@@ -121,6 +121,18 @@ class FundApplication(Auditable, UUIDMixin, TimestampMixin, Base):
         nullable=True,
         index=True,
     )
+    # F07 — Lien vers Offer (NOT NULL post-migration 028).
+    # Nullable=True dans le modèle pour permettre les tests legacy
+    # (SQLite in-memory, fixtures qui ne créent pas d'offre).
+    # En base PostgreSQL post-migration 028, la colonne est NOT NULL après backfill.
+    # NB : ``fund_id`` et ``intermediary_id`` sont conservés deprecated 2 sprints —
+    # utiliser ``offer.fund_id`` et ``offer.intermediary_id`` à la place.
+    offer_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("offers.id", ondelete="RESTRICT"),
+        nullable=True,
+        index=True,
+    )
     target_type: Mapped[TargetType] = mapped_column(
         Enum(TargetType, name="target_type_app_enum", create_constraint=True),
         nullable=False,
@@ -166,4 +178,8 @@ class FundApplication(Auditable, UUIDMixin, TimestampMixin, Base):
     # F06 — Relation vers Project
     project: Mapped["Project | None"] = relationship(
         "Project", lazy="selectin",
+    )
+    # F07 — Relation vers Offer
+    offer: Mapped["Offer | None"] = relationship(
+        "Offer", lazy="selectin",
     )

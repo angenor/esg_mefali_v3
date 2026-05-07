@@ -9,6 +9,10 @@ import type {
   IntermediaryListResponse,
   Intermediary,
   FundMatchSummary,
+  Offer,
+  OfferComparison,
+  OfferFilters,
+  OfferListResponse,
 } from '~/types/financing'
 
 export function useFinancing() {
@@ -191,6 +195,68 @@ export function useFinancing() {
     }
   }
 
+  // ----- F07 — Offres (Couple Fonds × Intermediaire) -----
+
+  /**
+   * Liste paginée des offres publiées et actives.
+   * Filtres : fund_id, intermediary_id, country, language, etc.
+   */
+  async function listOffers(filters: OfferFilters = {}): Promise<OfferListResponse> {
+    loading.value = true
+    error.value = ''
+    try {
+      const params = new URLSearchParams()
+      Object.entries(filters).forEach(([key, value]) => {
+        if (value !== undefined && value !== null && value !== '') {
+          params.append(key, String(value))
+        }
+      })
+      const qs = params.toString()
+      const url = qs ? `/offers?${qs}` : '/offers'
+      return await apiFetch<OfferListResponse>(url)
+    } catch (e) {
+      await handleError(e, 'Erreur lors du chargement des offres')
+      throw e
+    } finally {
+      loading.value = false
+    }
+  }
+
+  /**
+   * Récupère une offre par ID. Retourne null si introuvable / draft.
+   */
+  async function getOffer(offerId: string): Promise<Offer | null> {
+    loading.value = true
+    error.value = ''
+    try {
+      return await apiFetch<Offer>(`/offers/${offerId}`)
+    } catch (e) {
+      if (e instanceof ApiFetchError && e.status === 404) {
+        return null
+      }
+      await handleError(e, "Erreur lors du chargement de l'offre")
+      return null
+    } finally {
+      loading.value = false
+    }
+  }
+
+  /**
+   * Compare toutes les offres publiées pour un fonds donné.
+   */
+  async function compareOffersForFund(fundId: string): Promise<OfferComparison[]> {
+    loading.value = true
+    error.value = ''
+    try {
+      return await apiFetch<OfferComparison[]>(`/offers/comparator?fund_id=${fundId}`)
+    } catch (e) {
+      await handleError(e, 'Erreur lors du chargement du comparateur')
+      return []
+    } finally {
+      loading.value = false
+    }
+  }
+
   return {
     loading,
     error,
@@ -203,5 +269,9 @@ export function useFinancing() {
     fetchIntermediaries,
     fetchIntermediaryDetail,
     fetchPreparationSheet,
+    // F07 — Offres
+    listOffers,
+    getOffer,
+    compareOffersForFund,
   }
 }

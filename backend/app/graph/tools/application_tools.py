@@ -38,12 +38,22 @@ class ExportFormat(str, enum.Enum):
 
 
 class CreateFundApplicationArgs(BaseModel):
-    """Args strict pour create_fund_application."""
+    """Args strict pour create_fund_application.
+
+    F07 : ``offer_id`` accepté en priorité ; ``fund_id`` reste accepté pour
+    compatibilité descendante (legacy 2 sprints).
+    """
 
     model_config = ConfigDict(extra="forbid")
 
     fund_id: str = Field(..., min_length=36, max_length=36, pattern=UUID_PATTERN)
     target_type: TargetType | None = None
+    offer_id: str | None = Field(
+        None, min_length=36, max_length=36, pattern=UUID_PATTERN,
+    )
+    project_id: str | None = Field(
+        None, min_length=36, max_length=36, pattern=UUID_PATTERN,
+    )
 
 
 class GenerateApplicationSectionArgs(BaseModel):
@@ -153,33 +163,65 @@ async def create_fund_application(
     fund_id: str,
     config: RunnableConfig,
     target_type: str | None = None,
+    offer_id: str | None = None,
+    project_id: str | None = None,
 ) -> str:
-    """Cree un nouveau dossier de candidature pour un fonds vert (statut draft).
+    """Cree un nouveau dossier de candidature pour une offre/fonds vert (statut draft).
+
+    F07 : si ``offer_id`` est fourni, il est utilisé en priorité (l'offre
+    contient déjà fund_id et intermediary_id). Sinon, ``fund_id`` est utilisé
+    en mode legacy (2 sprints).
 
     Use when:
-    - l'utilisateur valide candidater a un fonds (uuid valide).
-    - apres matching d'un fonds, "je candidate".
+    - l'utilisateur valide candidater a une offre/fonds (uuid valide).
+    - apres matching d'une offre, "je candidate".
     Don't use when:
-    - aucun fonds identifie (cf. `module financing`).
+    - aucune offre/fonds identifie (cf. `module financing`).
     - simple consultation (cf. `module financing`).
-    Exemple: "Je candidate au GCF" -> create_fund_application(fund_id='<uuid>').
+    Exemple: "Je candidate à cette offre" -> create_fund_application(offer_id='<uuid>').
     Anti: "Quels fonds existent ?" -> NE PAS appeler.
     """
     from app.modules.applications.service import create_application
+    from app.models.offer import Offer
 
     try:
         db, user_id = get_db_and_user(config)
 
+        # F07 — Priorité à offer_id si fourni
+        target_offer_id = uuid.UUID(offer_id) if offer_id else None
+        target_fund_id = uuid.UUID(fund_id)
+        target_intermediary_id = None
+        target_project_id = uuid.UUID(project_id) if project_id else None
+
+        if target_offer_id is not None:
+            offer = await db.get(Offer, target_offer_id)
+            if offer is None:
+                return f"Offre introuvable (id={offer_id})."
+            target_fund_id = offer.fund_id
+            target_intermediary_id = offer.intermediary_id
+
         application = await create_application(
             db=db,
             user_id=user_id,
-            fund_id=uuid.UUID(fund_id),
+            fund_id=target_fund_id,
+            intermediary_id=target_intermediary_id,
         )
+
+        # F07 — Lier offer_id si fourni
+        if target_offer_id is not None:
+            application.offer_id = target_offer_id
+            await db.flush()
+
+        # F06 — Lier project_id si fourni
+        if target_project_id is not None:
+            application.project_id = target_project_id
+            await db.flush()
 
         return (
             f"Dossier de candidature cree avec succes.\n"
             f"- ID : {application.id}\n"
             f"- Statut : {application.status}\n"
+            f"- Offre : {application.offer_id or 'N/A (mode legacy)'}\n"
             f"- Fonds : {application.fund_id}"
         )
     except Exception as e:

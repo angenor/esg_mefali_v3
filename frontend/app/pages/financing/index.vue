@@ -2,7 +2,13 @@
 import { useFinancing } from '~/composables/useFinancing'
 import { useFinancingStore } from '~/stores/financing'
 import { useUiStore } from '~/stores/ui'
-import type { FundMatchSummary, FundSummary, IntermediarySummary, AccessType } from '~/types/financing'
+import type {
+  AccessType,
+  FundMatchSummary,
+  FundSummary,
+  IntermediarySummary,
+  OfferSummary,
+} from '~/types/financing'
 
 definePageMeta({
   layout: 'default',
@@ -10,12 +16,35 @@ definePageMeta({
 
 const financingStore = useFinancingStore()
 const uiStore = useUiStore()
-const { fetchMatches, fetchFunds, fetchIntermediaries, loading, error } = useFinancing()
+const {
+  fetchMatches, fetchFunds, fetchIntermediaries,
+  listOffers,
+  loading, error,
+} = useFinancing()
+
+// F07 — Feature flag (default false) : true → vue Cards Offres
+const runtimeConfig = useRuntimeConfig()
+const useOfferView = computed(() => Boolean(runtimeConfig.public.useOfferView))
+
+const offers = ref<OfferSummary[]>([])
+
+async function loadOffers(): Promise<void> {
+  try {
+    const result = await listOffers({ limit: 50 })
+    offers.value = result.items
+  } catch {
+    // erreurs gérées par le composable
+  }
+}
 
 onMounted(() => {
-  fetchMatches()
-  fetchFunds()
-  fetchIntermediaries()
+  if (useOfferView.value) {
+    loadOffers()
+  } else {
+    fetchMatches()
+    fetchFunds()
+    fetchIntermediaries()
+  }
 })
 
 // --- Helpers ---
@@ -150,7 +179,9 @@ const tabs = [
     <div class="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-dark-border">
       <div>
         <h1 class="text-xl font-bold text-surface-text dark:text-surface-dark-text">Financement Vert</h1>
-        <p class="text-sm text-gray-500 dark:text-gray-400">Fonds verts, matching et parcours d'acces</p>
+        <p class="text-sm text-gray-500 dark:text-gray-400">
+          {{ useOfferView ? 'Offres = Couples Fonds × Intermédiaire' : "Fonds verts, matching et parcours d'acces" }}
+        </p>
       </div>
       <button
         type="button"
@@ -163,6 +194,29 @@ const tabs = [
         Conseils IA
       </button>
     </div>
+
+    <!-- F07 — Vue Cards Offres (feature flag USE_OFFER_VIEW) -->
+    <div v-if="useOfferView" class="flex-1 overflow-auto px-6 py-6">
+      <div v-if="loading" class="text-center py-12 text-gray-500 dark:text-gray-400">
+        Chargement des offres...
+      </div>
+      <div
+        v-else-if="offers.length === 0"
+        class="rounded-lg border-2 border-dashed border-gray-300 dark:border-dark-border p-8 text-center text-gray-500 dark:text-gray-400"
+      >
+        Aucune offre publiée disponible.
+      </div>
+      <div v-else class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <OfferCard
+          v-for="offer in offers"
+          :key="offer.id"
+          :offer="offer"
+        />
+      </div>
+    </div>
+
+    <!-- Vue legacy (Cards Fonds + intermédiaires) si flag inactif -->
+    <template v-else>
 
     <!-- Tabs -->
     <div class="flex border-b border-gray-200 dark:border-dark-border px-6">
@@ -436,5 +490,6 @@ const tabs = [
         </div>
       </template>
     </div>
+    </template>
   </div>
 </template>

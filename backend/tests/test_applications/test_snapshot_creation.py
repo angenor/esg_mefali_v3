@@ -34,7 +34,7 @@ async def fund_and_user(db_session):
     fund = Fund(
         name="GCF Test",
         organization="GCF",
-        fund_type=FundType.international,
+        fund_type=FundType.multilateral,
         description="Fonds test",
         eligibility_criteria={},
         sectors_eligible=["agriculture"],
