@@ -14,6 +14,11 @@ from app.core.config import settings
 # qui crée des sessions SQLAlchemy.
 import app.core.auditable  # noqa: F401, E402
 
+# F12 — enregistre le hook `after_insert` sur Message pour l'embedding
+# asynchrone via asyncio.create_task. Doit être importé au démarrage
+# pour activer le listener SQLAlchemy.
+import app.modules.memory.hooks  # noqa: F401, E402
+
 logger = logging.getLogger(__name__)
 
 # Référence globale au graphe compilé LangGraph
@@ -22,19 +27,43 @@ compiled_graph = None
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
-    """Cycle de vie de l'application : initialisation et nettoyage."""
+    """Cycle de vie de l'application : initialisation et nettoyage.
+
+    F12 — Initialise un ``AsyncPostgresSaver`` dans un async context manager
+    pour la persistance des conversations LangGraph (survit aux redémarrages
+    du backend). Le graphe est compilé avec ce checkpointer.
+    """
     global compiled_graph
 
     # Démarrage : initialiser le graphe LangGraph
     if settings.openrouter_api_key:
         try:
+            from app.graph.checkpointer import create_checkpointer
             from app.graph.graph import create_compiled_graph
 
-            compiled_graph = await create_compiled_graph()
-            logger.info("Graphe LangGraph initialisé avec succès")
+            # F12 — checkpointer PostgreSQL persistant
+            async with create_checkpointer() as checkpointer:
+                compiled_graph = await create_compiled_graph(checkpointer=checkpointer)
+                app.state.checkpointer = checkpointer
+                app.state.compiled_graph = compiled_graph
+                logger.info("Graphe LangGraph initialisé avec AsyncPostgresSaver")
+                yield
+                # Sortie du with → cleanup checkpointer automatique
+                compiled_graph = None
+                return
         except Exception as e:
-            logger.warning("Impossible d'initialiser le graphe LangGraph : %s", e)
-            compiled_graph = None
+            logger.warning(
+                "Impossible d'initialiser le graphe LangGraph avec AsyncPostgresSaver : %s — fallback MemorySaver",
+                e,
+            )
+            try:
+                from app.graph.graph import create_compiled_graph
+
+                compiled_graph = await create_compiled_graph()
+                logger.info("Graphe LangGraph initialisé en mode dégradé (MemorySaver)")
+            except Exception as exc:
+                logger.warning("Impossible d'initialiser le graphe LangGraph : %s", exc)
+                compiled_graph = None
     else:
         logger.warning("OPENROUTER_API_KEY non configurée — graphe LangGraph désactivé")
 

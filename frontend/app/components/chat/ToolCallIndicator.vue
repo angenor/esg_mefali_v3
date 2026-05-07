@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { computed } from 'vue'
+
 interface Props {
   toolName: string
   args?: Record<string, unknown>
@@ -59,6 +61,9 @@ const TOOL_LABELS: Record<string, string> = {
   get_company_profile_chat: 'Consultation du profil...',
   get_esg_assessment_chat: 'Consultation du score ESG...',
   get_carbon_summary_chat: 'Consultation du bilan carbone...',
+
+  // F12 — Mémoire contextuelle
+  recall_history: 'Recherche dans l\'historique de conversation...',
 }
 
 const label = computed(() => {
