@@ -437,3 +437,46 @@ async def me(
         )
         account = account_result.scalar_one_or_none()
     return _build_user_response(current_user, account)
+
+
+# ---------------------------------------------------------------------------
+# F09 — Reset password (public, consume token)
+# ---------------------------------------------------------------------------
+
+
+from app.modules.admin.schemas import (  # noqa: E402
+    ResetPasswordCompleteRequest,
+    ResetPasswordCompleteResponse,
+)
+from app.modules.admin.users_service import (  # noqa: E402
+    ResetTokenAlreadyUsedError,
+    ResetTokenExpiredError,
+    ResetTokenInvalidError,
+    complete_password_reset,
+)
+
+
+@router.post(
+    "/reset-password",
+    response_model=ResetPasswordCompleteResponse,
+    status_code=status.HTTP_200_OK,
+)
+async def reset_password(
+    payload: ResetPasswordCompleteRequest,
+    db: AsyncSession = Depends(get_db),
+) -> ResetPasswordCompleteResponse:
+    """Consommer un token reset et changer le mot de passe (public)."""
+    try:
+        await complete_password_reset(
+            db,
+            plain_token=payload.token,
+            new_password=payload.new_password,
+        )
+    except ResetTokenAlreadyUsedError as exc:
+        raise HTTPException(status_code=400, detail="token_already_used") from exc
+    except ResetTokenExpiredError as exc:
+        raise HTTPException(status_code=400, detail="token_expired") from exc
+    except ResetTokenInvalidError as exc:
+        raise HTTPException(status_code=400, detail="token_invalid") from exc
+
+    return ResetPasswordCompleteResponse(success=True)
