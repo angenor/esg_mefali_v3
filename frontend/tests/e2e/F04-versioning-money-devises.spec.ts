@@ -217,11 +217,23 @@ test.describe('F04 — Money + Versioning + Multi-devises', () => {
           body: JSON.stringify(RECOMPUTE_RESPONSE),
         }),
     )
-    const response = await page.request.post(
-      `http://localhost:3000/api/applications/${APP_ID}/recompute-against-snapshot`,
-    )
-    // Le mock route Playwright n'intercepte que les requêtes du browser pas
-    // les page.request directes ; on confirme juste que le mock est en place.
-    expect(response.status()).toBeGreaterThanOrEqual(200)
+    await page.goto('/')
+    // page.route() n'intercepte que les requêtes émises depuis le contexte
+    // browser (fetch côté client). On déclenche l'appel via page.evaluate()
+    // pour que le mock soit utilisé, sans dépendre d'une UI dédiée.
+    const result = await page.evaluate(async (appId) => {
+      const res = await fetch(
+        `/api/applications/${appId}/recompute-against-snapshot`,
+        { method: 'POST' },
+      )
+      return {
+        status: res.status,
+        body: await res.json() as unknown,
+      }
+    }, APP_ID)
+    expect(result.status).toBe(200)
+    const body = result.body as typeof RECOMPUTE_RESPONSE
+    expect(body.comparison_with_origin.match).toBe(true)
+    expect(body.comparison_with_origin.delta).toBe(0.0)
   })
 })
