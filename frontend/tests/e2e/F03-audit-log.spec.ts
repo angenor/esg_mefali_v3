@@ -238,7 +238,9 @@ test.describe('F03 — Audit Log Append-Only', () => {
     const viewAdminEntry = page.locator('li[data-action="view_admin"]').first()
     await expect(viewAdminEntry).toBeVisible()
     await expect(viewAdminEntry.getByText('Consultation Admin')).toBeVisible()
-    await expect(viewAdminEntry.getByText('admin Mefali')).toBeVisible()
+    // Cible explicitement le span "par {{ actorLabel }}" (ligne 116 de AuditLogEntry.vue)
+    // pour eviter le match ambigu avec le badge "Admin Mefali" (sourceLabel, ligne 126).
+    await expect(viewAdminEntry.getByText('par Un admin Mefali')).toBeVisible()
   })
 
   test('US3 — export CSV avec accents français préservés (BOM UTF-8)', async ({
