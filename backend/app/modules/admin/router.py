@@ -1,4 +1,8 @@
-"""Router back-office Admin (F02 squelette + endpoint health + F17 seed carbone)."""
+"""Router back-office Admin (F02 squelette + endpoint health + F17 seed carbone).
+
+F09 : ajoute les sous-routers core (sources, funds, intermediaries, offers,
+users) sous des préfixes dédiés.
+"""
 
 from __future__ import annotations
 
@@ -8,10 +12,26 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_admin, get_db
 from app.models.user import User
+from app.modules.admin.funds_router import router as funds_router
+from app.modules.admin.intermediaries_router import router as intermediaries_router
+from app.modules.admin.offers_router import router as offers_router
+from app.modules.admin.sources_router import router as sources_router
+from app.modules.admin.users_router import router as users_router
 from app.schemas.admin import AdminHealthResponse
 
 
 router = APIRouter(dependencies=[Depends(get_current_admin)])
+
+# F09 — sous-routers admin (PRIO 1)
+router.include_router(funds_router, prefix="/funds", tags=["admin-funds"])
+router.include_router(
+    intermediaries_router,
+    prefix="/intermediaries",
+    tags=["admin-intermediaries"],
+)
+router.include_router(offers_router, prefix="/offers", tags=["admin-offers"])
+router.include_router(sources_router, prefix="/sources", tags=["admin-sources"])
+router.include_router(users_router, prefix="/users", tags=["admin-users"])
 
 
 @router.get("/health", response_model=AdminHealthResponse)

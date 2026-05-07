@@ -2,8 +2,12 @@
 
 F02 — extension : refresh tokens avec claim `jti` pour la rotation, helpers
 de décodage qui retournent le payload complet.
+F09 — extension : reset tokens password (génération + hash sha256 +
+vérification stable).
 """
 
+import hashlib
+import secrets
 import uuid
 from datetime import datetime, timedelta, timezone
 
@@ -72,6 +76,39 @@ def decode_token(token: str, expected_type: str = "access") -> str | None:
         return subject
     except JWTError:
         return None
+
+
+# --------------------------------------------------------------------------
+# F09 — Reset password tokens (admin déclenche reset → user consomme)
+# --------------------------------------------------------------------------
+
+
+def generate_reset_token() -> str:
+    """Générer un token URL-safe pour reset password (≥ 32 chars).
+
+    Utilise ``secrets.token_urlsafe(32)`` qui produit ~43 caractères URL-safe
+    cryptographiquement sécurisés. Le token plain est envoyé par email à
+    l'utilisateur ; en BDD on ne stocke que le hash sha256.
+    """
+    return secrets.token_urlsafe(32)
+
+
+def hash_token(token: str) -> str:
+    """Hasher un token reset avec sha256 (déterministe, stable).
+
+    Contrairement à bcrypt, sha256 est déterministe : le même token donne
+    toujours le même hash. C'est ce qu'on veut pour pouvoir lookup en BDD
+    par hash. Le token étant lui-même 256 bits aléatoires, sha256 suffit
+    (pas besoin de salt).
+    """
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+def verify_token_match(plain: str, hashed: str) -> bool:
+    """Vérifier qu'un token plain correspond à un hash stocké en BDD."""
+    if not plain or not hashed:
+        return False
+    return secrets.compare_digest(hash_token(plain), hashed)
 
 
 def decode_refresh_token_full(token: str) -> dict | None:
