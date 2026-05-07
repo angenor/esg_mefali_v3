@@ -1,0 +1,174 @@
+{
+  "version": "1.0.0",
+  "description": "F11 — Golden set de questions pour mesurer la pertinence du choix de tool de visualisation typé. SC-001 (KPI), SC-002 (Match), SC-003 (Comparison), bonus Map.",
+  "questions": [
+    {
+      "id": "kpi-01",
+      "category": "kpi",
+      "user_message": "Résume mon empreinte carbone 2026.",
+      "expected_tool": "show_kpi_card",
+      "context_page": "carbon",
+      "expected_min_args": ["title", "value"]
+    },
+    {
+      "id": "kpi-02",
+      "category": "kpi",
+      "user_message": "Quel est mon score ESG global ?",
+      "expected_tool": "show_kpi_card",
+      "context_page": "esg",
+      "expected_min_args": ["title", "value"]
+    },
+    {
+      "id": "kpi-03",
+      "category": "kpi",
+      "user_message": "Donne-moi mon score crédit synthétique.",
+      "expected_tool": "show_kpi_card",
+      "context_page": "credit",
+      "expected_min_args": ["title", "value"]
+    },
+    {
+      "id": "kpi-04",
+      "category": "kpi",
+      "user_message": "Combien de tonnes de CO2 ai-je émis l'an dernier vs cette année ?",
+      "expected_tool": "show_kpi_card",
+      "context_page": "carbon",
+      "expected_min_args": ["title", "value", "delta"]
+    },
+    {
+      "id": "kpi-05",
+      "category": "kpi",
+      "user_message": "Quel est le total de financement levé jusqu'à présent ?",
+      "expected_tool": "show_kpi_card",
+      "context_page": "dashboard",
+      "expected_min_args": ["title", "value"]
+    },
+    {
+      "id": "kpi-06",
+      "category": "kpi",
+      "user_message": "Mon score gouvernance, c'est quoi ?",
+      "expected_tool": "show_kpi_card",
+      "context_page": "esg",
+      "expected_min_args": ["title", "value"]
+    },
+    {
+      "id": "kpi-07",
+      "category": "kpi",
+      "user_message": "Affiche le nombre de critères ESG validés.",
+      "expected_tool": "show_kpi_card",
+      "context_page": "esg",
+      "expected_min_args": ["title", "value"]
+    },
+    {
+      "id": "kpi-08",
+      "category": "kpi",
+      "user_message": "Score crédit cette semaine vs semaine dernière ?",
+      "expected_tool": "show_kpi_card",
+      "context_page": "credit",
+      "expected_min_args": ["title", "value", "delta"]
+    },
+    {
+      "id": "kpi-09",
+      "category": "kpi",
+      "user_message": "Combien d'emplois mon projet va-t-il créer ?",
+      "expected_tool": "show_kpi_card",
+      "context_page": "dashboard",
+      "expected_min_args": ["title", "value"]
+    },
+    {
+      "id": "kpi-10",
+      "category": "kpi",
+      "user_message": "Quel pourcentage de réduction carbone ai-je atteint cette année ?",
+      "expected_tool": "show_kpi_card",
+      "context_page": "carbon",
+      "expected_min_args": ["title", "value"]
+    },
+    {
+      "id": "match-01",
+      "category": "match",
+      "user_message": "Quelles offres correspondent à mon projet ?",
+      "expected_tool": "show_match_card",
+      "context_page": "financing",
+      "expected_min_args": ["project_id", "offer_id", "fund_name", "compatibility_score"]
+    },
+    {
+      "id": "match-02",
+      "category": "match",
+      "user_message": "Recommande-moi 3 fonds compatibles avec mon recyclage plastique.",
+      "expected_tool": "show_match_card",
+      "context_page": "financing",
+      "expected_min_args": ["project_id", "offer_id", "compatibility_score"]
+    },
+    {
+      "id": "match-03",
+      "category": "match",
+      "user_message": "Quel intermédiaire devrais-je choisir pour SUNREF ?",
+      "expected_tool": "show_match_card",
+      "context_page": "financing",
+      "expected_min_args": ["project_id", "offer_id", "intermediary_name"]
+    },
+    {
+      "id": "match-04",
+      "category": "match",
+      "user_message": "Propose-moi un fonds pour ma centrale solaire.",
+      "expected_tool": "show_match_card",
+      "context_page": "financing",
+      "expected_min_args": ["project_id", "offer_id", "fund_name"]
+    },
+    {
+      "id": "match-05",
+      "category": "match",
+      "user_message": "Quelle offre me convient le mieux ?",
+      "expected_tool": "show_match_card",
+      "context_page": "financing",
+      "expected_min_args": ["project_id", "offer_id", "compatibility_score"]
+    },
+    {
+      "id": "comp-01",
+      "category": "comparison",
+      "user_message": "Compare GCF via BOAD vs GCF via UNDP vs GCF via AFD.",
+      "expected_tool": "show_comparison_table",
+      "context_page": "financing",
+      "expected_min_args": ["title", "subjects", "rows"]
+    },
+    {
+      "id": "comp-02",
+      "category": "comparison",
+      "user_message": "Lequel est le moins cher : SUNREF ou Adapt'Action ?",
+      "expected_tool": "show_comparison_table",
+      "context_page": "financing",
+      "expected_min_args": ["title", "subjects", "rows"]
+    },
+    {
+      "id": "comp-03",
+      "category": "comparison",
+      "user_message": "Mets-moi cote-à-cote les frais et délais des 3 intermédiaires distribuant le FEM.",
+      "expected_tool": "show_comparison_table",
+      "context_page": "candidatures",
+      "expected_min_args": ["title", "subjects", "rows"]
+    },
+    {
+      "id": "map-01",
+      "category": "map",
+      "user_message": "Où sont mes interlocuteurs en UEMOA ?",
+      "expected_tool": "show_map",
+      "context_page": "financing",
+      "expected_min_args": ["markers"]
+    },
+    {
+      "id": "fallback-01",
+      "category": "fallback_text",
+      "user_message": "Aide-moi à choisir entre subvention et blending.",
+      "expected_tool": null,
+      "context_page": "financing",
+      "expected_min_args": []
+    },
+    {
+      "id": "fallback-02",
+      "category": "fallback_text",
+      "user_message": "Explique-moi ce qu'est le carbone séquestré.",
+      "expected_tool": null,
+      "context_page": "carbon",
+      "expected_min_args": []
+    }
+  ]
+}

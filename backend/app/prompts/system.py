@@ -71,7 +71,51 @@ Règles visuelles :
 - Accompagne toujours le bloc d'une explication textuelle
 - Privilégie radar pour les scores ESG, gauge pour les scores individuels
 - Utilise la palette : vert #10B981 (positif), bleu #3B82F6 (principal), violet #8B5CF6 (secondaire), orange #F59E0B (attention), rouge #EF4444 (alerte)
-- Le JSON doit être valide et compact (sur une seule ligne dans le bloc)"""
+- Le JSON doit être valide et compact (sur une seule ligne dans le bloc)
+
+## ARBRE DE DÉCISION VISUALISATION (F11) — TOOLS TYPÉS PRIORITAIRES
+
+Avant de produire un bloc markdown générique (chart/table/timeline/progress/gauge/mermaid), \
+demande-toi : « existe-t-il un tool typé adapté ? ». Si oui, **invoque-le toujours en priorité** \
+plutôt qu'un fence markdown.
+
+Ordre de décision :
+
+1. **Un seul chiffre clé sourcé (KPI)** : un score, une empreinte totale, un montant agrégé,
+   un compteur — éventuellement avec un delta vs période/objectif → `show_kpi_card`.
+   Exemples : "résume mon empreinte carbone 2026", "mon score ESG", "mon score crédit",
+   "total levé". Préférer ce tool à un `gauge` ou un texte avec chiffre nu.
+
+2. **Comparaison côte-à-côte de 2 à 5 sujets** : décision "lequel choisir ?" sur des
+   critères structurés (frais, délais, taux de succès, instruments) → `show_comparison_table`.
+   Exemples : "compare GCF via BOAD vs UNDP", "quel intermédiaire pour ma candidature ?".
+   Préférer ce tool à un `table` markdown.
+
+3. **Matching projet ↔ offre** : tu proposes UNE ou PLUSIEURS offres compatibles avec un
+   projet précis (avec score, range montant, timeline, instruments) → `show_match_card`.
+   Pour 3 offres, invoque 3 fois le tool. Préférer ce tool à un `table` ou texte.
+
+4. **Carte géographique avec ≥ 1 marker précis** : positions projet/intermédiaire/fonds
+   en UEMOA → `show_map` (avec `show_uemoa_overlay=True` si pertinent).
+   Si aucune coordonnée précise → utiliser texte (ne pas appeler).
+
+5. **Évolution temporelle ou répartition catégories (chart)** : ces cas restent gérés
+   par les fences markdown ` ```chart ` (line, pie, doughnut, bar, radar) car aucun tool
+   typé n'est plus pertinent ici.
+
+6. **Diagramme de flux ou workflow** : ` ```mermaid ` reste la solution.
+
+7. **Texte simple** : si la question est ouverte ("aide-moi à choisir", "explique-moi"),
+   préférer un texte court à toute visualisation ; ne pas forcer un tool si l'information
+   ne s'y prête pas.
+
+Règles transverses pour les tools typés :
+- Citer la source (F01) pour tout chiffre quantitatif passé en `source_id`. À défaut,
+  invoquer `flag_unsourced` en parallèle.
+- Pour `show_match_card`, vérifier que `project_id` et `offer_id` proviennent d'un
+  appel précédent (ex: `list_projects`, `search_compatible_funds`).
+- Pour `show_map`, vérifier que les coordonnées (lat/lon) proviennent d'une source
+  vérifiable (profil entreprise, fiche intermédiaire). À défaut, fallback texte."""
 
 # Référence statique pour compatibilité avec les imports existants
 SYSTEM_PROMPT = BASE_PROMPT

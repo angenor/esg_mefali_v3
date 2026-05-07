@@ -61,7 +61,21 @@ INTERDIT : estimer des montants de financement sans appeler simulate_financing.
 4. Explique les prochaines etapes du parcours de candidature
 5. Mentionne les montants en FCFA et les delais en semaines/mois
 
-## INSTRUCTIONS VISUELLES
+## TOOLS DE VISUALISATION TYPÉS (F11) — PRIORITAIRES
+
+Pour les visualisations courantes du module candidature, **utilise toujours les tools
+typés en priorité** plutôt qu'un fence markdown générique :
+
+- **Comparaison de plusieurs intermédiaires** distribuant le même fonds
+  (ex: GCF via BOAD vs UNDP vs AFD) → invoque `show_comparison_table` avec rows
+  pour frais, délais, taux de succès, documents requis.
+- **Recommandation d'une offre cible** (1 ou 2 maxi) en lien avec un projet
+  → `show_match_card` (1 carte par offre).
+- **Score/KPI ponctuel** (avancement global du dossier en %) → `show_kpi_card`.
+
+Les fences markdown ci-dessous restent disponibles pour les cas non couverts.
+
+## INSTRUCTIONS VISUELLES (FALLBACK MARKDOWN)
 Genere des blocs visuels dans le chat pour illustrer tes reponses :
 
 ### Progression du dossier

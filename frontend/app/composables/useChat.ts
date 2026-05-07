@@ -46,6 +46,14 @@ const activeToolCall = ref<{
 // Feature 018 — interactive widgets
 const currentInteractiveQuestion = ref<InteractiveQuestion | null>(null)
 const interactiveQuestionsByMessage = ref<Record<string, InteractiveQuestion>>({})
+
+// F11 — Visualization blocks typés (KPICard, MatchCard, Map, ComparisonTable)
+// Indexés par messageId, ordre d'arrivée préservé (concaténation).
+export interface VisualizationBlock {
+  blockType: 'show_kpi_card' | 'show_match_card' | 'show_map' | 'show_comparison_table'
+  payload: Record<string, unknown>
+}
+const visualizationBlocksByMessage = ref<Record<string, VisualizationBlock[]>>({})
 const searchQuery = ref('')
 // SSE cross-routes : AbortController et reader module-level
 const abortController = ref<AbortController | null>(null)
@@ -394,6 +402,14 @@ export function useChat() {
                 updated[event.message_id!] = q
                 interactiveQuestionsByMessage.value = updated
               }
+              // F11 — Transférer les visualization_blocks du tempId au vrai message_id
+              if (oldId && visualizationBlocksByMessage.value[oldId]) {
+                const blocks = visualizationBlocksByMessage.value[oldId]!
+                const updated = { ...visualizationBlocksByMessage.value }
+                delete updated[oldId]
+                updated[event.message_id!] = blocks
+                visualizationBlocksByMessage.value = updated
+              }
               documentProgress.value = null
             } else if (event.type === 'document_upload') {
               // Document recu
@@ -449,6 +465,23 @@ export function useChat() {
             } else if (event.type === 'tool_call_error') {
               // Erreur d'un tool
               activeToolCall.value = null
+            } else if (event.type === 'visualization_block' && event.block_type) {
+              // F11 — Bloc de visualisation typé (KPICard, MatchCard, Map, ComparisonTable)
+              const lastIdx = messages.value.length - 1
+              if (lastIdx >= 0 && messages.value[lastIdx]?.role === 'assistant') {
+                const msgId = messages.value[lastIdx]!.id
+                const existing = visualizationBlocksByMessage.value[msgId] || []
+                visualizationBlocksByMessage.value = {
+                  ...visualizationBlocksByMessage.value,
+                  [msgId]: [
+                    ...existing,
+                    {
+                      blockType: event.block_type as VisualizationBlock['blockType'],
+                      payload: (event.payload || {}) as Record<string, unknown>,
+                    },
+                  ],
+                }
+              }
             } else if (event.type === 'interactive_question' && event.id) {
               // Feature 018 — affichage d'une question interactive cliquable
               const question: InteractiveQuestion = {
@@ -766,6 +799,14 @@ export function useChat() {
                 updated[evt.message_id!] = q
                 interactiveQuestionsByMessage.value = updated
               }
+              // F11 — Transférer les visualization_blocks
+              if (oldId && visualizationBlocksByMessage.value[oldId]) {
+                const blocks = visualizationBlocksByMessage.value[oldId]!
+                const updated = { ...visualizationBlocksByMessage.value }
+                delete updated[oldId]
+                updated[evt.message_id!] = blocks
+                visualizationBlocksByMessage.value = updated
+              }
             } else if (evt.type === 'interactive_question' && evt.id) {
               // Feature 018 — nouvelle question interactive dans un nouveau tour (apres submit d'une reponse)
               const newQ: InteractiveQuestion = {
@@ -796,6 +837,23 @@ export function useChat() {
             } else if (evt.type === 'guided_tour') {
               // Feature 019 — Declenchement parcours guide via SSE (apres submit reponse interactive)
               await handleGuidedTourEvent(evt as Record<string, unknown>)
+            } else if (evt.type === 'visualization_block' && evt.block_type) {
+              // F11 — Bloc de visualisation typé sur ce nouveau tour
+              const lastIdx = messages.value.length - 1
+              if (lastIdx >= 0 && messages.value[lastIdx]?.role === 'assistant') {
+                const msgId = messages.value[lastIdx]!.id
+                const existing = visualizationBlocksByMessage.value[msgId] || []
+                visualizationBlocksByMessage.value = {
+                  ...visualizationBlocksByMessage.value,
+                  [msgId]: [
+                    ...existing,
+                    {
+                      blockType: evt.block_type as VisualizationBlock['blockType'],
+                      payload: (evt.payload || {}) as Record<string, unknown>,
+                    },
+                  ],
+                }
+              }
             }
           } catch {
             // Ignorer les lignes invalides
@@ -914,6 +972,8 @@ export function useChat() {
     activeToolCall,
     currentInteractiveQuestion,
     interactiveQuestionsByMessage,
+    // F11 — visualization blocks typés
+    visualizationBlocksByMessage,
     fetchConversations,
     createConversation,
     selectConversation,

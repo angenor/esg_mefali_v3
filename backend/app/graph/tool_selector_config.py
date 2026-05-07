@@ -63,6 +63,8 @@ PAGE_TOOL_MAPPING: dict[str, frozenset[str]] = {
         # F06 — accès lecture aux projets depuis /profile
         "list_projects",
         "get_project",
+        # F11 — Map visible sur la page profil pour visualiser les sites projet
+        "show_map",
     }),
     # F06 — Page projets : 7 tools projet exclusifs.
     "profile_projects": frozenset({
@@ -73,6 +75,8 @@ PAGE_TOOL_MAPPING: dict[str, frozenset[str]] = {
         "delete_project",
         "duplicate_project",
         "link_document_to_project",
+        # F11 — Map pour visualiser les projets dans la zone UEMOA
+        "show_map",
     }),
     # Evaluation ESG (pages /esg, /esg/results).
     "esg": frozenset({
@@ -82,6 +86,8 @@ PAGE_TOOL_MAPPING: dict[str, frozenset[str]] = {
         "finalize_esg_assessment",
         "get_esg_assessment",
         "get_esg_assessment_chat",
+        # F11 — KPICard pour synthèses ESG (score global, scores par pilier)
+        "show_kpi_card",
     }),
     # Bilan carbone (pages /carbon, /carbon/results).
     "carbon": frozenset({
@@ -90,6 +96,8 @@ PAGE_TOOL_MAPPING: dict[str, frozenset[str]] = {
         "finalize_carbon_assessment",
         "get_carbon_summary",
         "get_carbon_summary_chat",
+        # F11 — KPICard pour résumé tCO2e + delta vs année précédente
+        "show_kpi_card",
     }),
     # Catalogue de financement vert et fiches fonds.
     "financing": frozenset({
@@ -97,6 +105,10 @@ PAGE_TOOL_MAPPING: dict[str, frozenset[str]] = {
         "save_fund_interest",
         "get_fund_details",
         "create_fund_application",
+        # F11 — Match/Comparison/Map pour matching projet↔offre
+        "show_match_card",
+        "show_comparison_table",
+        "show_map",
     }),
     # Dossiers de candidature (pages /applications, /applications/[id]).
     "candidatures": frozenset({
@@ -106,12 +118,17 @@ PAGE_TOOL_MAPPING: dict[str, frozenset[str]] = {
         "get_application_checklist",
         "simulate_financing",
         "export_application",
+        # F11 — Match/Comparison pour comparer offres concurrentes
+        "show_match_card",
+        "show_comparison_table",
     }),
     # Score credit alternatif.
     "credit": frozenset({
         "generate_credit_score",
         "get_credit_score",
         "generate_credit_certificate",
+        # F11 — KPICard pour score crédit
+        "show_kpi_card",
     }),
     # Plan d'action.
     "action_plan": frozenset({
@@ -126,6 +143,8 @@ PAGE_TOOL_MAPPING: dict[str, frozenset[str]] = {
         "get_esg_assessment_chat",
         "get_carbon_summary_chat",
         "get_action_plan",
+        # F11 — KPICard pour cartes de synthèse dashboard
+        "show_kpi_card",
     }),
     # Documents : analyse + listing.
     "documents": frozenset({
@@ -158,6 +177,11 @@ MODULE_TOOL_MAPPING: dict[str, frozenset[str]] = {
         "list_user_documents",
         # F06 — lecture projets depuis le noeud chat
         "list_projects",
+        # F11 — tools de visualisation tous disponibles dans le chat général.
+        "show_kpi_card",
+        "show_match_card",
+        "show_comparison_table",
+        "show_map",
     }),
     "esg_scoring": frozenset({
         "create_esg_assessment",
@@ -165,18 +189,26 @@ MODULE_TOOL_MAPPING: dict[str, frozenset[str]] = {
         "batch_save_esg_criteria",
         "finalize_esg_assessment",
         "get_esg_assessment",
+        # F11 — KPICard pour résumés ESG
+        "show_kpi_card",
     }),
     "carbon": frozenset({
         "create_carbon_assessment",
         "save_emission_entry",
         "finalize_carbon_assessment",
         "get_carbon_summary",
+        # F11 — KPICard pour résumé tCO2e
+        "show_kpi_card",
     }),
     "financing": frozenset({
         "search_compatible_funds",
         "save_fund_interest",
         "get_fund_details",
         "create_fund_application",
+        # F11 — Match/Comparison/Map pour matching et géolocalisation
+        "show_match_card",
+        "show_comparison_table",
+        "show_map",
     }),
     "application": frozenset({
         "create_fund_application",
@@ -185,16 +217,23 @@ MODULE_TOOL_MAPPING: dict[str, frozenset[str]] = {
         "get_application_checklist",
         "simulate_financing",
         "export_application",
+        # F11 — Match/Comparison pour comparaison cross-offres
+        "show_match_card",
+        "show_comparison_table",
     }),
     "credit": frozenset({
         "generate_credit_score",
         "get_credit_score",
         "generate_credit_certificate",
+        # F11 — KPICard pour score crédit
+        "show_kpi_card",
     }),
     "action_plan": frozenset({
         "generate_action_plan",
         "update_action_item",
         "get_action_plan",
+        # F11 — KPICard pour synthèse plan d'action
+        "show_kpi_card",
     }),
     "document": frozenset({
         "analyze_uploaded_document",

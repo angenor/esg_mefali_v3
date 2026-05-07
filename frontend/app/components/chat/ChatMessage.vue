@@ -5,6 +5,7 @@ import type {
   InteractiveQuestion,
   InteractiveQuestionAnswer,
 } from '~/types/interactive-question'
+import type { VisualizationBlock } from '~/composables/useChat'
 import { useCompanyStore } from '~/stores/company'
 import InteractiveQuestionHost from './InteractiveQuestionHost.vue'
 
@@ -17,12 +18,24 @@ const props = defineProps<{
     status: 'uploaded' | 'extracting' | 'analyzing' | 'done' | 'error'
   } | null
   interactiveQuestion?: InteractiveQuestion | null
+  // F11 — blocs de visualisation typés associés à ce message.
+  visualizationBlocks?: VisualizationBlock[]
 }>()
 
 const emit = defineEmits<{
   (e: 'interactive-answer', payload: { questionId: string; answer: InteractiveQuestionAnswer }): void
   (e: 'interactive-abandoned', questionId: string): void
+  (e: 'navigate', url: string): void
+  (e: 'open-source', sourceId: string): void
 }>()
+
+function onNavigate(url: string) {
+  emit('navigate', url)
+}
+
+function onOpenSource(sid: string) {
+  emit('open-source', sid)
+}
 
 function onAnswer(payload: InteractiveQuestionAnswer) {
   if (props.interactiveQuestion) {
@@ -141,6 +154,9 @@ async function copyContent() {
           <MessageParser
             :content="message.content"
             :is-streaming="isStreaming"
+            :visualization-blocks="visualizationBlocks"
+            @navigate="onNavigate"
+            @open-source="onOpenSource"
           />
           <!-- Widget interactif (feature 018) : uniquement pour les etats finaux
                (historique) — les questions pending sont affichees dans la bottom sheet

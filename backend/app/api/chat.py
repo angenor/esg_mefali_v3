@@ -306,6 +306,13 @@ async def stream_graph_events(
                                 if k != "__sse_guided_tour__"
                             }
                             yield event_payload
+                        elif sse_data.get("__sse_visualization_block__"):
+                            # F11 — Émettre l'event visualization_block typé
+                            event_payload = {
+                                k: v for k, v in sse_data.items()
+                                if k != "__sse_visualization_block__"
+                            }
+                            yield event_payload
                     except (ValueError, json.JSONDecodeError):
                         logger.debug("Impossible de parser les métadonnées SSE du tool")
 
@@ -1028,6 +1035,8 @@ async def send_message(
                         "interactive_question", "interactive_question_resolved",
                         "guided_tour",
                         "profile_update", "profile_completion",
+                        # F11 — visualisations typées (KPICard, MatchCard, Map, ComparisonTable)
+                        "visualization_block",
                     ):
                         if event_type == "guided_tour":
                             guided_tour_emitted = True
