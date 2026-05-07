@@ -1,0 +1,329 @@
+openapi: 3.0.3
+info:
+  title: ESG Mefali — F13 Referential Scores API
+  version: 1.0.0
+  description: |
+    Endpoints lecture et recalcul des scores ESG multi-référentiels.
+    Tous les endpoints requièrent une authentification JWT (header `Authorization: Bearer <token>`).
+    RLS PostgreSQL stricte par `account_id`.
+
+servers:
+  - url: http://localhost:8000
+    description: Local dev
+  - url: https://api.esg-mefali.app
+    description: Production
+
+paths:
+  /api/esg/assessments/{assessment_id}/referential-scores:
+    get:
+      summary: Liste des scores courants (un par référentiel actif)
+      tags: [Referential Scores]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: assessment_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Liste des scores courants (filtre `superseded_by IS NULL`)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  assessment_id:
+                    type: string
+                    format: uuid
+                  scores:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ReferentialScoreRead'
+                  recompute_in_progress:
+                    type: boolean
+                    description: True si un job de recalcul est en cours pour cet assessment
+                  recompute_started_at:
+                    type: string
+                    format: date-time
+                    nullable: true
+        '401':
+          description: Non authentifié
+        '404':
+          description: Assessment non trouvé OU appartient à un autre account (RLS)
+
+  /api/esg/assessments/{assessment_id}/referential-scores/history:
+    get:
+      summary: Historique des versions snapshot
+      tags: [Referential Scores]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: assessment_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: referential_id
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 20
+            maximum: 100
+      responses:
+        '200':
+          description: Historique des scores pour ce référentiel (filtre `superseded_by IS NOT NULL`, tri `computed_at DESC`)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  assessment_id:
+                    type: string
+                    format: uuid
+                  referential_id:
+                    type: string
+                    format: uuid
+                  history:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ReferentialScoreRead'
+
+  /api/esg/assessments/{assessment_id}/recompute-score:
+    post:
+      summary: Déclenche un recalcul ciblé async pour un référentiel
+      tags: [Referential Scores]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: assessment_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: referentiel_id
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '202':
+          description: Job de recalcul enqueue
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecomputeRequestResponse'
+        '404':
+          description: Assessment ou référentiel non trouvé
+        '422':
+          description: Référentiel inactif
+
+  /api/admin/recompute-referential-scores:
+    post:
+      summary: Recalcul forcé global (admin only)
+      tags: [Admin]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: account_id
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+          description: Si fourni, recalcule pour un seul compte ; sinon, recalcule pour tous (lot)
+      responses:
+        '202':
+          description: Recalcul global enqueue
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    enum: [accepted]
+                  request_id:
+                    type: string
+                    format: uuid
+                  total_assessments:
+                    type: integer
+        '403':
+          description: Rôle admin requis
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    ReferentialScoreRead:
+      type: object
+      required:
+        - id
+        - assessment_id
+        - referential_id
+        - referential_code
+        - referential_name
+        - referential_version
+        - coverage_rate
+        - computed_at
+        - computed_by
+        - is_fallback
+      properties:
+        id:
+          type: string
+          format: uuid
+        assessment_id:
+          type: string
+          format: uuid
+        referential_id:
+          type: string
+          format: uuid
+        referential_code:
+          type: string
+          example: ifc_ps
+        referential_name:
+          type: string
+          example: IFC Performance Standards 2012
+        referential_version:
+          type: string
+          example: "1.0.0"
+        overall_score:
+          type: number
+          format: decimal
+          minimum: 0
+          maximum: 100
+          nullable: true
+          description: NULL si coverage_rate=0
+        pillar_scores:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/PillarScore'
+        coverage_rate:
+          type: number
+          format: decimal
+          minimum: 0
+          maximum: 1
+        covered_criteria:
+          type: array
+          items:
+            $ref: '#/components/schemas/CoveredCriterion'
+        missing_criteria:
+          type: array
+          items:
+            $ref: '#/components/schemas/MissingCriterion'
+        gap_to_threshold:
+          type: number
+          format: decimal
+          nullable: true
+        eligibility:
+          type: boolean
+          nullable: true
+        computed_at:
+          type: string
+          format: date-time
+        computed_by:
+          type: string
+          enum: [manual, llm, auto]
+        computed_request_id:
+          type: string
+          format: uuid
+          nullable: true
+        is_fallback:
+          type: boolean
+          description: TRUE si ce score est un fallback Mefali (offer.fund.referential_id IS NULL)
+
+    PillarScore:
+      type: object
+      required: [score, weight, criteria_count, criteria_renseignés]
+      properties:
+        score:
+          type: number
+          format: decimal
+          minimum: 0
+          maximum: 100
+        weight:
+          type: number
+          format: decimal
+          minimum: 0
+          maximum: 1
+        criteria_count:
+          type: integer
+          minimum: 0
+        criteria_renseignés:
+          type: integer
+          minimum: 0
+
+    CoveredCriterion:
+      type: object
+      required: [indicator_id, indicator_code, score, weight, source_id]
+      properties:
+        indicator_id:
+          type: string
+          format: uuid
+        indicator_code:
+          type: string
+          example: pct_dechets_recycles
+        score:
+          type: number
+          format: decimal
+        weight:
+          type: number
+          format: decimal
+        source_id:
+          type: string
+          format: uuid
+
+    MissingCriterion:
+      type: object
+      required: [indicator_id, indicator_code, reason, source_id]
+      properties:
+        indicator_id:
+          type: string
+          format: uuid
+        indicator_code:
+          type: string
+          example: biodiversite_policy
+        reason:
+          type: string
+          enum: [non_renseigne, invalide, hors_scope]
+        source_id:
+          type: string
+          format: uuid
+        suggestion:
+          type: string
+          nullable: true
+
+    RecomputeRequestResponse:
+      type: object
+      required: [status, recompute_request_id, referentials_to_recompute]
+      properties:
+        status:
+          type: string
+          enum: [accepted]
+        recompute_request_id:
+          type: string
+          format: uuid
+        referentials_to_recompute:
+          type: array
+          items:
+            type: string
+            example: ifc_ps
+        estimated_duration_seconds:
+          type: integer
+          default: 5

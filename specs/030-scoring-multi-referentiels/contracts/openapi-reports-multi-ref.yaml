@@ -1,0 +1,180 @@
+openapi: 3.0.3
+info:
+  title: ESG Mefali — F13 Reports Multi-Référentiels API (refactor F06)
+  version: 1.0.0
+  description: |
+    Refactor de l'endpoint existant `POST /api/reports/esg/{id}/generate` pour supporter
+    la génération multi-référentiels avec annexe Sources F01.
+    Rétrocompatibilité : si `referentials` n'est pas fourni, default `["mefali"]` (mono-référentiel F06).
+
+servers:
+  - url: http://localhost:8000
+    description: Local dev
+  - url: https://api.esg-mefali.app
+    description: Production
+
+paths:
+  /api/reports/esg/{assessment_id}/generate:
+    post:
+      summary: Génère un rapport PDF ESG multi-référentiels (refactor F06 → F13)
+      tags: [Reports]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: assessment_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GenerateReportRequest'
+            examples:
+              monoReferentiel:
+                summary: Rétrocompatibilité F06 (mono-référentiel Mefali)
+                value:
+                  referentials: ["mefali"]
+                  include_appendix_sources: false
+              multiReferentiel:
+                summary: F13 multi-référentiels avec annexe sources
+                value:
+                  referentials: ["mefali", "ifc_ps"]
+                  include_appendix_sources: true
+              defaultBody:
+                summary: Body vide (defaults appliqués)
+                value: {}
+      responses:
+        '202':
+          description: Job de génération PDF enqueue
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenerateReportResponse'
+        '400':
+          description: Body invalide (JSON malformé)
+        '404':
+          description: Assessment non trouvé OU appartient à un autre account (RLS)
+        '422':
+          description: Code de référentiel inconnu OU référentiel inactif
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+
+  /api/reports/{report_id}/download:
+    get:
+      summary: Télécharger un PDF généré
+      tags: [Reports]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: report_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: PDF généré
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+        '202':
+          description: PDF en cours de génération (réessayer plus tard)
+        '404':
+          description: Rapport non trouvé OU appartient à un autre account (RLS)
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    GenerateReportRequest:
+      type: object
+      properties:
+        referentials:
+          type: array
+          items:
+            type: string
+            example: mefali
+          default: ["mefali"]
+          description: |
+            Codes des référentiels à inclure dans le rapport. Si non fourni, default `["mefali"]` (mono-référentiel, rétrocompatibilité F06).
+            Codes valides MVP : "mefali", "gcf", "ifc_ps", "boad_ess", "gri_2021".
+        include_appendix_sources:
+          type: boolean
+          default: true
+          description: |
+            Si TRUE, génère une annexe « Sources et références » listant toutes les Sources F01 citées dans le rapport.
+        format:
+          type: string
+          enum: [pdf]
+          default: pdf
+          description: Format de sortie (PDF uniquement en MVP)
+      additionalProperties: false
+
+    GenerateReportResponse:
+      type: object
+      required: [status, report_id, requested_referentials]
+      properties:
+        status:
+          type: string
+          enum: [pending, accepted]
+        report_id:
+          type: string
+          format: uuid
+        requested_referentials:
+          type: array
+          items:
+            type: string
+        include_appendix_sources:
+          type: boolean
+        download_url:
+          type: string
+          format: uri
+          description: URL de téléchargement (disponible après génération)
+        estimated_duration_seconds:
+          type: integer
+          default: 30
+        warnings:
+          type: array
+          items:
+            type: string
+          description: |
+            Avertissements éventuels (ex : « Référentiel IFC PS a coverage 48 %, le rapport sera marqué préliminaire »).
+
+    ValidationError:
+      type: object
+      required: [detail]
+      properties:
+        detail:
+          type: array
+          items:
+            type: object
+            properties:
+              loc:
+                type: array
+                items:
+                  type: string
+              msg:
+                type: string
+              type:
+                type: string
+              ctx:
+                type: object
+                properties:
+                  valid_referential_codes:
+                    type: array
+                    items:
+                      type: string
+                    description: Liste des codes valides connus
