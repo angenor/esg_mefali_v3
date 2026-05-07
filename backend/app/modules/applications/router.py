@@ -276,6 +276,31 @@ async def simulate_financing(
     return {"success": True, "data": result}
 
 
+@router.post("/{application_id}/recompute-against-snapshot")
+async def recompute_against_snapshot_endpoint(
+    application_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    """F04 — Recalcule le score d'une candidature contre son snapshot immuable.
+
+    Garantit que le score est reproductible indépendamment des évolutions
+    du référentiel. Réponse :
+    - 200 : recompute OK avec ``comparison_with_origin``
+    - 403 : la candidature appartient à un autre compte
+    - 404 : candidature introuvable
+    - 409 : candidature non encore soumise (``snapshot_at IS NULL``)
+    """
+    from app.modules.applications.recompute import recompute_against_snapshot
+    from app.modules.applications.snapshot import SnapshotMissingError
+
+    application = await _get_user_application(db, application_id, current_user.id)
+    try:
+        return await recompute_against_snapshot(application.id, db)
+    except SnapshotMissingError as e:
+        raise HTTPException(status_code=409, detail=str(e))
+
+
 # =====================================================================
 # HELPERS
 # =====================================================================

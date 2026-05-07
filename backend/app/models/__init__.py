@@ -57,3 +57,6 @@ from app.models.emission_factor import EmissionFactor  # noqa: F401
 from app.models.required_document import RequiredDocument  # noqa: F401
 from app.models.simulation_factor import SimulationFactor  # noqa: F401
 from app.models.unsourced_flag import UnsourcedFlag  # noqa: F401
+
+# F04 — Versioning + Money + Multi-devises
+from app.models.exchange_rate import ExchangeRate  # noqa: F401

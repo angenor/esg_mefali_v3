@@ -18,9 +18,10 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base, TimestampMixin, UUIDMixin
 from app.models.source import JSONType, PublicationStatus
+from app.models.versioning_mixin import VersioningMixin
 
 
-class Indicator(UUIDMixin, TimestampMixin, Base):
+class Indicator(UUIDMixin, TimestampMixin, VersioningMixin, Base):
     """Unite atomique de mesure ESG (par exemple 'pourcentage de dechets recycles')."""
 
     __tablename__ = "indicators"
@@ -66,7 +67,7 @@ class Indicator(UUIDMixin, TimestampMixin, Base):
     )
 
 
-class Criterion(UUIDMixin, TimestampMixin, Base):
+class Criterion(UUIDMixin, TimestampMixin, VersioningMixin, Base):
     """Condition logique sur indicateur(s)."""
 
     __tablename__ = "criteria"
@@ -106,7 +107,7 @@ class Criterion(UUIDMixin, TimestampMixin, Base):
     )
 
 
-class Formula(UUIDMixin, TimestampMixin, Base):
+class Formula(UUIDMixin, TimestampMixin, VersioningMixin, Base):
     """Formule de calcul mobilisant indicateurs et constantes."""
 
     __tablename__ = "formulas"
@@ -147,7 +148,7 @@ class Formula(UUIDMixin, TimestampMixin, Base):
     )
 
 
-class Threshold(UUIDMixin, TimestampMixin, Base):
+class Threshold(UUIDMixin, TimestampMixin, VersioningMixin, Base):
     """Seuil d'eligibilite ou de classification."""
 
     __tablename__ = "thresholds"

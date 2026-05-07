@@ -14,6 +14,13 @@ from app.models.application import (
     VALID_TRANSITIONS,
 )
 from app.models.financing import Fund, Intermediary, IntermediaryType
+from app.modules.applications.snapshot import (
+    SnapshotImmutableError,
+    build_snapshot_data,
+    estimate_snapshot_size_bytes,
+    SNAPSHOT_WARN_SIZE_BYTES,
+    validate_immutable,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -149,9 +156,41 @@ async def update_application_status(
     # Marquer la date de soumission si pertinent
     if new_status in ("submitted_to_intermediary", "submitted_to_fund"):
         application.submitted_at = datetime.now(timezone.utc)
+        # F04 — Création automatique du snapshot immuable (FR-011, US1).
+        # Le snapshot capture l'état du référentiel/fonds/scores au moment
+        # de la soumission, garantissant que la candidature reste défendable
+        # même si le catalogue évolue ensuite.
+        if application.snapshot_at is None:
+            await _create_snapshot(db, application)
 
     await db.flush()
     return application
+
+
+async def _create_snapshot(
+    db: AsyncSession,
+    application: FundApplication,
+) -> None:
+    """Crée et persiste le snapshot immuable d'une candidature.
+
+    Idempotent : si le snapshot existe déjà, lève :class:`SnapshotImmutableError`.
+    Logue la taille du snapshot pour observabilité (T707).
+    """
+    snapshot_data = await build_snapshot_data(application.id, db)
+    validate_immutable(application.snapshot_data, snapshot_data)
+    application.snapshot_data = snapshot_data
+    application.snapshot_at = datetime.now(timezone.utc)
+    size_bytes = estimate_snapshot_size_bytes(snapshot_data)
+    logger.info(
+        "F04 snapshot created application_id=%s size_bytes=%d",
+        application.id, size_bytes,
+    )
+    if size_bytes > SNAPSHOT_WARN_SIZE_BYTES:
+        logger.warning(
+            "F04 snapshot exceeds warn threshold (%d > %d bytes) "
+            "application_id=%s — consider gzip post-MVP",
+            size_bytes, SNAPSHOT_WARN_SIZE_BYTES, application.id,
+        )
 
 
 # =====================================================================

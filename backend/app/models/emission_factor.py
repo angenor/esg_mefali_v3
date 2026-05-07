@@ -17,9 +17,10 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base, TimestampMixin, UUIDMixin
 from app.models.source import PublicationStatus
+from app.models.versioning_mixin import VersioningMixin
 
 
-class EmissionFactor(UUIDMixin, TimestampMixin, Base):
+class EmissionFactor(UUIDMixin, TimestampMixin, VersioningMixin, Base):
     """Facteur d'emission par categorie et par pays (ADEME, IPCC, IEA)."""
 
     __tablename__ = "emission_factors"

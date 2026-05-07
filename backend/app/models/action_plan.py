@@ -3,6 +3,7 @@
 import enum
 import uuid
 from datetime import datetime
+from decimal import Decimal
 
 from sqlalchemy import (
     Boolean,
@@ -13,6 +14,7 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
+    Numeric,
     String,
     Text,
     UniqueConstraint,
@@ -23,6 +25,7 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.auditable import Auditable
+from app.core.money import Money
 from app.models.base import Base, TimestampMixin, UUIDMixin
 
 
@@ -204,6 +207,13 @@ class ActionItem(Auditable, UUIDMixin, TimestampMixin, Base):
     )
     due_date: Mapped[datetime | None] = mapped_column(Date, nullable=True)
     estimated_cost_xof: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # F04 — Money typed (cohabitation avec _xof legacy).
+    estimated_cost_amount: Mapped[Decimal | None] = mapped_column(
+        Numeric(20, 2), nullable=True,
+    )
+    estimated_cost_currency: Mapped[str | None] = mapped_column(
+        String(3), nullable=True,
+    )
     estimated_benefit: Mapped[str | None] = mapped_column(String(500), nullable=True)
     completion_percentage: Mapped[int] = mapped_column(
         Integer, default=0, server_default="0"
@@ -234,6 +244,20 @@ class ActionItem(Auditable, UUIDMixin, TimestampMixin, Base):
         cascade="all, delete-orphan",
         lazy="selectin",
     )
+
+    @property
+    def estimated_cost_money(self) -> Money | None:
+        """F04 — Reconstruit Money depuis (estimated_cost_amount,
+        estimated_cost_currency) ou fallback sur le champ legacy
+        ``estimated_cost_xof`` (XOF par défaut)."""
+        if self.estimated_cost_amount is not None and self.estimated_cost_currency:
+            return Money(
+                amount=self.estimated_cost_amount,
+                currency=self.estimated_cost_currency,
+            )
+        if self.estimated_cost_xof is not None:
+            return Money(amount=Decimal(self.estimated_cost_xof), currency="XOF")
+        return None
 
 
 class Reminder(UUIDMixin, Base):

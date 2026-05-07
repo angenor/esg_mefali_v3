@@ -2,6 +2,7 @@
 
 import enum
 import uuid
+from decimal import Decimal
 
 from sqlalchemy import (
     BigInteger,
@@ -10,6 +11,7 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
+    Numeric,
     String,
     Text,
 )
@@ -17,6 +19,7 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.auditable import Auditable
+from app.core.money import Money
 from app.models.base import Base, TimestampMixin, UUIDMixin
 
 
@@ -68,6 +71,13 @@ class CompanyProfile(Auditable, UUIDMixin, TimestampMixin, Base):
     sub_sector: Mapped[str | None] = mapped_column(Text, nullable=True)
     employee_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
     annual_revenue_xof: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    # F04 — Money typed (cohabitation avec _xof legacy).
+    annual_revenue_amount: Mapped[Decimal | None] = mapped_column(
+        Numeric(20, 2), nullable=True,
+    )
+    annual_revenue_currency: Mapped[str | None] = mapped_column(
+        String(3), nullable=True,
+    )
     year_founded: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     # Localisation
@@ -92,3 +102,17 @@ class CompanyProfile(Auditable, UUIDMixin, TimestampMixin, Base):
     __table_args__ = (
         Index("idx_company_profiles_account_id", "account_id"),
     )
+
+    @property
+    def annual_revenue_money(self) -> Money | None:
+        """F04 — Reconstruit Money depuis (annual_revenue_amount,
+        annual_revenue_currency) ou fallback sur le champ legacy
+        ``annual_revenue_xof`` (XOF par défaut)."""
+        if self.annual_revenue_amount is not None and self.annual_revenue_currency:
+            return Money(
+                amount=self.annual_revenue_amount,
+                currency=self.annual_revenue_currency,
+            )
+        if self.annual_revenue_xof is not None:
+            return Money(amount=Decimal(self.annual_revenue_xof), currency="XOF")
+        return None

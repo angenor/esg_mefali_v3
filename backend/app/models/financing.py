@@ -3,6 +3,7 @@
 import enum
 import uuid
 from datetime import datetime
+from decimal import Decimal
 
 from sqlalchemy import (
     BigInteger,
@@ -15,6 +16,7 @@ from sqlalchemy import (
     Index,
     Integer,
     JSON,
+    Numeric,
     String,
     Text,
     UniqueConstraint,
@@ -23,7 +25,9 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from app.core.money import Money
 from app.models.base import Base, TimestampMixin, UUIDMixin
+from app.models.versioning_mixin import VersioningMixin
 
 try:
     from pgvector.sqlalchemy import Vector
@@ -104,8 +108,13 @@ class FinancingSourceType(str, enum.Enum):
 # --- Modeles ---
 
 
-class Fund(UUIDMixin, TimestampMixin, Base):
-    """Fonds de financement vert."""
+class Fund(UUIDMixin, TimestampMixin, VersioningMixin, Base):
+    """Fonds de financement vert.
+
+    F04 : versioning catalogue + paires Money (min_amount/max_amount).
+    Les anciennes colonnes ``min_amount_xof`` / ``max_amount_xof`` sont
+    conservées (cohabitation phase 1) et migrées via le backfill.
+    """
 
     __tablename__ = "funds"
 
@@ -126,6 +135,11 @@ class Fund(UUIDMixin, TimestampMixin, Base):
     )
     min_amount_xof: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     max_amount_xof: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    # F04 — Money typed (cohabitation avec _xof legacy).
+    min_amount: Mapped[Decimal | None] = mapped_column(Numeric(20, 2), nullable=True)
+    min_amount_currency: Mapped[str | None] = mapped_column(String(3), nullable=True)
+    max_amount: Mapped[Decimal | None] = mapped_column(Numeric(20, 2), nullable=True)
+    max_amount_currency: Mapped[str | None] = mapped_column(String(3), nullable=True)
     application_deadline: Mapped[datetime | None] = mapped_column(
         Date, nullable=True
     )
@@ -169,9 +183,32 @@ class Fund(UUIDMixin, TimestampMixin, Base):
         cascade="all, delete-orphan",
     )
 
+    @property
+    def min_amount_money(self) -> Money | None:
+        """F04 — Reconstruit Money depuis (min_amount, min_amount_currency)
+        ou fallback sur le champ legacy ``min_amount_xof`` (XOF par défaut)."""
+        if self.min_amount is not None and self.min_amount_currency:
+            return Money(amount=self.min_amount, currency=self.min_amount_currency)
+        if self.min_amount_xof is not None:
+            return Money(amount=Decimal(self.min_amount_xof), currency="XOF")
+        return None
 
-class Intermediary(UUIDMixin, TimestampMixin, Base):
-    """Intermediaire financier (banque, agence ONU, developpeur carbone, etc.)."""
+    @property
+    def max_amount_money(self) -> Money | None:
+        """F04 — Reconstruit Money depuis (max_amount, max_amount_currency)
+        ou fallback sur le champ legacy ``max_amount_xof`` (XOF par défaut)."""
+        if self.max_amount is not None and self.max_amount_currency:
+            return Money(amount=self.max_amount, currency=self.max_amount_currency)
+        if self.max_amount_xof is not None:
+            return Money(amount=Decimal(self.max_amount_xof), currency="XOF")
+        return None
+
+
+class Intermediary(UUIDMixin, TimestampMixin, VersioningMixin, Base):
+    """Intermediaire financier (banque, agence ONU, developpeur carbone, etc.).
+
+    F04 : versioning catalogue (4 colonnes via ``VersioningMixin``).
+    """
 
     __tablename__ = "intermediaries"
 
@@ -215,8 +252,11 @@ class Intermediary(UUIDMixin, TimestampMixin, Base):
     )
 
 
-class FundIntermediary(UUIDMixin, Base):
-    """Liaison N-N entre un fonds et un intermediaire."""
+class FundIntermediary(UUIDMixin, VersioningMixin, Base):
+    """Liaison N-N entre un fonds et un intermediaire.
+
+    F04 : versioning catalogue (4 colonnes via ``VersioningMixin``).
+    """
 
     __tablename__ = "fund_intermediaries"
     __table_args__ = (

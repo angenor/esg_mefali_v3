@@ -10,6 +10,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.auditable import Auditable
 from app.models.base import Base, TimestampMixin, UUIDMixin
+from app.models.source import JSONType
 
 
 # --- Enumerations ---
@@ -136,6 +137,14 @@ class FundApplication(Auditable, UUIDMixin, TimestampMixin, Base):
     )
     submitted_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
+    )
+
+    # F04 — Snapshot immuable à la transition submitted_*
+    snapshot_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True,
+    )
+    snapshot_data: Mapped[dict | None] = mapped_column(
+        JSONType, nullable=True,
     )
 
     # Relations

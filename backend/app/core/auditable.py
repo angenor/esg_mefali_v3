@@ -140,6 +140,10 @@ EXEMPT_MODELS: frozenset[str] = frozenset(
         "Report",
         # Audit log lui-même : anti-récursion forte.
         "AuditLog",
+        # F04 — Référentiel public global (pas d'account_id, lecture publique).
+        # Les mutations sont admin-only (cron exchangerate-api.com) et tracées
+        # via les logs structurés ERROR/INFO du module currency.
+        "ExchangeRate",
     }
 )
 

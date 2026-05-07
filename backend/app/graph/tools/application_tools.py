@@ -97,21 +97,41 @@ class ExportApplicationArgs(BaseModel):
 async def _simulate_financing(db, application) -> dict:
     """Simulation financiere pour un dossier de candidature.
 
-    Calcule le montant eligible, le ROI estime, la timeline et l'impact carbone.
+    F04 : utilise les properties ``min_amount_money`` / ``max_amount_money``
+    qui retombent sur ``min_amount_xof`` / ``max_amount_xof`` si la paire
+    Money typée n'est pas renseignée. Plus d'AttributeError sur
+    ``fund.max_amount`` (FR-050).
     """
+    from decimal import Decimal
+
     from app.modules.financing.service import get_fund_by_id
 
     fund = await get_fund_by_id(db, application.fund_id)
     if not fund:
         return {"error": "Fonds introuvable pour cette candidature."}
 
-    max_amount = fund.max_amount or 0
-    min_amount = fund.min_amount or 0
-    eligible_estimate = int((max_amount + min_amount) / 2)
+    min_money = fund.min_amount_money
+    max_money = fund.max_amount_money
+
+    if min_money is not None and max_money is not None:
+        eligible_amount = (min_money.amount + max_money.amount) / Decimal("2")
+        currency = max_money.currency
+    elif max_money is not None:
+        eligible_amount = max_money.amount / Decimal("2")
+        currency = max_money.currency
+    elif min_money is not None:
+        eligible_amount = min_money.amount * Decimal("2")
+        currency = min_money.currency
+    else:
+        eligible_amount = Decimal("0")
+        currency = "XOF"
 
     return {
-        "eligible_amount": eligible_estimate,
-        "currency": getattr(fund, "currency", "USD"),
+        "eligible_amount": {
+            "amount": str(eligible_amount.quantize(Decimal("0.01"))),
+            "currency": currency,
+        },
+        "currency": currency,
         "roi_estimate": "12-18%",
         "timeline_months": 18,
         "fund_name": fund.name,
@@ -328,10 +348,21 @@ async def simulate_financing(
         if "error" in simulation:
             return f"Erreur de simulation : {simulation['error']}"
 
+        # F04 — eligible_amount peut être un dict Money typé OU un nombre legacy
+        # (cohabitation phase 1, FR-070 + FR-050).
+        eligible = simulation["eligible_amount"]
+        if isinstance(eligible, dict):
+            eligible_str = f"{eligible.get('amount', '0')} {eligible.get('currency', 'XOF')}"
+        else:
+            eligible_str = (
+                f"{eligible:,} {simulation.get('currency', 'USD')}"
+                if isinstance(eligible, (int, float))
+                else f"{eligible} {simulation.get('currency', 'USD')}"
+            )
         return (
             f"Simulation financiere :\n"
             f"- Fonds : {simulation.get('fund_name', 'N/A')}\n"
-            f"- Montant eligible estime : {simulation['eligible_amount']:,} {simulation.get('currency', 'USD')}\n"
+            f"- Montant eligible estime : {eligible_str}\n"
             f"- ROI estime : {simulation['roi_estimate']}\n"
             f"- Timeline : {simulation['timeline_months']} mois"
         )

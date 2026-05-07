@@ -25,6 +25,7 @@ from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin, UUIDMixin
+from app.models.versioning_mixin import SourceVersioningMixin
 
 
 class VerificationStatus(str, Enum):
@@ -47,10 +48,14 @@ class PublicationStatus(str, Enum):
 JSONType = JSONB().with_variant(JSON(), "sqlite")
 
 
-class Source(UUIDMixin, TimestampMixin, Base):
+class Source(UUIDMixin, TimestampMixin, SourceVersioningMixin, Base):
     """Source : document officiel de reference.
 
     Workflow 4-yeux : captured_by (createur) != verified_by (validateur).
+
+    F04 : utilise ``SourceVersioningMixin`` (champ ``catalog_version``) car
+    le champ ``version`` existant représente la version du document métier
+    (ex 'v2.3', 'AR6') et n'est pas concerné par le versioning catalogue.
     """
 
     __tablename__ = "sources"

@@ -1,0 +1,99 @@
+openapi: 3.0.3
+info:
+  title: ESG Mefali — Currency Admin Status API (F04)
+  version: "1.0.0"
+  description: |
+    Endpoint admin de monitoring de l'état du fetch quotidien exchangerate-api.com.
+    Auth : `get_current_admin` (rôle ADMIN, F02).
+
+paths:
+  /api/admin/currency/fetch-status:
+    get:
+      summary: Statut du fetch quotidien des taux de change
+      operationId: getCurrencyFetchStatus
+      tags: [admin, currency]
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Statut courant du fetch
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FetchStatusResponse"
+              examples:
+                healthy:
+                  value:
+                    last_success_at: "2026-05-07T08:00:00Z"
+                    last_failure_at: null
+                    last_error_message: null
+                    daily_quota_used: 1
+                    daily_quota_max: 50
+                    pairs_known: 8
+                degraded:
+                  value:
+                    last_success_at: "2026-05-04T08:00:00Z"
+                    last_failure_at: "2026-05-07T08:00:00Z"
+                    last_error_message: "EXCHANGERATE_FETCH_FAILED: 503 Service Unavailable"
+                    daily_quota_used: 0
+                    daily_quota_max: 50
+                    pairs_known: 8
+        "401":
+          description: Non authentifié
+        "403":
+          description: Authentifié mais sans rôle ADMIN
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                value:
+                  detail: "Forbidden: admin role required"
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    FetchStatusResponse:
+      type: object
+      required:
+        - last_success_at
+        - daily_quota_used
+        - daily_quota_max
+        - pairs_known
+      properties:
+        last_success_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: Horodatage du dernier fetch réussi
+        last_failure_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: Horodatage du dernier fetch en échec
+        last_error_message:
+          type: string
+          nullable: true
+          description: Message d'erreur normalisé (`EXCHANGERATE_FETCH_FAILED: ...`)
+        daily_quota_used:
+          type: integer
+          description: Nombre de fetch réussis dans la journée courante (UTC)
+        daily_quota_max:
+          type: integer
+          description: Quota journalier configuré (constante config)
+          example: 50
+        pairs_known:
+          type: integer
+          description: Nombre total de paires (base, quote) avec au moins une entrée dans `exchange_rates`
+
+    ErrorResponse:
+      type: object
+      required: [detail]
+      properties:
+        detail:
+          type: string
