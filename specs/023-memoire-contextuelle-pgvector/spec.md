@@ -1,7 +1,7 @@
 # Feature Specification: F12 — Mémoire Contextuelle Conforme (15 messages bruts + recherche sémantique)
 
 **Feature Branch**: `feat/F12-memoire-contextuelle-pgvector`
-**Spec Number**: `021`
+**Spec Number**: `023`
 **Created**: 2026-05-07
 **Status**: Draft
 **Input**: User description: "F12 - Mémoire Contextuelle Conforme : 15 derniers messages conservés en clair, historique ancien indexé pour recherche sémantique via tool `recall_history`, persistance des conversations en cours malgré redémarrage serveur, multi-tenant strict (F02), masquage des secrets avant indexation, suppression cascade des historiques quand un compte est purgé."

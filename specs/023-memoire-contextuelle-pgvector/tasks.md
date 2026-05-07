@@ -5,7 +5,7 @@ description: "Task list F12 - Mémoire Contextuelle Conforme (15 messages bruts 
 
 # Tasks: F12 — Mémoire Contextuelle Conforme
 
-**Input**: Design documents from `/specs/021-memoire-contextuelle-pgvector/`
+**Input**: Design documents from `/specs/023-memoire-contextuelle-pgvector/`
 **Prerequisites**: plan.md, spec.md, research.md, data-model.md, contracts/, quickstart.md
 **Tests**: TDD strict obligatoire (Constitution principe IV) — tests pytest et E2E Playwright écrits AVANT implémentation, couverture ≥ 80 %.
 **Organization**: Tâches groupées par user story pour permettre l'implémentation et le test indépendants.
@@ -28,7 +28,7 @@ description: "Task list F12 - Mémoire Contextuelle Conforme (15 messages bruts 
 - [ ] T002 Vérifier la disponibilité du extra LangGraph PostgreSQL : `python -c "from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver"` ; au besoin, ajouter `langgraph[postgres]>=0.2.0` à `backend/requirements.txt`.
 - [ ] T003 [P] Créer la structure du module `backend/app/modules/memory/` avec un fichier vide `__init__.py`.
 - [ ] T004 [P] Créer le dossier de tests `backend/tests/memory/` avec `__init__.py` vide.
-- [ ] T005 [P] Créer le dossier `specs/021-memoire-contextuelle-pgvector/contracts/` (déjà fait par /speckit.plan, vérifier la présence des deux fichiers `memory_tools.md` et `memory_service.md`).
+- [ ] T005 [P] Créer le dossier `specs/023-memoire-contextuelle-pgvector/contracts/` (déjà fait par /speckit.plan, vérifier la présence des deux fichiers `memory_tools.md` et `memory_service.md`).
 
 ---
 
@@ -42,7 +42,7 @@ description: "Task list F12 - Mémoire Contextuelle Conforme (15 messages bruts 
 
 - [ ] T006 Créer le modèle SQLAlchemy `MessageChunk` dans `backend/app/models/message_chunk.py` selon le contrat `data-model.md` (UUIDMixin, account_id FK accounts, conversation_id FK conversations CASCADE, message_id FK messages CASCADE, chunk_index Integer default 0, role VARCHAR(20), chunk_text Text, embedding Vector(1536) nullable, created_at server_default now(), 2 CHECK constraints, index composite et index HNSW conditionnel pgvector).
 - [ ] T007 Importer `MessageChunk` dans `backend/app/models/__init__.py` (si fichier d'import central) ou depuis `backend/app/db/base.py` pour qu'Alembic le voit.
-- [ ] T008 Créer la migration Alembic `backend/alembic/versions/021_create_message_chunks.py` (revision='021_message_chunks', down_revision='020_sources') : CREATE TABLE message_chunks + 3 indexes (composite, pending_embedding partial, HNSW) + RLS ENABLE+FORCE + 2 policies (admin_full_access, pme_access_own_account). Copier le pattern de `019_multitenant_and_roles.py` pour les policies RLS et de `163318558259_add_documents_tables.py` pour l'index HNSW. Downgrade : drop_index x3 + drop_table message_chunks.
+- [ ] T008 Créer la migration Alembic `backend/alembic/versions/023_create_message_chunks.py` (revision='023_create_message_chunks', down_revision='022_money_and_versioning') : CREATE TABLE message_chunks + 3 indexes (composite, pending_embedding partial, HNSW) + RLS ENABLE+FORCE + 2 policies (admin_full_access, pme_access_own_account). Copier le pattern de `019_multitenant_and_roles.py` pour les policies RLS et de `163318558259_add_documents_tables.py` pour l'index HNSW. Downgrade : drop_index x3 + drop_table message_chunks.
 - [ ] T009 Vérifier la migration : `cd backend && alembic upgrade head && alembic downgrade -1 && alembic upgrade head` ; vérifier qu'aucune erreur n'est levée et que la table apparaît dans `\d message_chunks`.
 
 ### Checkpointer LangGraph
@@ -261,7 +261,7 @@ description: "Task list F12 - Mémoire Contextuelle Conforme (15 messages bruts 
 ### Documentation et conformité
 
 - [ ] T084 [P] Créer `docs/memory-architecture.md` : (a) decision tree (15 derniers / 3 résumés / recall_history) avec mermaid ; (b) schéma de flux du hook after_insert → embedding async ; (c) section « Multi-tenant » (cf. T056) ; (d) section « Masquage des secrets » (regex et ordre) ; (e) section « Suppression cascade RGPD » ; (f) section « Observabilité » (formats des logs T083a/b, métriques cibles SC-006/007/010) ; (g) liens vers les FR du spec.
-- [ ] T085 [P] Mettre à jour `CLAUDE.md` section « Active Technologies » : ajouter une ligne pour 021-memoire-contextuelle-pgvector (déjà fait par T084 du script update-agent-context, vérifier). Section « Recent Changes » : ajouter un bloc concis F12.
+- [ ] T085 [P] Mettre à jour `CLAUDE.md` section « Active Technologies » : ajouter une ligne pour 023-memoire-contextuelle-pgvector (déjà fait par T084 du script update-agent-context, vérifier). Section « Recent Changes » : ajouter un bloc concis F12.
 - [ ] T086 Coverage backend complet : `cd backend && source venv/bin/activate && pytest tests/ -v --cov=app --cov-report=term-missing` ; viser ≥ 80 % global et ≥ 80 % spécifiquement sur `app/modules/memory/`, `app/graph/tools/memory_tools.py`, `app/graph/checkpointer.py`. Identifier et combler les trous éventuels par tests supplémentaires.
 - [ ] T087 [P] Lint Python : `cd backend && source venv/bin/activate && python -m py_compile $(find app -name '*.py')` ; aucun warning.
 - [ ] T088 Vérifier qu'aucun secret n'est hardcodé : `grep -rE '(api_key|secret|password|token)\s*=\s*["\047][A-Za-z0-9]' backend/ frontend/ | grep -v test | grep -v node_modules` ; ne doit rien retourner de neuf.

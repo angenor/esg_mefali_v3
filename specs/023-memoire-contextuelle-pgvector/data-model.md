@@ -12,7 +12,7 @@ F12 introduit une seule nouvelle table métier : `message_chunks`. Trois tables 
 
 Représente un fragment d'un message conversationnel, indexé pour la recherche sémantique via embedding pgvector. Un message court (≤ 6 000 caractères) produit exactement un chunk (`chunk_index = 0`). Un message long est découpé en N chunks avec recouvrement de 200 caractères entre chunks consécutifs.
 
-### Schéma SQL (équivalent migration Alembic 021)
+### Schéma SQL (équivalent migration Alembic 023)
 
 > **Note** : `id` reçoit son default soit par `gen_random_uuid()` côté serveur (DDL Postgres), soit par `default=uuid.uuid4` côté Python (UUIDMixin). Les deux sources cohabitent sans conflit — l'ORM fournit la valeur via Python avant l'INSERT, le DDL serveur sert de filet de sécurité pour les inserts SQL directs (scripts, fixtures).
 

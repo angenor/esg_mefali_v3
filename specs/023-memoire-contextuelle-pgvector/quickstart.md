@@ -139,7 +139,7 @@ Reverter la branche : `git revert HEAD~N` ou `git checkout main`.
 
 ## Critères de validation finale
 
-- [ ] Migration 021 applique et rollback proprement (`alembic upgrade head && alembic downgrade -1 && alembic upgrade head`).
+- [ ] Migration 023 applique et rollback proprement (`alembic upgrade head && alembic downgrade -1 && alembic upgrade head`).
 - [ ] Logs montrent `AsyncPostgresSaver setup completed` au premier démarrage.
 - [ ] Une conversation survit à un redémarrage uvicorn.
 - [ ] Les 15 derniers messages sont visibles dans le state LangGraph (vérifiable via debug log dans `_load_context_memory`).

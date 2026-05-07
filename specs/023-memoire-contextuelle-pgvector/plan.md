@@ -1,7 +1,7 @@
 # Implementation Plan: F12 — Mémoire Contextuelle Conforme (15 messages bruts + pgvector + recall_history)
 
 **Branch**: `feat/F12-memoire-contextuelle-pgvector` | **Date**: 2026-05-07 | **Spec**: [spec.md](./spec.md)
-**Input**: Feature specification from `/specs/021-memoire-contextuelle-pgvector/spec.md`
+**Input**: Feature specification from `/specs/023-memoire-contextuelle-pgvector/spec.md`
 
 ## Summary
 
@@ -71,7 +71,7 @@ Approche technique : réutilisation maximale du pattern existant `document_chunk
 ### Documentation (this feature)
 
 ```text
-specs/021-memoire-contextuelle-pgvector/
+specs/023-memoire-contextuelle-pgvector/
 ├── plan.md              # Ce fichier
 ├── spec.md              # Spécification fonctionnelle (déjà écrite)
 ├── research.md          # Phase 0 (généré ci-dessous)
@@ -91,7 +91,7 @@ specs/021-memoire-contextuelle-pgvector/
 backend/
 ├── alembic/
 │   └── versions/
-│       └── 021_create_message_chunks.py        # NEW (migration F12)
+│       └── 023_create_message_chunks.py        # NEW (migration F12)
 ├── app/
 │   ├── api/
 │   │   └── chat.py                             # MODIF (_load_context_memory + format_relative_time)
@@ -160,7 +160,7 @@ Voir `data-model.md`, `contracts/memory_tools.md`, `contracts/memory_service.md`
 
 Étapes :
 1. Modèle SQLAlchemy `MessageChunk` aligné sur `DocumentChunk` (Vector(1536), index HNSW).
-2. Migration Alembic 021 avec down_revision = `'020_sources'`.
+2. Migration Alembic 023 avec down_revision = `'022_money_and_versioning'`.
 3. Service `app/modules/memory/service.py` :
    - `mask_secrets(text: str) -> str` : applique 4 regex (cartes Luhn → IBAN → email → token Bearer) dans cet ordre.
    - `chunk_text(text: str, max_chars: int = 6000, overlap: int = 200) -> list[str]` : découpe par paragraphes, fallback phrase, fallback mot.
