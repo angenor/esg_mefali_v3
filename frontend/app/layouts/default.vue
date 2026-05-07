@@ -43,6 +43,19 @@ if (import.meta.client) {
       <main class="flex-1 overflow-y-auto p-6">
         <slot />
       </main>
+      <!-- F05 — Footer global avec lien obligatoire vers /legal/privacy -->
+      <footer
+        class="border-t border-gray-200 dark:border-dark-border bg-white dark:bg-dark-card px-6 py-3 text-xs text-gray-500 dark:text-gray-400 flex items-center justify-between gap-4"
+        role="contentinfo"
+      >
+        <span>&copy; {{ new Date().getFullYear() }} ESG Mefali</span>
+        <NuxtLink
+          to="/legal/privacy"
+          class="hover:underline hover:text-emerald-600 dark:hover:text-emerald-400"
+        >
+          Politique de confidentialité
+        </NuxtLink>
+      </footer>
     </div>
 
   </div>

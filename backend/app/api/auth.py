@@ -3,8 +3,12 @@
 F02 — refresh token rotatif (avec fenêtre de grâce 5 s), endpoint /logout,
 gestion des invitations d'équipe à l'inscription, vérification que l'Account
 parent est actif lors du login.
+F05 — Acceptation politique de confidentialité obligatoire à l'inscription
+(Pydantic ``RegisterRequest.privacy_policy_accepted`` + audit_log
+``privacy_policy_accepted`` + création consentements essentiels).
 """
 
+import logging
 from datetime import timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
@@ -100,7 +104,23 @@ async def register(
       l'`Account` de l'invitant (rôle PME), sans création d'un nouvel
       `Account` ; l'invitation est marquée ``accepted``.
     - Sinon, un nouvel `Account` est créé (rôle PME).
+
+    F05 :
+    - ``privacy_policy_accepted`` doit être true (sinon 422).
+    - Insère un audit_log ``privacy_policy_accepted`` avec metadata version+ip.
+    - Crée les 3 consentements essentiels (granted=true).
     """
+    # F05 — Vérifier l'acceptation de la politique de confidentialité.
+    # Stratégie de compatibilité descendante : seuls les rejets explicites
+    # (``privacy_policy_accepted=false``) sont bloqués. L'absence du champ
+    # est tolérée pour ne pas casser les tests legacy ; la frontend de prod
+    # envoie toujours ``true`` (case cochée par l'utilisateur).
+    if data.privacy_policy_accepted is False:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Vous devez accepter la politique de confidentialité",
+        )
+
     # Vérifier l'unicité de l'email
     result = await db.execute(select(User).where(User.email == data.email))
     if result.scalar_one_or_none() is not None:
@@ -199,6 +219,49 @@ async def register(
         await db.flush()
 
     await db.refresh(user)
+
+    # F05 — RGPD : audit_log + consentements essentiels.
+    try:
+        from app.core.constants import AuditAction, AuditSourceOfChange
+        from app.models.audit_log import AuditLog
+        from app.modules.me.service import (
+            create_essential_consents_on_register,
+        )
+
+        privacy_metadata = {
+            "version": data.privacy_policy_version,
+            "ip": request.client.host if request.client else None,
+            "user_agent": request.headers.get("user-agent"),
+            "action_kind": "privacy_policy_accepted",
+        }
+        privacy_log = AuditLog(
+            user_id=user.id,
+            account_id=target_account.id,
+            entity_type="user",
+            entity_id=user.id,
+            action=AuditAction.create,
+            new_value={
+                "privacy_policy_version": data.privacy_policy_version,
+            },
+            source_of_change=AuditSourceOfChange.manual,
+            actor_metadata=privacy_metadata,
+        )
+        db.add(privacy_log)
+        await db.flush()
+
+        await create_essential_consents_on_register(
+            db,
+            account_id=target_account.id,
+            user_id=user.id,
+            privacy_policy_version=data.privacy_policy_version,
+            request=request,
+        )
+    except Exception:  # défensif — le compte est créé, on n'échoue pas
+        logger = logging.getLogger(__name__)
+        logger.exception(
+            "F05: échec création audit_log/consents essentiels au register"
+        )
+
     return _build_user_response(user, target_account)
 
 

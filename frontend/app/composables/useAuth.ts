@@ -205,6 +205,9 @@ export function useAuth() {
     country?: string | null
     // F02 — token d'invitation team (rejoint un Account existant si fourni).
     invite_token?: string | null
+    // F05 — RGPD : acceptation politique de confidentialité (obligatoire).
+    privacy_policy_accepted?: boolean
+    privacy_policy_version?: string
   }): Promise<User> {
     return apiFetch<User>('/auth/register', {
       method: 'POST',
