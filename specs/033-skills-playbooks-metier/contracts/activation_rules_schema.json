@@ -1,0 +1,72 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://esg-mefali.com/schemas/activation_rules.json",
+  "title": "ActivationRules",
+  "description": "Règles d'activation contextuelles d'une Skill. Stockées en JSONB dans skills.activation_rules.",
+  "type": "object",
+  "properties": {
+    "page_slugs": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^/[a-z0-9_/-]+$"
+      },
+      "default": [],
+      "description": "Liste de slugs de page (ex: ['/esg', '/financing']). Match si page_slug courant ∈ liste."
+    },
+    "intent_keywords": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 2
+      },
+      "default": [],
+      "description": "Mots-clés détectés dans le user message (insensible à la casse). Match si ≥ 1 keyword présent."
+    },
+    "active_module": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "esg_scoring",
+          "carbon",
+          "financing",
+          "application",
+          "credit",
+          "action_plan"
+        ]
+      },
+      "default": [],
+      "description": "Liste de modules actifs. Match si state.active_module ∈ liste."
+    },
+    "offer_id": {
+      "type": ["string", "null"],
+      "format": "uuid",
+      "description": "UUID d'une Offer spécifique. Match exact si non null."
+    },
+    "fund_id": {
+      "type": ["string", "null"],
+      "format": "uuid",
+      "description": "UUID d'un Fund spécifique. Match exact si non null."
+    },
+    "intermediary_id": {
+      "type": ["string", "null"],
+      "format": "uuid",
+      "description": "UUID d'un Intermediary spécifique. Match exact si non null."
+    }
+  },
+  "additionalProperties": false,
+  "examples": [
+    {
+      "page_slugs": ["/esg"],
+      "intent_keywords": ["ESG", "diagnostic"],
+      "active_module": ["esg_scoring"]
+    },
+    {
+      "page_slugs": ["/applications"],
+      "active_module": ["application"],
+      "fund_id": "550e8400-e29b-41d4-a716-446655440000",
+      "intermediary_id": "550e8400-e29b-41d4-a716-446655440001"
+    }
+  ]
+}

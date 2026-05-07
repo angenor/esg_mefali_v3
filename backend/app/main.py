@@ -199,6 +199,15 @@ app.include_router(me_router, prefix="/api/me", tags=["me", "rgpd"])
 app.include_router(offers_router, prefix="/api", tags=["offers"])
 app.include_router(offers_admin_router, prefix="/api/admin", tags=["admin", "offers"])
 
+# F23 — Skills (Playbooks Métier) admin CRUD.
+from app.modules.admin.skills_router import router as admin_skills_router  # noqa: E402
+
+app.include_router(
+    admin_skills_router,
+    prefix="/api/admin",
+    tags=["admin", "skills"],
+)
+
 # F05 — Test stub pour démontrer le gating require_consent (consent_dependency).
 from app.api.credit_stub import router as credit_stub_router  # noqa: E402
 

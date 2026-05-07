@@ -1,0 +1,80 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://esg-mefali.com/schemas/skill_eval_report.json",
+  "title": "SkillEvalReport",
+  "description": "Rapport d'exécution des golden_examples d'une skill (eval gating). Retourné par POST /publish et /test.",
+  "type": "object",
+  "required": [
+    "skill_id",
+    "run_id",
+    "started_at",
+    "completed_at",
+    "duration_seconds",
+    "total_cases",
+    "passed",
+    "failed",
+    "success_rate",
+    "threshold",
+    "gate_passed",
+    "failed_cases"
+  ],
+  "properties": {
+    "skill_id": { "type": "string", "format": "uuid" },
+    "run_id": { "type": "string", "format": "uuid" },
+    "started_at": { "type": "string", "format": "date-time" },
+    "completed_at": { "type": "string", "format": "date-time" },
+    "duration_seconds": { "type": "number", "minimum": 0 },
+    "total_cases": { "type": "integer", "minimum": 0 },
+    "passed": { "type": "integer", "minimum": 0 },
+    "failed": { "type": "integer", "minimum": 0 },
+    "success_rate": { "type": "number", "minimum": 0, "maximum": 1 },
+    "threshold": { "type": "number", "minimum": 0, "maximum": 1, "default": 0.9 },
+    "gate_passed": { "type": "boolean" },
+    "failed_cases": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["case_id", "expected_tool", "actual_tool"],
+        "properties": {
+          "case_id": { "type": "string" },
+          "expected_tool": {
+            "oneOf": [
+              { "type": "string" },
+              { "type": "array", "items": { "type": "string" } }
+            ]
+          },
+          "actual_tool": { "type": ["string", "null"] },
+          "payload_diff": { "type": ["object", "null"] },
+          "latency_ms": { "type": "integer", "minimum": 0 },
+          "error": { "type": ["string", "null"] }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false,
+  "examples": [
+    {
+      "skill_id": "550e8400-e29b-41d4-a716-446655440000",
+      "run_id": "550e8400-e29b-41d4-a716-446655440099",
+      "started_at": "2026-05-07T10:00:00Z",
+      "completed_at": "2026-05-07T10:00:42Z",
+      "duration_seconds": 42.3,
+      "total_cases": 5,
+      "passed": 2,
+      "failed": 3,
+      "success_rate": 0.4,
+      "threshold": 0.9,
+      "gate_passed": false,
+      "failed_cases": [
+        {
+          "case_id": "gcf-boad-init-01",
+          "expected_tool": "create_fund_application",
+          "actual_tool": "search_funds",
+          "payload_diff": { "missing": ["fund_id"] },
+          "latency_ms": 5800
+        }
+      ]
+    }
+  ]
+}

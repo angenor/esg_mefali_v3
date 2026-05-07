@@ -952,6 +952,35 @@ async def esg_scoring_node(
         active_entities=state.get("active_entities"),
     )
     _propagate_tools_offered(config, debug_info["tools_offered"])
+
+    # F23 — Skill loader contextuel + fusion prompt + intersection tools.
+    active_skills_snapshot_esg: list[dict] | None = None
+    try:
+        from app.core.database import async_session_factory
+        from app.graph.skill_integration import apply_skills_to_node
+        # Dernier message utilisateur pour l'intent.
+        _last_user = ""
+        for _msg in reversed(messages):
+            if isinstance(_msg, HumanMessage):
+                _last_user = _msg.content
+                break
+        async with async_session_factory() as _db_skill:
+            full_prompt, filtered_tools, active_skills_snapshot_esg = (
+                await apply_skills_to_node(
+                    base_prompt=full_prompt,
+                    base_tools=filtered_tools,
+                    state=state,
+                    intent=_last_user,
+                    db=_db_skill,
+                )
+            )
+        # Reconstruire chat_messages si le full_prompt a changé.
+        chat_messages = [SystemMessage(content=full_prompt), *[
+            m for m in messages if not isinstance(m, SystemMessage)
+        ]]
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("[esg_scoring_node] skill_integration bypass: %s", exc)
+
     llm_with_tools = llm.bind_tools(filtered_tools)
     response = await llm_with_tools.ainvoke(chat_messages)
 
@@ -978,13 +1007,16 @@ async def esg_scoring_node(
             ] if esg_assessment.get("partial_scores") else [],
         }
 
-    return {
+    out_payload: dict = {
         "messages": [response],
         "esg_assessment": esg_assessment,
         "tool_call_count": new_tool_call_count,
         "active_module": new_active_module,
         "active_module_data": new_active_module_data,
     }
+    if active_skills_snapshot_esg is not None:
+        out_payload["active_skills"] = active_skills_snapshot_esg
+    return out_payload
 
 
 @_with_llm_source
@@ -1138,6 +1170,33 @@ async def carbon_node(
         active_entities=state.get("active_entities"),
     )
     _propagate_tools_offered(config, debug_info["tools_offered"])
+
+    # F23 — Skill loader contextuel + fusion prompt + intersection tools.
+    active_skills_snapshot_carbon: list[dict] | None = None
+    try:
+        from app.core.database import async_session_factory
+        from app.graph.skill_integration import apply_skills_to_node
+        _last_user = ""
+        for _msg in reversed(messages):
+            if isinstance(_msg, HumanMessage):
+                _last_user = _msg.content
+                break
+        async with async_session_factory() as _db_skill:
+            full_prompt, filtered_tools, active_skills_snapshot_carbon = (
+                await apply_skills_to_node(
+                    base_prompt=full_prompt,
+                    base_tools=filtered_tools,
+                    state=state,
+                    intent=_last_user,
+                    db=_db_skill,
+                )
+            )
+        chat_messages = [SystemMessage(content=full_prompt), *[
+            m for m in messages if not isinstance(m, SystemMessage)
+        ]]
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("[carbon_node] skill_integration bypass: %s", exc)
+
     llm_with_tools = llm.bind_tools(filtered_tools)
     response = await llm_with_tools.ainvoke(chat_messages)
 
@@ -1154,12 +1213,15 @@ async def carbon_node(
             "current_category": carbon_data.get("current_category"),
         }
 
-    return {
+    out_payload: dict = {
         "messages": [response],
         "carbon_data": carbon_data,
         "active_module": new_active_module,
         "active_module_data": new_active_module_data,
     }
+    if active_skills_snapshot_carbon is not None:
+        out_payload["active_skills"] = active_skills_snapshot_carbon
+    return out_payload
 
 
 async def _fetch_rag_context_for_financing(query: str) -> str:
@@ -1269,6 +1331,31 @@ async def financing_node(
 
     full_prompt = system_prompt + tool_instructions
 
+    # F23 — Skill loader contextuel + fusion prompt + intersection tools.
+    active_skills_snapshot_fin: list[dict] | None = None
+    try:
+        from app.core.database import async_session_factory
+        from app.graph.skill_integration import apply_skills_to_node
+        _last_user = ""
+        for _msg in reversed(messages):
+            if isinstance(_msg, HumanMessage):
+                _last_user = _msg.content
+                break
+        async with async_session_factory() as _db_skill:
+            full_prompt, filtered_tools, active_skills_snapshot_fin = (
+                await apply_skills_to_node(
+                    base_prompt=full_prompt,
+                    base_tools=filtered_tools,
+                    state=state,
+                    intent=_last_user,
+                    db=_db_skill,
+                )
+            )
+        # Re-bind les tools si la liste a été modifiée par l'intersection.
+        llm = get_llm().bind_tools(filtered_tools)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("[financing_node] skill_integration bypass: %s", exc)
+
     # Envoyer au LLM
     chat_messages = [SystemMessage(content=full_prompt), *[
         m for m in messages if not isinstance(m, SystemMessage)
@@ -1276,7 +1363,7 @@ async def financing_node(
 
     response = await llm.ainvoke(chat_messages)
 
-    return {
+    out_payload: dict = {
         "messages": [response],
         "financing_data": financing_data,
         "active_module": "financing",
@@ -1286,6 +1373,9 @@ async def financing_node(
             "interest_expressed": (financing_data or {}).get("interest_expressed", False),
         },
     }
+    if active_skills_snapshot_fin is not None:
+        out_payload["active_skills"] = active_skills_snapshot_fin
+    return out_payload
 
 
 async def _fetch_credit_scoring_context(user_id: str | None) -> tuple[str, list[dict]]:
@@ -1454,6 +1544,30 @@ async def credit_node(
     # Les instructions tool calling sont dans le template prompt
     full_prompt = system_prompt
 
+    # F23 — Skill loader contextuel + fusion prompt + intersection tools.
+    active_skills_snapshot_credit: list[dict] | None = None
+    try:
+        from app.core.database import async_session_factory
+        from app.graph.skill_integration import apply_skills_to_node
+        _last_user = ""
+        for _msg in reversed(messages):
+            if isinstance(_msg, HumanMessage):
+                _last_user = _msg.content
+                break
+        async with async_session_factory() as _db_skill:
+            full_prompt, filtered_tools, active_skills_snapshot_credit = (
+                await apply_skills_to_node(
+                    base_prompt=full_prompt,
+                    base_tools=filtered_tools,
+                    state=state,
+                    intent=_last_user,
+                    db=_db_skill,
+                )
+            )
+        llm = get_llm().bind_tools(filtered_tools)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("[credit_node] skill_integration bypass: %s", exc)
+
     # Envoyer au LLM
     chat_messages = [SystemMessage(content=full_prompt), *[
         m for m in messages if not isinstance(m, SystemMessage)
@@ -1461,12 +1575,15 @@ async def credit_node(
 
     response = await llm.ainvoke(chat_messages)
 
-    return {
+    out_payload: dict = {
         "messages": [response],
         "credit_data": credit_data,
         "active_module": "credit",
         "active_module_data": {"session_id": None},
     }
+    if active_skills_snapshot_credit is not None:
+        out_payload["active_skills"] = active_skills_snapshot_credit
+    return out_payload
 
 
 @_with_llm_source
@@ -1521,16 +1638,6 @@ async def chat_node(
             if getattr(t, "name", None) not in _ESG_BLOCKED_TOOL_NAMES
         ]
 
-    if all_tools:
-        filtered_tools, debug_info = select_tools_for_node(
-            node_name="chat",
-            current_page=state.get("current_page"),
-            all_tools=all_tools,
-            active_entities=state.get("active_entities"),
-        )
-        _propagate_tools_offered(config, debug_info["tools_offered"])
-        llm = llm.bind_tools(filtered_tools)
-
     user_profile = state.get("user_profile")
     context_memory = state.get("context_memory", [])
     profiling_instructions = state.get("profiling_instructions")
@@ -1569,6 +1676,34 @@ async def chat_node(
     if page_context:
         full_prompt += "\n\n" + page_context
 
+    active_skills_snapshot: list[dict] | None = None
+    if all_tools:
+        filtered_tools, debug_info = select_tools_for_node(
+            node_name="chat",
+            current_page=state.get("current_page"),
+            all_tools=all_tools,
+            active_entities=state.get("active_entities"),
+        )
+        _propagate_tools_offered(config, debug_info["tools_offered"])
+
+        # F23 — Skill loader contextuel + fusion prompt + intersection tools.
+        try:
+            from app.core.database import async_session_factory
+            from app.graph.skill_integration import apply_skills_to_node
+            async with async_session_factory() as _db_skill:
+                full_prompt, filtered_tools, active_skills_snapshot = (
+                    await apply_skills_to_node(
+                        base_prompt=full_prompt,
+                        base_tools=filtered_tools,
+                        state=state,
+                        intent=last_user_msg_chat,
+                        db=_db_skill,
+                    )
+                )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("[chat_node] skill_integration bypass: %s", exc)
+        llm = llm.bind_tools(filtered_tools)
+
     # Ajouter le prompt systeme en tete
     messages = state["messages"]
     chat_messages = [SystemMessage(content=full_prompt), *[
@@ -1577,7 +1712,10 @@ async def chat_node(
 
     response = await llm.ainvoke(chat_messages)
 
-    return {"messages": [response]}
+    out: dict = {"messages": [response]}
+    if active_skills_snapshot is not None:
+        out["active_skills"] = active_skills_snapshot
+    return out
 
 
 @_with_llm_source
@@ -1685,6 +1823,30 @@ async def application_node(
     # Les instructions tool calling sont dans le template prompt
     full_prompt = system_prompt
 
+    # F23 — Skill loader contextuel + fusion prompt + intersection tools.
+    active_skills_snapshot_app: list[dict] | None = None
+    try:
+        from app.core.database import async_session_factory
+        from app.graph.skill_integration import apply_skills_to_node
+        _last_user = ""
+        for _msg in reversed(messages):
+            if isinstance(_msg, HumanMessage):
+                _last_user = _msg.content
+                break
+        async with async_session_factory() as _db_skill:
+            full_prompt, filtered_tools, active_skills_snapshot_app = (
+                await apply_skills_to_node(
+                    base_prompt=full_prompt,
+                    base_tools=filtered_tools,
+                    state=state,
+                    intent=_last_user,
+                    db=_db_skill,
+                )
+            )
+        llm = get_llm().bind_tools(filtered_tools)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("[application_node] skill_integration bypass: %s", exc)
+
     # Envoyer au LLM
     chat_messages = [SystemMessage(content=full_prompt), *[
         m for m in messages if not isinstance(m, SystemMessage)
@@ -1692,12 +1854,15 @@ async def application_node(
 
     response = await llm.ainvoke(chat_messages)
 
-    return {
+    out_payload: dict = {
         "messages": [response],
         "application_data": application_data,
         "active_module": "application",
         "active_module_data": {"session_id": None},
     }
+    if active_skills_snapshot_app is not None:
+        out_payload["active_skills"] = active_skills_snapshot_app
+    return out_payload
 
 
 @_with_llm_source
@@ -1835,6 +2000,30 @@ async def action_plan_node(
     # Les instructions tool calling sont dans le template prompt
     full_prompt = system_prompt
 
+    # F23 — Skill loader contextuel + fusion prompt + intersection tools.
+    active_skills_snapshot_ap: list[dict] | None = None
+    try:
+        from app.core.database import async_session_factory
+        from app.graph.skill_integration import apply_skills_to_node
+        _last_user = ""
+        for _msg in reversed(messages):
+            if isinstance(_msg, HumanMessage):
+                _last_user = _msg.content
+                break
+        async with async_session_factory() as _db_skill:
+            full_prompt, filtered_tools, active_skills_snapshot_ap = (
+                await apply_skills_to_node(
+                    base_prompt=full_prompt,
+                    base_tools=filtered_tools,
+                    state=state,
+                    intent=_last_user,
+                    db=_db_skill,
+                )
+            )
+        llm = get_llm().bind_tools(filtered_tools)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("[action_plan_node] skill_integration bypass: %s", exc)
+
     # Envoyer au LLM
     chat_messages = [SystemMessage(content=full_prompt), *[
         m for m in messages if not isinstance(m, SystemMessage)
@@ -1842,12 +2031,15 @@ async def action_plan_node(
 
     response = await llm.ainvoke(chat_messages)
 
-    return {
+    out_payload: dict = {
         "messages": [response],
         "action_plan_data": action_plan_data,
         "active_module": "action_plan",
         "active_module_data": {"session_id": None},
     }
+    if active_skills_snapshot_ap is not None:
+        out_payload["active_skills"] = active_skills_snapshot_ap
+    return out_payload
 
 
 async def generate_title(user_content: str, assistant_content: str) -> str:

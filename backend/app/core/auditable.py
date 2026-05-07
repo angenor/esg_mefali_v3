@@ -174,6 +174,12 @@ EXEMPT_MODELS: frozenset[str] = frozenset(
         # journalisés explicitement via ``app/core/audit_context`` avec
         # source_of_change='referential_score_recompute' (cf. plan.md F13).
         "ReferentialScore",
+        # F23 — Skills (Playbooks Métier). Catalogue admin-only sans
+        # account_id : les mutations CRUD sont tracées explicitement par
+        # ``app/modules/skills/service.py`` via ``audit_log`` avec source
+        # ``admin`` (middleware AdminAuditContextMiddleware). Le mixin
+        # générique n'est pas appliqué car la table n'a pas de account_id.
+        "Skill",
     }
 )
 

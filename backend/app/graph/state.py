@@ -42,3 +42,6 @@ class ConversationState(TypedDict):
     conversation_id: NotRequired[str]
     # F06 — Projets actifs (statut ≠ cancelled/closed) pour le contexte LLM.
     user_projects: NotRequired[list[dict[str, Any]] | None]
+    # F23 — Snapshot des Skills actives pour ce tour (loader contextuel).
+    # Format: [{"id": "uuid", "name": "skill_xxx", "version": "1.0.0"}]
+    active_skills: NotRequired[list[dict[str, Any]] | None]

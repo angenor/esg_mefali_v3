@@ -1,0 +1,122 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://esg-mefali.com/schemas/skill.json",
+  "title": "Skill",
+  "description": "Bundle métier (playbook) chargé contextuellement par le runtime LangGraph.",
+  "type": "object",
+  "required": [
+    "name",
+    "domain",
+    "prompt_expert",
+    "procedure",
+    "tool_whitelist",
+    "sources",
+    "activation_rules",
+    "golden_examples"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "PK UUID. Généré côté serveur à la création."
+    },
+    "name": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 100,
+      "pattern": "^skill_[a-z][a-z0-9_]*$",
+      "description": "Nom unique snake_case préfixé par skill_ (ex: skill_dossier_gcf_via_boad)."
+    },
+    "domain": {
+      "type": "string",
+      "enum": [
+        "diagnostic_esg",
+        "scoring_referentiel",
+        "carbon_calc",
+        "dossier",
+        "intermediaire",
+        "attestation",
+        "credit_score"
+      ]
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$",
+      "description": "Semver MAJOR.MINOR.PATCH. Incrément patch automatique à l'édition d'une skill published."
+    },
+    "prompt_expert": {
+      "type": "string",
+      "minLength": 50,
+      "description": "Prompt expert injecté dans le system prompt. Limité à 5000 tokens (cl100k_base). Validé contre patterns d'injection."
+    },
+    "procedure": {
+      "type": "string",
+      "minLength": 50,
+      "description": "Procédure pas-à-pas (texte markdown). Limité à 3000 tokens."
+    },
+    "tool_whitelist": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z_][a-z0-9_]*$"
+      },
+      "minItems": 1,
+      "description": "Liste des tool_name LangChain autorisés. Validé contre ALL_TOOL_NAMES au save."
+    },
+    "sources": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "format": "uuid"
+      },
+      "description": "Liste de Source.id. Validé : chaque UUID existe ET verification_status='verified'."
+    },
+    "activation_rules": {
+      "$ref": "./activation_rules_schema.json"
+    },
+    "golden_examples": {
+      "type": "array",
+      "items": {
+        "$ref": "./golden_example_schema.json"
+      },
+      "minItems": 0,
+      "maxItems": 15,
+      "description": "5-15 cas pour eval gating. 0-4 accepté en draft, ≥ 5 requis pour publier."
+    },
+    "status": {
+      "type": "string",
+      "enum": ["draft", "published"],
+      "default": "draft"
+    },
+    "created_by": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "verified_by": {
+      "type": ["string", "null"],
+      "format": "uuid",
+      "description": "Doit être différent de created_by (4-yeux)."
+    },
+    "valid_from": {
+      "type": "string",
+      "format": "date"
+    },
+    "valid_to": {
+      "type": ["string", "null"],
+      "format": "date"
+    },
+    "superseded_by": {
+      "type": ["string", "null"],
+      "format": "uuid"
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "updated_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "additionalProperties": false
+}
