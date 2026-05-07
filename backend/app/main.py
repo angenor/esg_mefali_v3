@@ -9,6 +9,11 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
 
+# F03 — enregistre le listener `before_flush` global du mixin Auditable
+# (effet de bord à l'import). Doit être importé avant tout autre module
+# qui crée des sessions SQLAlchemy.
+import app.core.auditable  # noqa: F401, E402
+
 logger = logging.getLogger(__name__)
 
 # Référence globale au graphe compilé LangGraph
@@ -55,6 +60,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# F03 — Middleware admin : SET source_of_change="admin" sur /api/admin/*
+from app.modules.admin.middleware import AdminAuditContextMiddleware  # noqa: E402
+
+app.add_middleware(AdminAuditContextMiddleware)
+
 # Inclusion des routers
 from app.api.auth import router as auth_router  # noqa: E402
 from app.api.chat import router as chat_router  # noqa: E402
@@ -74,6 +84,11 @@ from app.modules.account.router import router as account_router  # noqa: E402
 from app.modules.admin.router import router as admin_router  # noqa: E402
 # F01 — Catalogue de sources verifiees.
 from app.modules.sources.router import router as sources_router  # noqa: E402
+# F03 — Audit log
+from app.modules.audit.router import (  # noqa: E402
+    admin_router as audit_admin_router,
+    router as audit_router,
+)
 
 app.include_router(auth_router, prefix="/api/auth", tags=["auth"])
 app.include_router(chat_router, prefix="/api/chat", tags=["chat"])
@@ -90,4 +105,7 @@ app.include_router(action_plan_router, prefix="/api/action-plan", tags=["action-
 app.include_router(account_router, prefix="/api/account", tags=["account"])
 app.include_router(admin_router, prefix="/api/admin", tags=["admin"])
 app.include_router(sources_router, prefix="/api/sources", tags=["sources"])
+# F03 — Audit log endpoints PME et admin.
+app.include_router(audit_router, prefix="/api/audit", tags=["audit"])
+app.include_router(audit_admin_router, prefix="/api/admin/audit", tags=["admin", "audit"])
 app.include_router(health_router, prefix="/api", tags=["health"])

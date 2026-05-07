@@ -9,11 +9,28 @@ from langchain_core.runnables import RunnableConfig
 from langchain_openai import ChatOpenAI
 from sqlalchemy.exc import SQLAlchemyError
 
+from app.core.audit_context import source_of_change_scope
 from app.core.config import settings
 from app.graph.state import ConversationState
 from app.graph.tool_selector import select_tools_for_node
 from app.modules.company.service import FIELD_LABELS, IDENTITY_FIELDS
 from app.prompts.system import build_system_prompt
+
+
+def _with_llm_source(node_func):  # type: ignore[no-untyped-def]
+    """Décorateur qui ouvre un scope ``source_of_change="llm"`` autour d'un node.
+
+    Toutes les mutations effectuées dans le corps du node (et ses tools, qui
+    héritent de la ContextVar Python) seront tracées comme provenant du LLM.
+    """
+    import functools
+
+    @functools.wraps(node_func)
+    async def wrapper(*args, **kwargs):  # type: ignore[no-untyped-def]
+        with source_of_change_scope("llm"):
+            return await node_func(*args, **kwargs)
+
+    return wrapper
 
 logger = logging.getLogger(__name__)
 
@@ -710,6 +727,7 @@ async def analyze_document_for_chat(
         return document, analysis
 
 
+@_with_llm_source
 async def document_node(state: ConversationState) -> ConversationState:
     """Nœud document : analyse le document uploadé et injecte le résumé.
 
@@ -796,6 +814,7 @@ async def _fetch_rag_context_for_esg(
         return ""
 
 
+@_with_llm_source
 async def esg_scoring_node(
     state: ConversationState,
     config: RunnableConfig | None = None,
@@ -963,6 +982,7 @@ async def esg_scoring_node(
     }
 
 
+@_with_llm_source
 async def carbon_node(
     state: ConversationState,
     config: RunnableConfig | None = None,
@@ -1148,6 +1168,7 @@ async def _fetch_rag_context_for_financing(query: str) -> str:
         return ""
 
 
+@_with_llm_source
 async def financing_node(
     state: ConversationState,
     config: RunnableConfig | None = None,
@@ -1336,6 +1357,7 @@ async def _fetch_credit_scoring_context(user_id: str | None) -> tuple[str, list[
         return "Erreur lors de la recuperation du score.", []
 
 
+@_with_llm_source
 async def credit_node(
     state: ConversationState,
     config: RunnableConfig | None = None,
@@ -1417,6 +1439,7 @@ async def credit_node(
     }
 
 
+@_with_llm_source
 async def chat_node(
     state: ConversationState,
     config: RunnableConfig | None = None,
@@ -1515,6 +1538,7 @@ async def chat_node(
     return {"messages": [response]}
 
 
+@_with_llm_source
 async def profiling_node(state: ConversationState) -> ConversationState:
     """Nœud de profilage : extrait les infos d'entreprise du message.
 
@@ -1553,6 +1577,7 @@ async def profiling_node(state: ConversationState) -> ConversationState:
     return {"profile_updates": profile_updates}
 
 
+@_with_llm_source
 async def application_node(
     state: ConversationState,
     config: RunnableConfig | None = None,
@@ -1626,6 +1651,7 @@ async def application_node(
     }
 
 
+@_with_llm_source
 async def action_plan_node(
     state: ConversationState,
     config: RunnableConfig | None = None,

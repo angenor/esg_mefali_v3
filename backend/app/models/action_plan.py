@@ -22,6 +22,7 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from app.core.auditable import Auditable
 from app.models.base import Base, TimestampMixin, UUIDMixin
 
 
@@ -115,7 +116,7 @@ class BadgeType(str, enum.Enum):
 # --- Modeles ---
 
 
-class ActionPlan(UUIDMixin, TimestampMixin, Base):
+class ActionPlan(Auditable, UUIDMixin, TimestampMixin, Base):
     """Plan d'action personnalise d'un utilisateur."""
 
     __tablename__ = "action_plans"
@@ -162,7 +163,7 @@ class ActionPlan(UUIDMixin, TimestampMixin, Base):
     )
 
 
-class ActionItem(UUIDMixin, TimestampMixin, Base):
+class ActionItem(Auditable, UUIDMixin, TimestampMixin, Base):
     """Action concrete d'un plan d'action."""
 
     __tablename__ = "action_items"

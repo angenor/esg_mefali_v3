@@ -16,6 +16,7 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
+from app.core.auditable import Auditable
 from app.models.base import Base, TimestampMixin, UUIDMixin
 
 
@@ -35,7 +36,7 @@ class SectorEnum(str, enum.Enum):
     autre = "autre"
 
 
-class CompanyProfile(UUIDMixin, TimestampMixin, Base):
+class CompanyProfile(Auditable, UUIDMixin, TimestampMixin, Base):
     """Profil d'entreprise lié à un utilisateur (relation un-à-un)."""
 
     __tablename__ = "company_profiles"
