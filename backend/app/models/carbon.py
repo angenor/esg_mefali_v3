@@ -8,6 +8,7 @@ from sqlalchemy import DateTime, Enum, Float, ForeignKey, Integer, JSON, String,
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from app.core.auditable import Auditable
 from app.models.base import Base, TimestampMixin, UUIDMixin
 
 
@@ -21,7 +22,7 @@ class CarbonStatusEnum(str, enum.Enum):
 VALID_CATEGORIES = ("energy", "transport", "waste", "industrial", "agriculture")
 
 
-class CarbonAssessment(UUIDMixin, TimestampMixin, Base):
+class CarbonAssessment(Auditable, UUIDMixin, TimestampMixin, Base):
     """Bilan carbone annuel pour une entreprise."""
 
     __tablename__ = "carbon_assessments"

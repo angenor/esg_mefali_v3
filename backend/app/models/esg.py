@@ -7,6 +7,7 @@ from sqlalchemy import Enum, Float, ForeignKey, Integer, JSON, String
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
+from app.core.auditable import Auditable
 from app.models.base import Base, TimestampMixin, UUIDMixin
 
 
@@ -18,7 +19,7 @@ class ESGStatusEnum(str, enum.Enum):
     completed = "completed"
 
 
-class ESGAssessment(UUIDMixin, TimestampMixin, Base):
+class ESGAssessment(Auditable, UUIDMixin, TimestampMixin, Base):
     """Evaluation ESG complete pour une entreprise."""
 
     __tablename__ = "esg_assessments"

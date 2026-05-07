@@ -43,6 +43,9 @@ from app.models.source import (  # noqa: F401
     Source,
     VerificationStatus,
 )
+
+# F03 — Audit log append-only
+from app.models.audit_log import AuditLog  # noqa: F401
 from app.models.indicator import (  # noqa: F401
     Criterion,
     Formula,

@@ -8,6 +8,7 @@ from sqlalchemy import DateTime, Enum, ForeignKey, Index, JSON, String, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from app.core.auditable import Auditable
 from app.models.base import Base, TimestampMixin, UUIDMixin
 
 
@@ -74,7 +75,7 @@ VALID_TRANSITIONS: dict[str, list[str]] = {
 # --- Modele ---
 
 
-class FundApplication(UUIDMixin, TimestampMixin, Base):
+class FundApplication(Auditable, UUIDMixin, TimestampMixin, Base):
     """Dossier de candidature a un fonds vert."""
 
     __tablename__ = "fund_applications"

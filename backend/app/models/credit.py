@@ -20,6 +20,7 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from app.core.auditable import Auditable
 from app.models.base import Base, UUIDMixin
 
 
@@ -46,7 +47,7 @@ class ConfidenceLabel(str, enum.Enum):
 # --- Modeles ---
 
 
-class CreditScore(UUIDMixin, Base):
+class CreditScore(Auditable, UUIDMixin, Base):
     """Score de credit vert genere pour un utilisateur, versionne."""
 
     __tablename__ = "credit_scores"
