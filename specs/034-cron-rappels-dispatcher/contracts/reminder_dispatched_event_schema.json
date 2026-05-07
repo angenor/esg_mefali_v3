@@ -1,0 +1,108 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://esg-mefali.app/schemas/reminder_dispatched_event.json",
+  "title": "ReminderDispatchedEvent",
+  "description": "F19 — Payload SSE event 'reminder_due' emitted when dispatch_reminders marks a reminder as sent.",
+  "type": "object",
+  "required": ["type", "payload"],
+  "properties": {
+    "type": {
+      "type": "string",
+      "const": "reminder_due"
+    },
+    "payload": {
+      "type": "object",
+      "required": ["reminder_id", "type", "message", "scheduled_at"],
+      "additionalProperties": false,
+      "properties": {
+        "reminder_id": {
+          "type": "string",
+          "format": "uuid",
+          "description": "UUID du Reminder dispatché"
+        },
+        "type": {
+          "type": "string",
+          "enum": [
+            "action_due",
+            "assessment_renewal",
+            "fund_deadline",
+            "intermediary_followup",
+            "attestation_renewal",
+            "custom"
+          ]
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500
+        },
+        "scheduled_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "ISO 8601 UTC du scheduled_at du reminder"
+        },
+        "sent_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "ISO 8601 UTC du moment du dispatch (sent_at)"
+        },
+        "metadata": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "entity_id": {
+              "type": "string",
+              "format": "uuid",
+              "description": "UUID de l'entité métier liée (fund, assessment, application, attestation)"
+            },
+            "entity_type": {
+              "type": "string",
+              "enum": ["fund", "offer", "assessment", "application", "attestation", "action_item", null]
+            },
+            "action_url": {
+              "type": "string",
+              "description": "Frontend route à naviguer au click (ex /financing/{fund_id})"
+            },
+            "intermediary_name": {
+              "type": "string",
+              "description": "Nom de l'intermédiaire pour les reminders silence_radio (UX)"
+            }
+          }
+        }
+      }
+    }
+  },
+  "examples": [
+    {
+      "type": "reminder_due",
+      "payload": {
+        "reminder_id": "550e8400-e29b-41d4-a716-446655440000",
+        "type": "fund_deadline",
+        "message": "Le fonds GCF clôt les candidatures dans 30 jours",
+        "scheduled_at": "2026-05-07T08:00:00Z",
+        "sent_at": "2026-05-07T08:00:15Z",
+        "metadata": {
+          "entity_id": "f1234567-89ab-cdef-0123-456789abcdef",
+          "entity_type": "fund",
+          "action_url": "/financing/f1234567-89ab-cdef-0123-456789abcdef"
+        }
+      }
+    },
+    {
+      "type": "reminder_due",
+      "payload": {
+        "reminder_id": "660e8400-e29b-41d4-a716-446655440001",
+        "type": "intermediary_followup",
+        "message": "Aucune activité sur votre dossier depuis 14 jours. Relancez l'intermédiaire BOAD.",
+        "scheduled_at": "2026-05-07T09:00:00Z",
+        "sent_at": "2026-05-07T09:05:00Z",
+        "metadata": {
+          "entity_id": "a9876543-21fe-dcba-9876-543210fedcba",
+          "entity_type": "application",
+          "action_url": "/applications/a9876543-21fe-dcba-9876-543210fedcba",
+          "intermediary_name": "BOAD"
+        }
+      }
+    }
+  ]
+}

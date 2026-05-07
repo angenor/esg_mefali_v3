@@ -82,6 +82,38 @@ class Settings(BaseSettings):
     # Délai de grâce avant purge effective d'un compte supprimé (jours).
     account_deletion_grace_period_days: int = 30
 
+    # F19 — Cron Dispatcher Rappels (APScheduler MVP single-process).
+    # Active l'enregistrement du scheduler dans le lifespan FastAPI.
+    apscheduler_enabled: bool = False
+    # Active les endpoints debug ``/api/admin/scheduler/*``.
+    admin_debug_scheduler: bool = False
+    # Délai (j) sans activité avant un reminder ``intermediary_followup``.
+    silence_radio_delay_days: int = 14
+    # Délai (j) avant l'expiration d'une évaluation ESG (renewal J-30).
+    assessment_renewal_grace_days: int = 30
+    # Délai (j) avant l'expiration d'une attestation (renewal J-30).
+    attestation_expiration_grace_days: int = 30
+    # Liste des jours J-N pour les deadlines (CSV : "30,7,1").
+    deadline_reminder_days: str = "30,7,1"
+    # Limite par batch pour le dispatcher (FOR UPDATE SKIP LOCKED).
+    dispatch_batch_limit: int = 100
+    # Délai (j) après quoi un reminder ``sent=true`` est archivé.
+    purge_old_reminders_after_days: int = 90
+
+    @property
+    def deadline_reminder_days_list(self) -> list[int]:
+        """Parse la chaîne CSV ``deadline_reminder_days`` en liste d'entiers."""
+        if not self.deadline_reminder_days:
+            return [30, 7, 1]
+        try:
+            return [
+                int(x.strip())
+                for x in self.deadline_reminder_days.split(",")
+                if x.strip()
+            ]
+        except ValueError:
+            return [30, 7, 1]
+
 
 settings = Settings()
 # F05 — fallback de la clé de signature export URL sur secret_key si non définie.
