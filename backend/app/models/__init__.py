@@ -63,3 +63,7 @@ from app.models.exchange_rate import ExchangeRate  # noqa: F401
 
 # F12 — Mémoire contextuelle pgvector (chunks de messages indexés pour recherche sémantique)
 from app.models.message_chunk import MessageChunk  # noqa: F401
+
+# F06 — Entité Projet Vert (Module 1.3)
+from app.models.project import Project  # noqa: F401
+from app.models.project_document import ProjectDocument  # noqa: F401

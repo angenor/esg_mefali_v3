@@ -1,64 +1,61 @@
 <script setup lang="ts">
-import { useCompanyProfile } from '~/composables/useCompanyProfile'
-import { useCompanyStore } from '~/stores/company'
+import { computed } from 'vue'
 
 definePageMeta({
   layout: 'default',
 })
 
-const companyStore = useCompanyStore()
-const { loading, error, fetchProfile, updateProfile, fetchCompletion } = useCompanyProfile()
+const route = useRoute()
 
-const identityCompletion = computed(() => companyStore.completion?.identity_completion ?? 0)
-const esgCompletion = computed(() => companyStore.completion?.esg_completion ?? 0)
-const overallCompletion = computed(() => companyStore.completion?.overall_completion ?? 0)
+const tabs = [
+  { key: 'company', label: 'Entreprise', path: '/profile/company' },
+  { key: 'projects', label: 'Mes Projets', path: '/profile/projects' },
+] as const
 
-async function handleFieldUpdate(field: string, value: string | number | boolean | null) {
-  await updateProfile({ [field]: value })
-}
+const activeTab = computed(() => {
+  if (route.path.startsWith('/profile/projects')) return 'projects'
+  return 'company'
+})
 
-onMounted(async () => {
-  await fetchProfile()
-  await fetchCompletion()
+// F06 — Redirection automatique vers /profile/company quand on est sur /profile
+onMounted(() => {
+  if (route.path === '/profile' || route.path === '/profile/') {
+    navigateTo('/profile/company', { replace: true })
+  }
 })
 </script>
 
 <template>
   <div class="min-h-screen bg-surface-bg dark:bg-surface-dark-bg">
-    <div class="max-w-2xl mx-auto px-4 py-8">
-      <!-- En-tête -->
-      <div class="mb-8">
-        <h1 class="text-2xl font-bold text-gray-900 dark:text-surface-dark-text">
-          Profil Entreprise
-        </h1>
-        <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
-          Completez votre profil pour recevoir des conseils ESG personnalises.
-        </p>
-      </div>
-
-      <!-- Erreur -->
-      <div
-        v-if="error"
-        class="mb-6 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg"
+    <div class="max-w-5xl mx-auto px-4 py-8">
+      <h1
+        class="text-2xl font-bold text-gray-900 dark:text-surface-dark-text mb-6"
       >
-        <p class="text-sm text-red-700 dark:text-red-400">{{ error }}</p>
-      </div>
+        Profil
+      </h1>
+      <!-- Onglets -->
+      <nav
+        class="flex gap-1 border-b border-gray-200 dark:border-dark-border mb-8"
+        role="tablist"
+      >
+        <NuxtLink
+          v-for="tab in tabs"
+          :key="tab.key"
+          :to="tab.path"
+          role="tab"
+          :aria-selected="activeTab === tab.key"
+          class="px-4 py-2.5 text-sm font-medium border-b-2 transition-colors"
+          :class="
+            activeTab === tab.key
+              ? 'border-brand-green text-brand-green dark:text-emerald-400'
+              : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-surface-text dark:hover:text-surface-dark-text'
+          "
+        >
+          {{ tab.label }}
+        </NuxtLink>
+      </nav>
 
-      <!-- Chargement initial -->
-      <div v-if="!companyStore.profile && loading" class="flex items-center justify-center py-16">
-        <div class="w-8 h-8 border-3 border-brand-green border-t-transparent rounded-full animate-spin" />
-      </div>
-
-      <!-- Formulaire -->
-      <ProfileForm
-        v-else-if="companyStore.profile"
-        :profile="companyStore.profile"
-        :identity-completion="identityCompletion"
-        :esg-completion="esgCompletion"
-        :overall-completion="overallCompletion"
-        :loading="loading"
-        @update="handleFieldUpdate"
-      />
+      <NuxtPage />
     </div>
   </div>
 </template>

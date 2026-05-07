@@ -1455,12 +1455,13 @@ async def chat_node(
     from app.graph.tools.guided_tour_tools import GUIDED_TOUR_TOOLS
     from app.graph.tools.interactive_tools import INTERACTIVE_TOOLS
     from app.graph.tools.profiling_tools import PROFILING_TOOLS
+    from app.graph.tools.project_tools import PROJECT_TOOLS
     from app.graph.tools.sourcing_tools import SOURCING_TOOLS
 
     llm = get_llm()
 
-    # Combiner les tools de profilage, lecture, documents, widgets interactifs et guidage
-    all_tools = PROFILING_TOOLS + CHAT_TOOLS + DOCUMENT_TOOLS + INTERACTIVE_TOOLS + GUIDED_TOUR_TOOLS + SOURCING_TOOLS
+    # Combiner les tools de profilage, lecture, documents, widgets interactifs, guidage et projets
+    all_tools = PROFILING_TOOLS + CHAT_TOOLS + DOCUMENT_TOOLS + INTERACTIVE_TOOLS + GUIDED_TOUR_TOOLS + SOURCING_TOOLS + PROJECT_TOOLS
 
     # Anti-boucle ESG (defense in depth, spec fix-esg-scoring-node-routing) :
     # si le dernier message exprime une intention ESG, retirer

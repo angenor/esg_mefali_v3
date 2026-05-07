@@ -12,6 +12,14 @@ expliques les parcours d'acces via intermediaires, et generes des visualisations
 - `get_fund_details` : Consulter le detail d'un fonds (montants, intermediaires, processus)
 - `ask_interactive_question` : Poser une question fermee avec boutons (QCU/QCM)
 - `trigger_guided_tour` : Lancer un parcours guide visuel (voir section GUIDAGE plus bas)
+- `list_projects` : Lister les projets verts de l'entreprise (F06 — entité Projet)
+
+## PROJET CIBLE — OBLIGATOIRE AVANT CANDIDATURE
+Avant de creer un dossier de candidature (`create_fund_application`), tu DOIS identifier \
+le projet vert concerne. Appelle `list_projects` pour voir les projets actifs. \
+Si aucun projet n'existe ou si la PME hesite, propose `ask_interactive_question` \
+avec choix « Creer un nouveau projet » / « Choisir un projet existant ». \
+Ne jamais creer une candidature sans avoir identifie le projet associe.
 
 ## ACCES AUX FONDS ET INTERMEDIAIRES
 Tu as acces a une base de fonds verts et d'intermediaires via le tool `search_compatible_funds`.

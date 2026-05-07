@@ -110,6 +110,17 @@ class FundApplication(Auditable, UUIDMixin, TimestampMixin, Base):
         ForeignKey("intermediaries.id", ondelete="SET NULL"),
         nullable=True,
     )
+    # F06 — Lien vers Project (NOT NULL post-migration).
+    # NOTE : nullable=True dans le modèle pour permettre les tests legacy
+    # (SQLite in-memory, fixtures qui ne créent pas de projet).
+    # En base de données PostgreSQL post-migration 025, la colonne est
+    # NOT NULL après backfill (cf. alembic/versions/025_create_projects.py).
+    project_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("projects.id", ondelete="RESTRICT"),
+        nullable=True,
+        index=True,
+    )
     target_type: Mapped[TargetType] = mapped_column(
         Enum(TargetType, name="target_type_app_enum", create_constraint=True),
         nullable=False,
@@ -151,4 +162,8 @@ class FundApplication(Auditable, UUIDMixin, TimestampMixin, Base):
     fund: Mapped["Fund"] = relationship("Fund", lazy="selectin")
     intermediary: Mapped["Intermediary | None"] = relationship(
         "Intermediary", lazy="selectin"
+    )
+    # F06 — Relation vers Project
+    project: Mapped["Project | None"] = relationship(
+        "Project", lazy="selectin",
     )

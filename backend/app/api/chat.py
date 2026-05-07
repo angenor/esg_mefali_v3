@@ -154,6 +154,7 @@ async def stream_graph_events(
     guidance_stats: dict | None = None,
     active_entities: dict | None = None,
     account_id: uuid.UUID | None = None,
+    user_projects: list[dict] | None = None,
 ) -> AsyncGenerator[dict, None]:
     """Streamer les événements du graphe LangGraph via astream_events().
 
@@ -196,6 +197,8 @@ async def stream_graph_events(
         "current_page": current_page,
         "guidance_stats": guidance_stats,
         "active_entities": active_entities,
+        # F06 — Projets actifs (statut ≠ cancelled/closed) injectés dans le state
+        "user_projects": user_projects or [],
     }
 
     config = {
@@ -381,6 +384,39 @@ async def _load_profile_for_state(
             profile_dict[field] = value.value if hasattr(value, "value") else value
 
     return profile_dict if profile_dict else None
+
+
+async def _load_full_context_for_state(
+    db: AsyncSession, user_id: uuid.UUID,
+) -> dict[str, list | dict | None]:
+    """F06 — Charger profil + projets actifs pour le state LangGraph.
+
+    Retourne un dict ``{"profile": ..., "projects": [...]}``.
+    Les projets actifs sont ceux dont le statut n'est pas ``cancelled``/``closed``
+    (statut in {draft, seeking_funding, funded, in_execution}). Le LLM peut
+    ainsi être conscient des projets existants à chaque tour de conversation.
+    """
+    from app.models.user import User as _User
+    from app.modules.projects.service import get_active_projects_for_user
+
+    profile = await _load_profile_for_state(db, user_id)
+
+    # Résoudre l'account_id du user pour charger ses projets.
+    user_result = await db.execute(
+        select(_User).where(_User.id == user_id)
+    )
+    user_obj = user_result.scalar_one_or_none()
+    projects: list = []
+    if user_obj is not None and user_obj.account_id is not None:
+        try:
+            projects = await get_active_projects_for_user(
+                db, account_id=user_obj.account_id, limit=20,
+            )
+        except Exception:
+            logger.exception("Erreur chargement projets actifs")
+            projects = []
+
+    return {"profile": profile, "projects": projects}
 
 
 def format_relative_time(
@@ -921,8 +957,10 @@ async def send_message(
             "user_id": str(user_id),
         }
 
-    # Charger le profil et la mémoire contextuelle pour le prompt
-    user_profile = await _load_profile_for_state(db, user_id)
+    # F06 — Charger le profil + projets actifs et la mémoire contextuelle pour le prompt
+    full_context = await _load_full_context_for_state(db, user_id)
+    user_profile = full_context.get("profile")
+    user_projects_state = full_context.get("projects") or []
     context_memory = await _load_context_memory(db, user_id, conversation_id=conv_id)
 
     async def generate_sse() -> AsyncGenerator[str, None]:
@@ -977,6 +1015,7 @@ async def send_message(
                     guidance_stats=parsed_guidance_stats,
                     active_entities=parsed_active_entities,
                     account_id=current_user.account_id,
+                    user_projects=user_projects_state,
                 ):
                     event_type = event.get("type")
 

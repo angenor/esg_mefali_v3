@@ -134,6 +134,8 @@ def build_graph() -> StateGraph:
     from app.graph.tools.guided_tour_tools import GUIDED_TOUR_TOOLS
     from app.graph.tools.interactive_tools import INTERACTIVE_TOOLS
     from app.graph.tools.profiling_tools import PROFILING_TOOLS
+    # F06 — Tools projets verts (list/get/create/update/delete/duplicate/link)
+    from app.graph.tools.project_tools import PROJECT_TOOLS
 
     graph = StateGraph(ConversationState)
 
@@ -149,7 +151,7 @@ def build_graph() -> StateGraph:
     # MEMORY_TOOLS (recall_history) injecte partout (F12).
     # Le tool doit figurer AUSSI dans le ToolNode (et pas seulement bind_tools cote LLM),
     # sinon l'executeur rejette le tool_call et le LLM hallucine "tool indisponible".
-    create_tool_loop(graph, "chat", chat_node, tools=PROFILING_TOOLS + CHAT_TOOLS + DOCUMENT_TOOLS + INTERACTIVE_TOOLS + GUIDED_TOUR_TOOLS + MEMORY_TOOLS)
+    create_tool_loop(graph, "chat", chat_node, tools=PROFILING_TOOLS + CHAT_TOOLS + DOCUMENT_TOOLS + INTERACTIVE_TOOLS + GUIDED_TOUR_TOOLS + MEMORY_TOOLS + PROJECT_TOOLS)
     create_tool_loop(graph, "esg_scoring", esg_scoring_node, tools=ESG_TOOLS + INTERACTIVE_TOOLS + GUIDED_TOUR_TOOLS + MEMORY_TOOLS)
     create_tool_loop(graph, "carbon", carbon_node, tools=CARBON_TOOLS + INTERACTIVE_TOOLS + GUIDED_TOUR_TOOLS + MEMORY_TOOLS)
     create_tool_loop(graph, "financing", financing_node, tools=FINANCING_TOOLS + INTERACTIVE_TOOLS + GUIDED_TOUR_TOOLS + MEMORY_TOOLS)
