@@ -1,0 +1,120 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://esg-mefali.com/schemas/golden_example.json",
+  "title": "GoldenExample",
+  "description": "Cas de test calibré pour eval gating de Skill. Format aligné avec F22 golden_set.json pour réutiliser le runner LLM eval.",
+  "type": "object",
+  "required": ["id", "category", "context", "user_message", "expected"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 100,
+      "description": "Identifiant unique du cas (ex: 'gcf-boad-init-01')."
+    },
+    "category": {
+      "type": "string",
+      "enum": [
+        "diagnostic_esg",
+        "scoring_referentiel",
+        "carbon_calc",
+        "dossier",
+        "intermediaire",
+        "attestation",
+        "credit_score",
+        "conversational"
+      ]
+    },
+    "context": {
+      "type": "object",
+      "properties": {
+        "current_page": {
+          "type": ["string", "null"],
+          "description": "Page slug du contexte (ex: '/esg', null)."
+        },
+        "active_module": {
+          "type": ["string", "null"],
+          "enum": [null, "esg_scoring", "carbon", "financing", "application", "credit", "action_plan"]
+        },
+        "user_profile": {
+          "type": "object",
+          "description": "Payload partiel du profil entreprise (sector, country, etc.).",
+          "additionalProperties": true
+        },
+        "offer_id": {
+          "type": ["string", "null"],
+          "format": "uuid"
+        },
+        "fund_id": {
+          "type": ["string", "null"],
+          "format": "uuid"
+        },
+        "intermediary_id": {
+          "type": ["string", "null"],
+          "format": "uuid"
+        }
+      },
+      "additionalProperties": false
+    },
+    "user_message": {
+      "type": "string",
+      "minLength": 5,
+      "description": "Message utilisateur simulé."
+    },
+    "expected": {
+      "type": "object",
+      "required": ["tool_called"],
+      "properties": {
+        "tool_called": {
+          "oneOf": [
+            { "type": "string", "pattern": "^[a-z_][a-z0-9_]*$" },
+            {
+              "type": "array",
+              "items": { "type": "string", "pattern": "^[a-z_][a-z0-9_]*$" },
+              "minItems": 1,
+              "description": "Whitelist de tools acceptés (matching tolérant)."
+            }
+          ]
+        },
+        "payload_contains": {
+          "type": "object",
+          "description": "Subset attendu dans tool_args. Matching: clés-valeurs présentes (autres ignorées).",
+          "additionalProperties": true
+        },
+        "fallback_acceptable": {
+          "type": "boolean",
+          "default": false,
+          "description": "Si true, un retour fallback {success:false,...} est compté comme succès."
+        }
+      },
+      "additionalProperties": false
+    },
+    "tags": {
+      "type": "array",
+      "items": { "type": "string" },
+      "default": []
+    }
+  },
+  "additionalProperties": false,
+  "examples": [
+    {
+      "id": "gcf-boad-init-01",
+      "category": "dossier",
+      "context": {
+        "current_page": "/applications",
+        "active_module": "application",
+        "fund_id": "550e8400-e29b-41d4-a716-446655440000",
+        "intermediary_id": "550e8400-e29b-41d4-a716-446655440001"
+      },
+      "user_message": "Je veux préparer mon dossier GCF via BOAD pour mon projet solaire",
+      "expected": {
+        "tool_called": "create_fund_application",
+        "payload_contains": {
+          "fund_id": "550e8400-e29b-41d4-a716-446655440000",
+          "intermediary_id": "550e8400-e29b-41d4-a716-446655440001"
+        }
+      },
+      "tags": ["initialisation", "GCF", "BOAD"]
+    }
+  ]
+}
