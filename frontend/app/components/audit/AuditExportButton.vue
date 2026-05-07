@@ -41,7 +41,7 @@ async function doExport(format: 'csv' | 'json') {
       :disabled="exporting"
       :aria-expanded="open"
       aria-haspopup="menu"
-      data-test="export-button"
+      data-testid="export-button"
       @click="open = !open"
     >
       {{ exporting ? 'Export en cours...' : 'Exporter' }}
@@ -55,7 +55,7 @@ async function doExport(format: 'csv' | 'json') {
       <button
         type="button"
         role="menuitem"
-        data-test="export-csv"
+        data-testid="export-csv"
         class="block w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 dark:text-surface-dark-text dark:hover:bg-dark-hover"
         @click="doExport('csv')"
       >
@@ -64,7 +64,7 @@ async function doExport(format: 'csv' | 'json') {
       <button
         type="button"
         role="menuitem"
-        data-test="export-json"
+        data-testid="export-json"
         class="block w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 dark:text-surface-dark-text dark:hover:bg-dark-hover"
         @click="doExport('json')"
       >

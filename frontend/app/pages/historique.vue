@@ -8,9 +8,10 @@ import { useAuditLog } from '~/composables/useAuditLog'
 import { useAuditStore } from '~/stores/audit'
 import type { AuditFilters as AuditFiltersType } from '~/types/audit'
 
-definePageMeta({
-  middleware: 'auth',
-})
+// Le middleware d'authentification est applique globalement via
+// `app/middleware/auth.global.ts` ; il ne doit pas etre reference par nom
+// dans `definePageMeta` (sinon Nuxt leve "Unknown route middleware: 'auth'"
+// car les middlewares globaux ne sont pas exposes au registre nomme).
 
 const auditStore = useAuditStore()
 const { fetchMe } = useAuditLog()
@@ -58,7 +59,7 @@ function prevPage() {
         <div>
           <h1
             class="text-2xl font-bold text-gray-900 dark:text-surface-dark-text"
-            data-test="historique-title"
+            data-testid="historique-title"
           >
             Historique d'activité
           </h1>
