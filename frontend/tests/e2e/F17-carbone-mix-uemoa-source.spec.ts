@@ -191,8 +191,9 @@ test.describe('F17 — Carbone Mix UEMOA + Facteurs Sources + Categorie Achats',
     await mockCarbonRoutes(page, SUMMARY_CI)
     await page.goto(`/carbon/results?id=${SUMMARY_CI.assessment_id}`)
     await expect(page.locator('h1')).toContainText('Resultats Empreinte Carbone')
-    // Le total est affiche.
-    await expect(page.getByText('0.5', { exact: false })).toBeVisible()
+    // Le total est affiche dans le <p class="text-5xl"> dedie (scope strict pour eviter
+    // collision avec le <style> Mermaid et les ventilations par categorie).
+    await expect(page.locator('p.text-5xl').getByText('0.5', { exact: false })).toBeVisible()
   })
 
   test('Scenario 2 — SN electricite affiche un total distinct', async ({ page }) => {
@@ -201,7 +202,8 @@ test.describe('F17 — Carbone Mix UEMOA + Facteurs Sources + Categorie Achats',
     await page.goto(`/carbon/results?id=${SUMMARY_CI.assessment_id}`)
     await expect(page.locator('h1')).toContainText('Resultats Empreinte Carbone')
     // 0.540 (SN) > 0.456 (CI), donc total different.
-    await expect(page.getByText('0.5', { exact: false })).toBeVisible()
+    // Scope strict sur <p class="text-5xl"> pour eviter strict-mode locator violation.
+    await expect(page.locator('p.text-5xl').getByText('0.5', { exact: false })).toBeVisible()
   })
 
   test('Scenario 3 — Achats ciment apparait dans la ventilation', async ({ page }) => {
