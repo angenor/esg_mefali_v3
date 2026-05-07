@@ -31,6 +31,7 @@ const {
   activeToolCall,
   currentInteractiveQuestion,
   interactiveQuestionsByMessage,
+  visualizationBlocksByMessage,
   sendMessage,
   submitInteractiveAnswer,
   onInteractiveQuestionAbandoned,
@@ -598,6 +599,7 @@ watch(
               :is-streaming="isStreaming && idx === messages.length - 1 && msg.role === 'assistant'"
               :document-progress="isStreaming && idx === messages.length - 1 && msg.role === 'assistant' ? documentProgress : null"
               :interactive-question="interactiveQuestionsByMessage[msg.id] || (idx === messages.length - 1 && msg.role === 'assistant' && currentInteractiveQuestion?.id ? currentInteractiveQuestion : null)"
+              :visualization-blocks="visualizationBlocksByMessage[msg.id]"
             />
           </template>
         </div>

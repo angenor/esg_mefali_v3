@@ -55,6 +55,8 @@ const mockReportSuggestion = ref(null)
 const mockActiveToolCall = ref<{ name: string; args: Record<string, unknown>; callId: string } | null>(null)
 const mockCurrentInteractiveQuestion = ref<InteractiveQuestion | null>(null)
 const mockInteractiveQuestionsByMessage = ref<Record<string, InteractiveQuestion>>({})
+// F11 — visualization blocks par message
+const mockVisualizationBlocksByMessage = ref<Record<string, unknown[]>>({})
 // Story 7.3 — indicateur de connexion SSE exposee par useChat
 const mockIsConnected = ref(true)
 
@@ -79,6 +81,7 @@ vi.mock('~/composables/useChat', () => ({
     activeToolCall: mockActiveToolCall,
     currentInteractiveQuestion: mockCurrentInteractiveQuestion,
     interactiveQuestionsByMessage: mockInteractiveQuestionsByMessage,
+    visualizationBlocksByMessage: mockVisualizationBlocksByMessage,
     sendMessage: mockSendMessage,
     submitInteractiveAnswer: mockSubmitInteractiveAnswer,
     onInteractiveQuestionAbandoned: mockOnInteractiveQuestionAbandoned,

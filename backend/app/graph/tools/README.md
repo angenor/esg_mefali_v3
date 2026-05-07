@@ -152,3 +152,40 @@ Lit les 50 dernieres conversations de `tool_call_logs.tools_offered`, agrege
 par noeud LangGraph et ecrit un rapport markdown dans
 `backend/tools/_tools_offered_report.md`. Code de sortie 1 si une conversation
 depasse `MAX_TOOLS_PER_TURN`.
+
+## 9. Tools de visualisation typés (F11)
+
+Le module `visualization_tools.py` expose 4 tools de présentation pure (pas de
+mutation) consommés par le frontend pour rendre des composants Vue stylés
+(KPICardBlock, MatchCardBlock, MapBlock, ComparisonTableBlock).
+
+| Tool | Schéma | Usage |
+|------|--------|-------|
+| `show_kpi_card` | `KPICardArgs` | Chiffre clé sourcé avec delta |
+| `show_match_card` | `MatchCardArgs` | Carte projet ↔ offre cliquable |
+| `show_map` | `MapArgs` | Carte Leaflet UEMOA avec markers |
+| `show_comparison_table` | `ComparisonTableArgs` | Tableau comparatif 2-5 sujets |
+
+**Règle d'usage** : si un tool typé existe pour un cas (ex: présentation d'un
+chiffre clé), **toujours l'invoquer en priorité** plutôt qu'un fence markdown
+générique. L'arbre de décision complet figure dans `app/prompts/system.py`
+(section "ARBRE DE DÉCISION VISUALISATION").
+
+**Visibilité** :
+- `show_kpi_card` : pages dashboard, esg, carbon, credit
+- `show_match_card` : pages financing, candidatures
+- `show_map` : pages profile, profile_projects, financing
+- `show_comparison_table` : pages financing, candidatures
+
+**Validation** : les payloads sont strictement Pydantic (`extra="forbid"`,
+bornes, enums fermés). En cas de payload invalide, le validator
+`app/graph/validators/payload_invalid.py` demande 1 retry au LLM puis bascule
+sur fallback texte.
+
+**Sourçage F01** : tout chiffre quantitatif dans un KPICard / MatchCard /
+ComparisonValue doit pouvoir référencer une `source_id` (UUID). À défaut,
+invoquer `flag_unsourced` en parallèle.
+
+**Centroïdes UEMOA** : `app/core/visualization_centroids.py` expose 8 entrées
+hardcodées (BEN, BFA, CIV, GNB, MLI, NER, SEN, TGO) pour fallback `show_map`.
+
