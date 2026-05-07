@@ -1,0 +1,57 @@
+{# F13 — Annexe Jinja2 « Sources et références » F01.
+
+Inclus dans esg_report.html via {% include "_appendix_sources.html" %}
+quand include_appendix_sources=true.
+
+Variables disponibles :
+- sources_data : list[dict] avec keys (url, title, publisher, version,
+  date_publi, page, section, verification_status)
+#}
+<section class="appendix appendix-sources">
+  <h2>Annexe — Sources et références</h2>
+  <p class="appendix-intro">
+    Toutes les sources documentaires citées dans ce rapport sont listées
+    ci-dessous avec leur URL, leur date d'extraction et leur statut de
+    vérification (workflow 4-yeux F01).
+  </p>
+
+  {% if sources_data %}
+    <table class="sources-table">
+      <thead>
+        <tr>
+          <th>Titre</th>
+          <th>Éditeur</th>
+          <th>URL</th>
+          <th>Date publi.</th>
+          <th>Page</th>
+          <th>Statut</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for source in sources_data %}
+          <tr>
+            <td>{{ source.title }}</td>
+            <td>{{ source.publisher }}</td>
+            <td>
+              <a href="{{ source.url }}" target="_blank" rel="noopener">
+                {{ source.url }}
+              </a>
+            </td>
+            <td>{{ source.date_publi }}</td>
+            <td>{{ source.page or '-' }}</td>
+            <td>
+              <span class="badge badge-{{ source.verification_status }}">
+                {{ source.verification_status }}
+              </span>
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p class="empty-state">
+      Aucune source citée dans ce rapport. Les indicateurs et seuils utilisés
+      sont issus du référentiel ESG Mefali (vue par défaut).
+    </p>
+  {% endif %}
+</section>

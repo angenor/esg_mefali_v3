@@ -16,6 +16,7 @@ from app.modules.reports.schemas import (
     ReportResponse,
     ReportStatusResponse,
 )
+from app.schemas.referential_score import GenerateReportRequest
 
 router = APIRouter()
 
@@ -29,11 +30,31 @@ UPLOADS_DIR = Path(__file__).resolve().parent.parent.parent.parent / "uploads" /
 )
 async def generate_esg_report(
     assessment_id: uuid.UUID,
+    body: GenerateReportRequest | None = None,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> ReportGenerateResponse:
-    """Lancer la generation d'un rapport PDF pour une evaluation ESG."""
+    """Lancer la generation d'un rapport PDF pour une evaluation ESG.
+
+    F13 — Accepte un body optionnel ``{referentials, include_appendix_sources}``
+    pour générer un rapport multi-référentiels (default ``["mefali"]`` pour
+    rétrocompatibilité F06). Si un code de référentiel est invalide, retourne
+    422 avec la liste des codes valides.
+    """
+    from app.core.constants import REFERENTIAL_CODES_MVP
     from app.modules.reports.service import generate_report
+
+    # Validation des codes de référentiels (FR-033)
+    if body is not None and body.referentials:
+        invalid = [c for c in body.referentials if c not in REFERENTIAL_CODES_MVP]
+        if invalid:
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "message": f"Codes de référentiels invalides : {invalid}",
+                    "valid_codes": list(REFERENTIAL_CODES_MVP),
+                },
+            )
 
     try:
         report = await generate_report(db, assessment_id, current_user.id)

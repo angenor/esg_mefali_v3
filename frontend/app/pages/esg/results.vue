@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { useEsg } from '~/composables/useEsg'
+import { useEsgMultiReferential } from '~/composables/useEsgMultiReferential'
 import { useEsgStore } from '~/stores/esg'
 import { useUiStore } from '~/stores/ui'
-import type { BenchmarkResponse } from '~/types/esg'
+import type { BenchmarkResponse, ReferentialOption } from '~/types/esg'
 
 definePageMeta({
   layout: 'default',
@@ -12,10 +13,50 @@ const route = useRoute()
 const esgStore = useEsgStore()
 const uiStore = useUiStore()
 const { fetchAssessment, fetchScore, fetchBenchmark, loading, error } = useEsg()
+const {
+  getReferentialScores,
+  recomputeScore,
+  generateMultiReferentialReport,
+} = useEsgMultiReferential()
 
 const benchmark = ref<BenchmarkResponse | null>(null)
 const allAssessments = ref<import('~/types/esg').ESGAssessmentSummary[]>([])
 const assessmentId = computed(() => route.query.id as string | undefined)
+
+// F13 — Multi-référentiels
+const showReportModal = ref(false)
+const isGeneratingReport = ref(false)
+
+const referentialOptions = computed<ReferentialOption[]>(() =>
+  esgStore.referentialScores.map((s) => ({
+    code: s.referential_code,
+    name: s.referential_name,
+    version: s.referential_version,
+  })),
+)
+
+async function loadMultiReferentialScores(id: string) {
+  const scores = await getReferentialScores(id)
+  esgStore.setReferentialScores(scores)
+  if (scores.length > 0 && !esgStore.referentialScores.find((s) => s.referential_code === esgStore.selectedReferential)) {
+    esgStore.setSelectedReferential(scores[0].referential_code)
+  }
+}
+
+async function handleGenerateReport(params: { referentials: string[]; include_appendix_sources: boolean }) {
+  if (!esgStore.currentAssessment) return
+  isGeneratingReport.value = true
+  try {
+    await generateMultiReferentialReport(
+      esgStore.currentAssessment.id,
+      params.referentials,
+      params.include_appendix_sources,
+    )
+  } finally {
+    isGeneratingReport.value = false
+    showReportModal.value = false
+  }
+}
 
 onMounted(async () => {
   if (!assessmentId.value) {
@@ -33,6 +74,7 @@ onMounted(async () => {
   await Promise.all([
     loadBenchmark(),
     loadHistory(),
+    loadMultiReferentialScores(assessmentId.value),
   ])
 })
 
@@ -125,6 +167,48 @@ const pillarLabels: Record<string, string> = {
 
       <!-- Resultats -->
       <div v-else class="max-w-4xl mx-auto space-y-8">
+        <!-- F13 — Sélecteur multi-référentiels + bouton modale rapport -->
+        <div
+          v-if="referentialOptions.length > 0"
+          class="bg-white dark:bg-dark-card border border-gray-200 dark:border-dark-border rounded-xl p-4 flex items-center justify-between gap-4"
+        >
+          <ReferentialSelector
+            :options="referentialOptions"
+            v-model="esgStore.selectedReferential"
+            :disabled="esgStore.isRecomputing"
+          />
+          <button
+            type="button"
+            class="rounded-md border border-primary text-primary hover:bg-primary hover:text-white px-3 py-1.5 text-sm font-medium transition"
+            @click="showReportModal = true"
+          >
+            Générer un rapport PDF
+          </button>
+        </div>
+
+        <!-- F13 — Carte du score référentiel sélectionné -->
+        <ReferentialScoreCard
+          v-if="esgStore.currentReferentialScore"
+          :score="esgStore.currentReferentialScore"
+          :show-include-in-report="true"
+          @include-in-report="(code) => esgStore.setSelectedReferential(code)"
+        />
+
+        <!-- F13 — Liste critères manquants -->
+        <MissingCriteriaList
+          v-if="esgStore.currentReferentialScore && esgStore.currentReferentialScore.missing_criteria.length > 0"
+          :criteria="esgStore.currentReferentialScore.missing_criteria"
+          :referential-name="esgStore.currentReferentialScore.referential_name"
+        />
+
+        <!-- F13 — Modale rapport multi-référentiels -->
+        <MultiReferentialReportModal
+          v-model="showReportModal"
+          :referential-scores="esgStore.referentialScores"
+          :is-generating="isGeneratingReport"
+          @generate="handleGenerateReport"
+        />
+
         <!-- Score global + piliers -->
         <div class="bg-white dark:bg-dark-card border border-gray-200 dark:border-dark-border rounded-xl p-6">
           <h2 class="text-lg font-semibold text-surface-text dark:text-surface-dark-text mb-6">

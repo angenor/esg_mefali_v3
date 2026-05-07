@@ -26,6 +26,20 @@ vi.mock('~/composables/useEsg', () => ({
   }),
 }))
 
+// F13 — Mock du composable multi-référentiels
+vi.mock('~/composables/useEsgMultiReferential', () => ({
+  useEsgMultiReferential: () => ({
+    getReferentialScores: vi.fn().mockResolvedValue([]),
+    recomputeScore: vi.fn().mockResolvedValue(null),
+    generateMultiReferentialReport: vi.fn().mockResolvedValue(null),
+    pollReferentialScores: vi.fn().mockResolvedValue([]),
+    getReferentialScoresHistory: vi.fn().mockResolvedValue([]),
+    loading: computed(() => false),
+    error: computed(() => ''),
+    sessionExpired: computed(() => false),
+  }),
+}))
+
 // Stub NuxtLink
 const NuxtLink = defineComponent({
   name: 'NuxtLink',

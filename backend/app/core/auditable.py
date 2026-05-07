@@ -168,6 +168,12 @@ EXEMPT_MODELS: frozenset[str] = frozenset(
         # via ``_audit_event``. L'introspection champ-à-champ générique du
         # mixin n'apporte pas de valeur ajoutée pour cette entité.
         "Consent",
+        # F13 — ReferentialScore : artefact calculé (déterministe à partir de
+        # ESGAssessment + Referential), pas une mutation métier au sens strict.
+        # Les événements de recalcul (échec, partiel, fallback) sont
+        # journalisés explicitement via ``app/core/audit_context`` avec
+        # source_of_change='referential_score_recompute' (cf. plan.md F13).
+        "ReferentialScore",
     }
 )
 

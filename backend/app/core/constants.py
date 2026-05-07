@@ -1,6 +1,7 @@
 """Constantes globales et enums liés à l'authentification et au multi-tenant (F02)."""
 
 import enum
+import uuid
 from decimal import Decimal
 
 
@@ -76,3 +77,31 @@ EXCHANGERATE_DAILY_QUOTA_MAX: int = 50
 
 # Devises supportées par la plateforme (alignées sur app.core.money.Currency).
 SUPPORTED_CURRENCIES: tuple[str, ...] = ("XOF", "EUR", "USD", "GBP", "JPY")
+
+
+# --- F13 — Codes des référentiels MVP pour le scoring multi-référentiels ---
+
+MEFALI_REFERENTIAL_CODE = "mefali"
+GCF_REFERENTIAL_CODE = "gcf"
+IFC_PS_REFERENTIAL_CODE = "ifc_ps"
+BOAD_ESS_REFERENTIAL_CODE = "boad_ess"
+GRI_2021_REFERENTIAL_CODE = "gri_2021"
+
+REFERENTIAL_CODES_MVP: tuple[str, ...] = (
+    MEFALI_REFERENTIAL_CODE,
+    GCF_REFERENTIAL_CODE,
+    IFC_PS_REFERENTIAL_CODE,
+    BOAD_ESS_REFERENTIAL_CODE,
+    GRI_2021_REFERENTIAL_CODE,
+)
+
+# UUID stable du référentiel Mefali — utilisé par la migration de seed
+# et le fallback ESG Mefali quand fund.referential_id IS NULL. Le UUID est
+# arbitrairement fixé à une valeur reconnaissable mais non triviale (les
+# UUIDs avec uniquement des zéros et un seul caractère non-zéro déclenchent
+# un edge case dans la sérialisation SQLAlchemy 2.0 sur SQLite, cf. tests).
+MEFALI_REFERENTIAL_UUID: uuid.UUID = uuid.UUID("0e5f1310-1310-1310-1310-13101310f013")
+
+# Seuils par défaut F13 (scoring multi-référentiels).
+DEFAULT_MIN_COVERAGE_FOR_PDF: float = 0.5
+DEFAULT_REFERENTIAL_THRESHOLD: float = 50.0

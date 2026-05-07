@@ -52,7 +52,9 @@ EXEMPT_NAMES = {
 
 
 def test_scope_count():
-    assert len(SCOPE_TOOLS) == 14
+    # 14 base + 3 F13 multi-référentiels (finalize_esg_assessment_multi_ref,
+    # recompute_score, compare_referentials)
+    assert len(SCOPE_TOOLS) == 17
 
 
 @pytest.mark.parametrize("tool", SCOPE_TOOLS, ids=lambda t: t.name)
