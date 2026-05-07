@@ -95,13 +95,14 @@ PRICE_REFERENCES_FCFA: dict[str, dict] = {
     },
 }
 
-# Categories d'emissions et leur ordre de progression
+# Categories d'emissions et leur ordre de progression.
+# F17 — Ajout de la categorie ``purchases`` (achats matieres premieres).
 EMISSION_CATEGORIES: list[dict] = [
     {
         "key": "energy",
         "label": "Energie",
         "required": True,
-        "subcategories": ["electricity_ci", "diesel_generator", "butane_gas"],
+        "subcategories": ["electricity", "diesel_generator", "butane_gas"],
     },
     {
         "key": "transport",
@@ -127,11 +128,41 @@ EMISSION_CATEGORIES: list[dict] = [
         "required": False,
         "applicable_sectors": ["agriculture", "agroalimentaire"],
     },
+    # F17 — Achats matieres premieres (optionnel, applicable aux secteurs
+    # industriels, BTP, commerce et exploitation miniere).
+    {
+        "key": "purchases",
+        "label": "Achats",
+        "required": False,
+        "applicable_sectors": [
+            "manufacturing",
+            "construction",
+            "commerce",
+            "mining",
+            "industrie",
+            "btp",
+            "agroalimentaire",
+        ],
+        "subcategories": [
+            "purchases_steel",
+            "purchases_cement",
+            "purchases_paper",
+            "purchases_food",
+            "purchases_plastic",
+            "purchases_other",
+        ],
+    },
 ]
 
 
 def get_emission_factor(subcategory: str) -> float:
-    """Retourne le facteur d'emission pour une sous-categorie donnee."""
+    """Retourne le facteur d'emission pour une sous-categorie donnee.
+
+    DEPRECATED (F17) : ce helper est conserve pour retro-compatibilite
+    transitoire mais utilise la constante Python figee. Pour les nouveaux
+    codes, utiliser ``app.modules.carbon.factor_service.get_emission_factor``
+    qui interroge la BDD avec priorite pays/annee.
+    """
     factor_info = EMISSION_FACTORS.get(subcategory)
     if factor_info is None:
         raise ValueError(f"Facteur d'emission inconnu: {subcategory}")

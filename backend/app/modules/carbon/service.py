@@ -155,6 +155,11 @@ async def add_entries(
             emission_factor=entry_data["emission_factor"],
             emissions_tco2e=entry_data["emissions_tco2e"],
             source_description=entry_data.get("source_description"),
+            # F17 — FK source_id + factor_id pour le sourcage (None tolere
+            # pour entries legacy non backfillees ; le tool refactore valide
+            # la presence avant d'invoquer ``add_entries``).
+            source_id=entry_data.get("source_id"),
+            factor_id=entry_data.get("factor_id"),
         )
         db.add(entry)
         added += 1
@@ -194,11 +199,23 @@ async def complete_assessment(
     assessment: CarbonAssessment,
     reduction_plan: dict | None = None,
 ) -> CarbonAssessment:
-    """Finaliser un bilan carbone."""
+    """Finaliser un bilan carbone.
+
+    F17 (T046) : si ``reduction_plan`` est fourni avec la cle ``actions``
+    (schema F17 canonique), il est valide via ``ReductionPlan.model_validate``
+    avant attribution. Les anciens formats (``quick_wins`` / ``long_term``)
+    restent acceptes en passe-passe pour retro-compatibilite.
+    """
     total = await _compute_total_emissions(db, assessment.id)
     assessment.total_emissions_tco2e = total
     assessment.status = CarbonStatusEnum.completed
     if reduction_plan is not None:
+        # F17 — validation Pydantic du nouveau schema actions[].
+        if isinstance(reduction_plan, dict) and "actions" in reduction_plan:
+            from app.modules.carbon.reduction_plan_schema import ReductionPlan
+
+            # Leve une ValueError si invalide (cohesion source_id <-> unsourced).
+            ReductionPlan.model_validate(reduction_plan)
         assessment.reduction_plan = reduction_plan
     await db.flush()
     return assessment

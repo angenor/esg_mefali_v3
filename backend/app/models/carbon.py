@@ -19,7 +19,16 @@ class CarbonStatusEnum(str, enum.Enum):
     completed = "completed"
 
 
-VALID_CATEGORIES = ("energy", "transport", "waste", "industrial", "agriculture")
+# F17 — Elargissement des categories pour inclure ``purchases`` (achats matieres
+# premieres : ciment, acier, papier, alimentaire, plastique, autres).
+VALID_CATEGORIES = (
+    "energy",
+    "transport",
+    "waste",
+    "industrial",
+    "agriculture",
+    "purchases",
+)
 
 
 class CarbonAssessment(Auditable, UUIDMixin, TimestampMixin, Base):
@@ -68,7 +77,16 @@ class CarbonAssessment(Auditable, UUIDMixin, TimestampMixin, Base):
 
 
 class CarbonEmissionEntry(UUIDMixin, Base):
-    """Ligne d'emission individuelle dans un bilan carbone."""
+    """Ligne d'emission individuelle dans un bilan carbone.
+
+    F17 ajoute deux FK obligatoires pour le sourcage :
+        - ``source_id`` : Source du facteur d'emission utilise.
+        - ``factor_id`` : Snapshot du facteur d'emission applique.
+
+    Le champ legacy ``source_description`` (texte libre) est conserve nullable
+    au plus 2 sprints (clarification Q5 du 2026-05-07). Suppression planifiee
+    dans une migration ulterieure post-stabilisation.
+    """
 
     __tablename__ = "carbon_emission_entries"
 
@@ -83,7 +101,21 @@ class CarbonEmissionEntry(UUIDMixin, Base):
     unit: Mapped[str] = mapped_column(String(20), nullable=False)
     emission_factor: Mapped[float] = mapped_column(Float, nullable=False)
     emissions_tco2e: Mapped[float] = mapped_column(Float, nullable=False)
+    # TODO(F17+1): drop after stabilisation — colonne legacy texte libre.
     source_description: Mapped[str | None] = mapped_column(String(500), nullable=True)
+
+    # F17 — FK obligatoire vers la Source du facteur (sourcage F01).
+    source_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("sources.id", ondelete="RESTRICT"),
+        nullable=True,
+    )
+    # F17 — FK obligatoire vers le facteur d'emission applique (snapshot).
+    factor_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("emission_factors.id", ondelete="RESTRICT"),
+        nullable=True,
+    )
 
     # Timestamp creation seulement (pas de updated_at pour les entrees)
     created_at: Mapped[datetime] = mapped_column(

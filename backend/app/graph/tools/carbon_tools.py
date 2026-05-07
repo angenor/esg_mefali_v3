@@ -83,24 +83,38 @@ async def save_emission_entry(
 ) -> str:
     """Enregistrer une entree d'emission dans le bilan carbone.
 
-    Cherche le facteur d'emission correspondant, calcule les tCO2e,
-    et ajoute l'entree au bilan.
+    F17 — Le facteur d'emission est selectionne automatiquement selon la
+    categorie, le pays du profil entreprise et l'annee du bilan. Le facteur
+    est cite via la table sources (F01) ; le LLM doit appeler
+    ``cite_source(source_id)`` apres ce tool pour respecter l'invariant
+    n°1 (sourcage obligatoire).
 
     Args:
         assessment_id: UUID du bilan carbone.
-        category: Categorie d'emission (energy, transport, waste, industrial, agriculture).
-        quantity: Quantite consommee (ex: 500 kWh, 200 litres).
-        unit: Unite de la quantite (kWh, L, kg, etc.).
-        source_description: Description de la source (ex: "Electricite bureau principal").
-        subcategory: Sous-categorie / cle du facteur d'emission (ex: electricity_ci, diesel_generator).
+        category: Categorie d'emission (energy, transport, waste, industrial,
+            agriculture, purchases).
+        quantity: Quantite consommee (ex: 500 kWh, 200 litres, 50 tonnes).
+        unit: Unite de la quantite (kWh, L, kg, t, etc.).
+        source_description: Texte libre legacy decrivant la source utilisateur.
+        subcategory: Sous-categorie / cle du facteur d'emission (ex:
+            ``electricity``, ``electricity_ci_2024``, ``purchases_cement``).
+
+    Returns:
+        JSON string avec status, entry, total_emissions_tco2e, factor_used,
+        source_id (a citer via cite_source), is_approximate, fallback_reason.
     """
-    from app.modules.carbon.emission_factors import EMISSION_FACTORS, compute_emissions_tco2e
+    from app.modules.carbon.emission_factors import compute_emissions_tco2e
+    from app.modules.carbon.factor_service import (
+        EmissionFactorNotFoundError,
+        get_emission_factor,
+    )
     from app.modules.carbon.service import add_entries, get_assessment
+    from app.modules.company.service import get_profile
 
     try:
         db, user_id = get_db_and_user(config)
 
-        # Recuperer le bilan
+        # Recuperer le bilan.
         assessment = await get_assessment(db, uuid.UUID(assessment_id), user_id)
         if assessment is None:
             return json.dumps({
@@ -108,39 +122,69 @@ async def save_emission_entry(
                 "message": f"Bilan carbone introuvable (id={assessment_id}).",
             }, ensure_ascii=False)
 
-        # Rechercher le facteur d'emission
-        factor_key = subcategory
-        if factor_key and factor_key in EMISSION_FACTORS:
-            factor_info = EMISSION_FACTORS[factor_key]
-        else:
-            # Chercher par categorie : prendre le premier facteur correspondant
-            factor_info = None
-            for key, info in EMISSION_FACTORS.items():
-                if info.get("category") == category:
-                    factor_info = info
-                    factor_key = key
-                    break
+        # F17 — Resoudre le pays via le profil entreprise.
+        country: str | None = None
+        try:
+            profile = await get_profile(db, user_id)
+            if profile and profile.country:
+                country = profile.country.strip().upper()
+        except Exception:
+            logger.debug("Impossible de resoudre le pays via le profil entreprise.")
 
-            if factor_info is None:
+        # F17 — Resolution facteur via factor_service.
+        # Strategie : on essaie d'abord ``subcategory`` (categorie complete
+        # ex. ``purchases_cement``, ``electricity``), puis fallback sur ``category``
+        # standard (ex. ``energy``).
+        lookup_category = subcategory if subcategory else category
+        try:
+            resolution = await get_emission_factor(
+                db,
+                category=lookup_category,
+                country=country,
+                year=assessment.year,
+            )
+        except EmissionFactorNotFoundError:
+            # Tentative fallback : matching par categorie de base si
+            # la subcategory exotique echoue.
+            if subcategory and subcategory != category:
+                try:
+                    resolution = await get_emission_factor(
+                        db,
+                        category=category,
+                        country=country,
+                        year=assessment.year,
+                    )
+                except EmissionFactorNotFoundError as exc:
+                    return json.dumps({
+                        "status": "error",
+                        "message": str(exc),
+                        "error_code": "factor_not_found",
+                    }, ensure_ascii=False)
+            else:
+                exc = EmissionFactorNotFoundError(
+                    lookup_category, country, assessment.year
+                )
                 return json.dumps({
                     "status": "error",
-                    "message": (
-                        f"Aucun facteur d'emission trouve pour la categorie '{category}'"
-                        f" et sous-categorie '{subcategory}'."
-                    ),
+                    "message": str(exc),
+                    "error_code": "factor_not_found",
                 }, ensure_ascii=False)
 
-        emission_factor = factor_info["factor"]
-        emissions_tco2e = compute_emissions_tco2e(quantity, emission_factor)
+        factor = resolution.factor
+        emission_factor_value = float(factor.value)
+        emissions_tco2e = compute_emissions_tco2e(quantity, emission_factor_value)
 
         entry_data = {
             "category": category,
-            "subcategory": factor_key,
+            "subcategory": factor.code,
             "quantity": quantity,
             "unit": unit,
-            "emission_factor": emission_factor,
+            "emission_factor": emission_factor_value,
             "emissions_tco2e": emissions_tco2e,
             "source_description": source_description,
+            # F17 — sourcage et snapshot facteur.
+            "source_id": factor.source_id,
+            "factor_id": factor.id,
         }
 
         added_count, total, completed_cats = await add_entries(
@@ -153,16 +197,27 @@ async def save_emission_entry(
             "status": "success",
             "entry": {
                 "category": category,
-                "subcategory": factor_key,
+                "subcategory": factor.code,
                 "quantity": quantity,
                 "unit": unit,
-                "emission_factor_kgco2e": emission_factor,
+                "emission_factor_kgco2e": emission_factor_value,
                 "emissions_tco2e": emissions_tco2e,
                 "source_description": source_description,
             },
+            "factor_used": {
+                "code": factor.code,
+                "label": factor.label,
+                "country": factor.country,
+                "year": factor.year,
+                "value": emission_factor_value,
+                "unit": factor.unit,
+            },
+            "source_id": str(factor.source_id),
+            "is_approximate": resolution.is_approximate,
+            "fallback_reason": resolution.fallback_reason,
             "total_emissions_tco2e": total,
             "message": (
-                f"Entree enregistree : {quantity} {unit} de {factor_info['label']}"
+                f"Entree enregistree : {quantity} {unit} de {factor.label}"
                 f" = {emissions_tco2e} tCO2e. Total actuel : {total} tCO2e."
             ),
         }, ensure_ascii=False)
