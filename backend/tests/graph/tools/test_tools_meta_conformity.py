@@ -48,13 +48,18 @@ EXEMPT_NAMES = {
     "sub_sector",
     # country reste str (CountryEnum non defini dans app/models/, hors scope 10.1)
     "country",
+    # F10 — doc_type_hint est un free-text (hint de catégorisation pour le LLM,
+    # pas un choix fermé : ex « business_plan », « statuts », « justificatif »).
+    "doc_type_hint",
 }
 
 
 def test_scope_count():
     # 14 base + 3 F13 multi-référentiels (finalize_esg_assessment_multi_ref,
     # recompute_score, compare_referentials)
-    assert len(SCOPE_TOOLS) == 17
+    # F10 — 9 nouveaux tools widgets (ask_yes_no/ask_select/ask_number/
+    # ask_date/ask_date_range/ask_rating/ask_file_upload/show_form/show_summary_card)
+    assert len(SCOPE_TOOLS) == 26
 
 
 @pytest.mark.parametrize("tool", SCOPE_TOOLS, ids=lambda t: t.name)

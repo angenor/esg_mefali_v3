@@ -266,6 +266,17 @@ class DeleteProjectArgs(BaseModel):
             description="True pour confirmer malgré les candidatures actives",
         ),
     ] = False
+    # F10 — pattern destructif (Module 1.1.3) : confirm=True obligatoire après ask_yes_no.
+    confirm: Annotated[
+        bool,
+        Field(
+            default=False,
+            description=(
+                "F10 — True pour confirmer la suppression après widget ask_yes_no. "
+                "Si False, retourne {requires_confirmation: True} sans toucher la BDD."
+            ),
+        ),
+    ] = False
 
 
 class DuplicateProjectArgs(BaseModel):
@@ -492,18 +503,29 @@ async def delete_project(
     config: RunnableConfig,
     project_id: uuid.UUID,
     force: bool = False,
+    confirm: bool = False,
 ) -> str:
     """Supprime (soft-delete : statut passe à 'cancelled') un projet.
+
+    PATTERN DESTRUCTIF F10 (Module 1.1.3) :
+    - Premier appel sans ``confirm`` : retourne ``{requires_confirmation: True}``
+      sans toucher la BDD. Le LLM doit alors invoquer ``ask_yes_no(destructive=True)``.
+    - Second appel avec ``confirm=True`` après réponse utilisateur : exécute la suppression.
 
     Si le projet a des candidatures actives (status NOT IN rejected/accepted/cancelled),
     le tool refuse par défaut et retourne la liste des candidatures bloquantes.
     Tu peux alors appeler ``ask_interactive_question`` pour demander confirmation
-    à l'utilisateur, puis re-appeler ``delete_project(project_id, force=true)``
+    à l'utilisateur, puis re-appeler ``delete_project(project_id, force=true, confirm=true)``
     si l'utilisateur confirme.
 
     Use when:
     - L'utilisateur demande explicitement la suppression d'un projet.
     """
+    # F10 — Garde-fou destructif (Module 1.1.3)
+    if not confirm:
+        from app.graph.tools.common import requires_destructive_confirmation
+        return requires_destructive_confirmation("delete_project")
+
     try:
         db, user_id, account_id = await _get_account_id_from_config(config)
         with source_of_change_scope("llm"):

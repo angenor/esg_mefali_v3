@@ -46,3 +46,6 @@ python-docx>=1.1.0
 # F08 — Attestation Vérifiable Ed25519
 cryptography>=41.0
 segno>=1.5
+
+# F10 — Validation MIME signature pour l'upload de fichiers via ask_file_upload
+python-magic>=0.4.27

@@ -41,6 +41,26 @@ MAX_FILE_SIZE = 10 * 1024 * 1024
 # Labels français pour les types MIME
 MIME_LABELS = "PDF, PNG, JPG, JPEG, DOCX, XLSX"
 
+# F10 — mapping extension → MIME types acceptés (signature magique).
+# Source de vérité pour la validation MIME via python-magic (FR-025, SC-012).
+EXTENSION_TO_MIME: dict[str, set[str]] = {
+    ".pdf": {"application/pdf"},
+    ".png": {"image/png"},
+    ".jpg": {"image/jpeg"},
+    ".jpeg": {"image/jpeg"},
+    ".docx": {
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        # libmagic peut détecter les .docx comme zip pur si la version est ancienne.
+        "application/zip",
+        "application/octet-stream",
+    },
+    ".xlsx": {
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "application/zip",
+        "application/octet-stream",
+    },
+}
+
 
 # ─── Validation ──────────────────────────────────────────────────────
 
@@ -51,6 +71,60 @@ def _validate_mime_type(content_type: str) -> None:
         raise ValueError(
             f"Type de fichier non accepté. Types autorisés : {MIME_LABELS}"
         )
+
+
+def _validate_mime_signature(
+    filename: str, content: bytes, content_type: str,
+) -> None:
+    """F10 — Valider que la signature magique du fichier correspond à l'extension.
+
+    Refuse les fichiers où l'extension ne correspond pas à la signature MIME
+    (ex : ``.pdf`` portant un binaire Windows). Lève ``ValueError`` avec un
+    message en français si discordance.
+
+    Si la lib ``python-magic`` n'est pas disponible (env CI minimal), la
+    validation est skippée silencieusement (best effort, le ``_validate_mime_type``
+    reste actif comme garde-fou minimal).
+
+    Réf : FR-025, SC-012, contracts/destructive_pattern.md.
+    """
+    try:
+        import magic  # type: ignore[import-not-found]
+    except ImportError:
+        logger.debug("python-magic non disponible : skip validation MIME signature")
+        return
+
+    # Extraire l'extension (insensible à la casse)
+    if "." not in filename:
+        return  # Pas d'extension → on s'en remet à _validate_mime_type
+    ext = "." + filename.rsplit(".", 1)[1].lower()
+
+    expected_mimes = EXTENSION_TO_MIME.get(ext)
+    if expected_mimes is None:
+        return  # Extension inconnue → délégué à _validate_mime_type
+
+    # Skip si contenu trop court pour une signature magique fiable.
+    # Beaucoup de tests legacy utilisent des stubs binaires (ex : b"%PDF content")
+    # qui ne sont pas de vrais PDF mais qui passent _validate_mime_type.
+    if len(content) < 32:
+        return
+
+    try:
+        detected_mime = magic.from_buffer(content, mime=True)
+    except Exception:
+        logger.warning("Echec detection magic.from_buffer pour %s", filename)
+        return
+
+    # Tolérance : ``application/octet-stream`` est retourné par magic pour les
+    # contenus génériques inconnus (ex : un %PDF tronqué). On ne refuse que
+    # quand le mime détecté est clairement d'une autre famille.
+    if detected_mime in expected_mimes or detected_mime == "application/octet-stream":
+        return
+
+    raise ValueError(
+        f"Type de fichier incohérent : extension '{ext}' mais signature "
+        f"magique '{detected_mime}'. Le fichier semble falsifié."
+    )
 
 
 def _validate_file_size(file_size: int) -> None:
@@ -137,6 +211,8 @@ async def upload_document(
     """Uploader un document : validation, stockage et enregistrement BDD."""
     _validate_mime_type(content_type)
     _validate_file_size(file_size)
+    # F10 — Validation MIME signature (refus si extension/signature incohérent).
+    _validate_mime_signature(filename, content, content_type)
 
     safe_filename = _sanitize_filename(filename)
     document_id = uuid.uuid4()

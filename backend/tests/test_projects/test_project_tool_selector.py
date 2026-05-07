@@ -25,7 +25,9 @@ def test_profile_projects_in_page_mapping():
     assert "link_document_to_project" in tools
     # F11 ajoute show_map à la page profile_projects
     assert "show_map" in tools
-    assert len(tools) == 8
+    # F10 ajoute show_form à la page profile_projects
+    assert "show_form" in tools
+    assert len(tools) == 9
 
 
 def test_profile_includes_read_only_project_tools():

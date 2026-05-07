@@ -28,12 +28,28 @@ from app.models.base import Base, UUIDMixin
 
 
 class InteractiveQuestionType(str, Enum):
-    """Type de widget interactif."""
+    """Type de widget interactif.
 
+    Valeurs F18 (existantes) : qcu, qcm, qcu_justification, qcm_justification.
+    Valeurs F10 (étendues, payload jsonb) : yes_no, select, number, date,
+    date_range, rating, file_upload, form, summary_card.
+    """
+
+    # F18 — widgets QCU/QCM
     QCU = "qcu"
     QCM = "qcm"
     QCU_JUSTIFICATION = "qcu_justification"
     QCM_JUSTIFICATION = "qcm_justification"
+    # F10 — 9 nouveaux widgets bottom sheet
+    YES_NO = "yes_no"
+    SELECT = "select"
+    NUMBER = "number"
+    DATE = "date"
+    DATE_RANGE = "date_range"
+    RATING = "rating"
+    FILE_UPLOAD = "file_upload"
+    FORM = "form"
+    SUMMARY_CARD = "summary_card"
 
 
 class InteractiveQuestionState(str, Enum):
@@ -97,6 +113,12 @@ class InteractiveQuestion(UUIDMixin, Base):
     )
     response_values: Mapped[list[str] | None] = mapped_column(JSONType, nullable=True)
     response_justification: Mapped[str | None] = mapped_column(String(400), nullable=True)
+    # F10 — payload jsonb pour les paramètres spécifiques (yes_no/select/number/...)
+    payload: Mapped[dict] = mapped_column(
+        JSONType, nullable=False, default=dict, server_default="{}",
+    )
+    # F10 — réponse structurée variante-spécifique (au-delà de response_values)
+    response_payload: Mapped[dict | None] = mapped_column(JSONType, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False,
     )
@@ -114,7 +136,11 @@ class InteractiveQuestion(UUIDMixin, Base):
         CheckConstraint(
             "max_selections >= min_selections", name="ck_iq_max_ge_min",
         ),
-        CheckConstraint("max_selections <= 8", name="ck_iq_max_le_8"),
+        # F10 — contrainte étendue : permet max_selections > 8 pour 'select' et 'form'.
+        CheckConstraint(
+            "max_selections <= 8 OR question_type IN ('select', 'form')",
+            name="ck_iq_max_le_8_or_select_form",
+        ),
         # NB : la borne 500 caracteres sur prompt est verifiee cote Pydantic.
         # On evite un CHECK SQL avec char_length() qui n'est pas portable SQLite.
         Index(

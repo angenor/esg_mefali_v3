@@ -1,5 +1,6 @@
 """Helpers partagés pour tous les tools LangChain des nœuds LangGraph."""
 
+import json
 import logging
 import time
 import uuid
@@ -11,6 +12,62 @@ from langchain_core.runnables import RunnableConfig
 from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = logging.getLogger(__name__)
+
+
+# ─── F10 — Pattern de confirmation des actions destructives (Module 1.1.3) ──
+#
+# Tout tool de mutation destructif (`delete_*`, `revoke_*`, `cancel_*`) DOIT
+# accepter un paramètre `confirm: bool = False`. Si `confirm=False`, il appelle
+# `requires_destructive_confirmation(...)` ci-dessous, qui retourne le marker
+# JSON sérialisé. Le LLM voit ce retour et invoque `ask_yes_no(destructive=True)`.
+# Quand l'utilisateur confirme, le LLM rappelle le tool destructif initial avec
+# `confirm=True` et la mutation s'exécute, tracée dans `audit_log` (F03).
+#
+# Réf : ``specs/031-widgets-bottom-sheet-complets/contracts/destructive_pattern.md``.
+
+DESTRUCTIVE_ACTIONS: frozenset[str] = frozenset({
+    "delete_project",
+    "delete_application",
+    "delete_assessment",
+    "delete_esg_assessment",
+    "delete_carbon_assessment",
+    "revoke_attestation",
+    "cancel_application",
+    "cancel_assessment",
+})
+
+
+def requires_destructive_confirmation(action_name: str) -> str:
+    """Retourne le marker JSON destiné au LLM pour déclencher ask_yes_no.
+
+    Le LLM, en voyant ce retour, doit invoquer immédiatement
+    ``ask_yes_no(destructive=True)`` pour solliciter une confirmation
+    utilisateur explicite.
+
+    Raises:
+        ValueError: Si ``action_name`` n'est pas dans ``DESTRUCTIVE_ACTIONS``
+            (garde-fou contre les fausses utilisations du pattern).
+    """
+    if action_name not in DESTRUCTIVE_ACTIONS:
+        raise ValueError(
+            f"'{action_name}' n'est pas dans la liste DESTRUCTIVE_ACTIONS. "
+            "Ajoutez-la à app.graph.tools.common.DESTRUCTIVE_ACTIONS si elle "
+            "constitue effectivement une mutation destructive irréversible."
+        )
+
+    return json.dumps(
+        {
+            "requires_confirmation": True,
+            "message": (
+                f"Action destructive '{action_name}' nécessite une confirmation "
+                "utilisateur. Invoque immédiatement "
+                "ask_yes_no(destructive=True, question='...') puis re-appelle "
+                "ce tool avec confirm=True si l'utilisateur confirme."
+            ),
+            "destructive_action": action_name,
+        },
+        ensure_ascii=False,
+    )
 
 
 # Pattern UUID standard (8-4-4-4-12, hex insensible a la casse).
