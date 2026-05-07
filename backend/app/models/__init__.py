@@ -78,3 +78,6 @@ from app.models.consent import Consent  # noqa: F401
 
 # F13 — Scoring ESG multi-référentiels
 from app.models.referential_score import ComputedByEnum, ReferentialScore  # noqa: F401
+
+# F23 — Skills (Playbooks Métier)
+from app.models.skill import Skill, SkillDomain, SkillStatus  # noqa: F401

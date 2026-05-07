@@ -49,3 +49,9 @@ segno>=1.5
 
 # F10 — Validation MIME signature pour l'upload de fichiers via ask_file_upload
 python-magic>=0.4.27
+
+# F22/F23 — comptage tokens (LLM eval, validator skills)
+tiktoken>=0.5.0
+
+# F23 — versioning semver des Skills
+semver>=3.0.0
