@@ -1,0 +1,146 @@
+openapi: 3.0.3
+info:
+  title: ESG Mefali — Application Recompute API (F04)
+  version: "1.0.0"
+  description: |
+    Endpoint d'audit qui recalcule le score d'une candidature soumise contre son snapshot immuable.
+    Garantit que le score est reproductible indépendamment des évolutions du référentiel.
+
+paths:
+  /api/applications/{application_id}/recompute-against-snapshot:
+    post:
+      summary: Recalcule le score d'une candidature contre son snapshot immuable
+      operationId: recomputeAgainstSnapshot
+      tags: [applications]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: application_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Score recalculé avec comparaison à l'origine
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RecomputeResponse"
+              example:
+                value:
+                  application_id: "f47ac10b-58cc-4372-a567-0e02b2c3d479"
+                  snapshot_at: "2026-03-15T10:30:00Z"
+                  recomputed_at: "2026-05-07T14:00:00Z"
+                  score:
+                    esg_total: 72.5
+                    esg_breakdown: {E: 80, S: 70, G: 65}
+                    credit_score: null
+                    carbon_total_tco2e: 12.3
+                  comparison_with_origin:
+                    match: true
+                    delta: 0.0
+                  referential_version_used: "1.2"
+                  referential_id_used: "..."
+        "403":
+          description: Utilisateur n'appartient pas au compte propriétaire de la candidature
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                value:
+                  detail: "Forbidden: application belongs to another account"
+        "404":
+          description: Candidature introuvable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Candidature non encore soumise (snapshot_at IS NULL)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                value:
+                  detail: "Application must be submitted before recompute"
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    RecomputeResponse:
+      type: object
+      required:
+        - application_id
+        - snapshot_at
+        - recomputed_at
+        - score
+        - comparison_with_origin
+        - referential_version_used
+        - referential_id_used
+      properties:
+        application_id:
+          type: string
+          format: uuid
+        snapshot_at:
+          type: string
+          format: date-time
+        recomputed_at:
+          type: string
+          format: date-time
+        score:
+          $ref: "#/components/schemas/SnapshotScores"
+        comparison_with_origin:
+          type: object
+          required: [match, delta]
+          properties:
+            match:
+              type: boolean
+              description: True si le score recalculé est identique au score d'origine
+            delta:
+              type: number
+              format: float
+              description: Différence numérique (0 si match)
+        referential_version_used:
+          type: string
+          description: Version du référentiel mobilisée (lue dans snapshot_data)
+          example: "1.2"
+        referential_id_used:
+          type: string
+          format: uuid
+
+    SnapshotScores:
+      type: object
+      properties:
+        esg_total:
+          type: number
+          format: float
+          nullable: true
+        esg_breakdown:
+          type: object
+          additionalProperties:
+            type: number
+            format: float
+        credit_score:
+          type: number
+          format: float
+          nullable: true
+        carbon_total_tco2e:
+          type: number
+          format: float
+          nullable: true
+
+    ErrorResponse:
+      type: object
+      required: [detail]
+      properties:
+        detail:
+          type: string

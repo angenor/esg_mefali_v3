@@ -1,0 +1,224 @@
+openapi: 3.0.3
+info:
+  title: ESG Mefali — Currency API (F04)
+  version: "1.0.0"
+  description: |
+    API de conversion et consultation des taux de change (peg fixe FCFA-EUR + table `exchange_rates`).
+    Lecture publique (pas d'authentification) pour les endpoints `/api/currency`.
+
+paths:
+  /api/currency/rates/latest:
+    get:
+      summary: Liste des taux de change les plus récents par paire
+      operationId: listLatestRates
+      tags: [currency]
+      security: []
+      responses:
+        "200":
+          description: Liste des taux les plus récents (groupés par paire)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  rates:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/RateEntry"
+                  peg_pairs:
+                    description: Paires peggées (sans entrée dans `exchange_rates`)
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/PegEntry"
+              examples:
+                example:
+                  value:
+                    rates:
+                      - base_currency: USD
+                        quote_currency: XOF
+                        rate: "615.20"
+                        as_of: "2026-04-15"
+                        source: "exchangerate-api.com"
+                        fetched_at: "2026-04-15T08:00:00Z"
+                      - base_currency: USD
+                        quote_currency: EUR
+                        rate: "0.92"
+                        as_of: "2026-04-15"
+                        source: "exchangerate-api.com"
+                        fetched_at: "2026-04-15T08:00:00Z"
+                    peg_pairs:
+                      - base_currency: XOF
+                        quote_currency: EUR
+                        rate: "0.001524"
+                        formula: "1 / 655.957"
+                      - base_currency: EUR
+                        quote_currency: XOF
+                        rate: "655.957"
+                        formula: "FCFA_EUR_PEG (Banque de France/BCEAO)"
+
+  /api/currency/convert:
+    post:
+      summary: Convertit un montant d'une devise vers une autre
+      operationId: convertCurrency
+      tags: [currency]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ConvertRequest"
+            examples:
+              fcfaToEur:
+                value:
+                  amount: "655957"
+                  source_currency: "XOF"
+                  target_currency: "EUR"
+              usdToXof:
+                value:
+                  amount: "1000"
+                  source_currency: "USD"
+                  target_currency: "XOF"
+                  date: "2026-04-15"
+      responses:
+        "200":
+          description: Résultat de la conversion
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConvertResponse"
+              examples:
+                fcfaToEur:
+                  value:
+                    source:
+                      amount: "655957.00"
+                      currency: "XOF"
+                    target:
+                      amount: "1000.00"
+                      currency: "EUR"
+                    rate_used: "0.001524"
+                    method: "peg_fixed"
+                    rate_date: null
+                usdToXof:
+                  value:
+                    source:
+                      amount: "1000.00"
+                      currency: "USD"
+                    target:
+                      amount: "615200.00"
+                      currency: "XOF"
+                    rate_used: "615.20"
+                    method: "table"
+                    rate_date: "2026-04-15"
+        "404":
+          description: Aucun taux disponible pour la paire demandée (et pivot USD impossible)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                value:
+                  detail: "no exchange rate available for pair JPY/GBP via USD pivot"
+        "422":
+          description: Validation Pydantic en échec (devise hors enum, montant négatif)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+components:
+  schemas:
+    Money:
+      type: object
+      required: [amount, currency]
+      properties:
+        amount:
+          type: string
+          pattern: '^\d+(\.\d{1,2})?$'
+          description: Montant en string décimal pour préserver précision
+          example: "1000.50"
+        currency:
+          type: string
+          enum: [XOF, EUR, USD, GBP, JPY]
+          example: "XOF"
+
+    Currency:
+      type: string
+      enum: [XOF, EUR, USD, GBP, JPY]
+
+    ConvertRequest:
+      type: object
+      required: [amount, source_currency, target_currency]
+      properties:
+        amount:
+          type: string
+          pattern: '^\d+(\.\d{1,2})?$'
+        source_currency:
+          $ref: "#/components/schemas/Currency"
+        target_currency:
+          $ref: "#/components/schemas/Currency"
+        date:
+          type: string
+          format: date
+          description: Date du taux à utiliser (défaut today)
+
+    ConvertResponse:
+      type: object
+      required: [source, target, rate_used, method]
+      properties:
+        source:
+          $ref: "#/components/schemas/Money"
+        target:
+          $ref: "#/components/schemas/Money"
+        rate_used:
+          type: string
+          description: Taux multiplicateur appliqué
+          example: "615.20"
+        method:
+          type: string
+          enum: [peg_fixed, table, pivot_usd]
+          description: Méthode utilisée pour la conversion
+        rate_date:
+          type: string
+          format: date
+          nullable: true
+          description: Date effective du taux table (null si peg_fixed)
+
+    RateEntry:
+      type: object
+      required: [base_currency, quote_currency, rate, as_of, source, fetched_at]
+      properties:
+        base_currency:
+          $ref: "#/components/schemas/Currency"
+        quote_currency:
+          $ref: "#/components/schemas/Currency"
+        rate:
+          type: string
+        as_of:
+          type: string
+          format: date
+        source:
+          type: string
+        fetched_at:
+          type: string
+          format: date-time
+
+    PegEntry:
+      type: object
+      required: [base_currency, quote_currency, rate, formula]
+      properties:
+        base_currency:
+          $ref: "#/components/schemas/Currency"
+        quote_currency:
+          $ref: "#/components/schemas/Currency"
+        rate:
+          type: string
+        formula:
+          type: string
+
+    ErrorResponse:
+      type: object
+      required: [detail]
+      properties:
+        detail:
+          type: string
