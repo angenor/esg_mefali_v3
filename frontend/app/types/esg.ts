@@ -151,3 +151,99 @@ export interface EvaluateResponse {
   progress_percent: number
   total_criteria: number
 }
+
+// ----------------------------------------------------------------------
+// F13 — Scoring multi-référentiels
+// ----------------------------------------------------------------------
+
+export type ComputedBy = 'manual' | 'llm' | 'auto'
+export type MissingReason = 'non_renseigne' | 'invalide' | 'hors_scope'
+
+export interface PillarScore {
+  score: number
+  weight: number
+  criteria_count: number
+  /** Nombre de critères renseignés (clé JSON encode UTF-8 conservée). */
+  criteria_renseignés?: number
+  criteria_renseignes?: number
+}
+
+export interface CoveredCriterion {
+  indicator_id: string
+  indicator_code: string
+  score: number
+  weight: number
+  source_id: string | null
+}
+
+export interface MissingCriterion {
+  indicator_id: string
+  indicator_code: string
+  reason: MissingReason
+  source_id: string | null
+  suggestion: string | null
+}
+
+export interface ReferentialScore {
+  id: string
+  assessment_id: string
+  referential_id: string
+  referential_code: string
+  referential_name: string
+  referential_version: string
+  overall_score: number | null
+  pillar_scores: Record<string, PillarScore>
+  coverage_rate: number
+  covered_criteria: CoveredCriterion[]
+  missing_criteria: MissingCriterion[]
+  gap_to_threshold: number | null
+  eligibility: boolean | null
+  computed_at: string
+  computed_by: ComputedBy
+  computed_request_id: string | null
+  is_fallback: boolean
+}
+
+export interface ComparisonResult {
+  scores: ReferentialScore[]
+  gaps: Record<string, number>
+  divergent_criteria: Record<string, CoveredCriterion[]>
+  summary_text: string | null
+}
+
+export interface RecomputeRequestResponse {
+  status: string
+  recompute_request_id: string
+  referentials_to_recompute: string[]
+  estimated_duration_seconds: number
+}
+
+export interface BottleneckInfo {
+  bottleneck_referential_code: string
+  bottleneck_referential_name: string
+  bottleneck_score: number
+  other_referential_code: string
+  other_referential_score: number
+  gap: number
+  eligibility_min: boolean
+  top_3_critical_indicators: string[]
+}
+
+export interface DualReferentialResponse {
+  fund_score: ReferentialScore
+  intermediary_score: ReferentialScore | null
+  bottleneck: BottleneckInfo | null
+  is_dual_view: boolean
+}
+
+export interface ReferentialOption {
+  code: string
+  name: string
+  version: string
+}
+
+export interface GenerateReportRequest {
+  referentials?: string[]
+  include_appendix_sources?: boolean
+  format?: 'pdf'
+}

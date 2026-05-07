@@ -11,8 +11,8 @@ def test_batch_save_esg_criteria_in_tools():
 
 
 def test_esg_tools_count():
-    """T010 — ESG_TOOLS contient 5 tools (4 existants + batch)."""
-    assert len(ESG_TOOLS) == 5
+    """T010+F13 — ESG_TOOLS contient 8 tools (5 base + 3 F13 multi-référentiels)."""
+    assert len(ESG_TOOLS) == 8
 
 
 def test_batch_tool_accepts_criteria_list():

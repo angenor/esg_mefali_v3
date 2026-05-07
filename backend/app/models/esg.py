@@ -2,13 +2,17 @@
 
 import enum
 import uuid
+from typing import TYPE_CHECKING
 
 from sqlalchemy import Enum, Float, ForeignKey, Integer, JSON, String
 from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.auditable import Auditable
 from app.models.base import Base, TimestampMixin, UUIDMixin
+
+if TYPE_CHECKING:
+    from app.models.referential_score import ReferentialScore
 
 
 class ESGStatusEnum(str, enum.Enum):
@@ -68,4 +72,12 @@ class ESGAssessment(Auditable, UUIDMixin, TimestampMixin, Base):
     current_pillar: Mapped[str | None] = mapped_column(String(20), nullable=True)
     evaluated_criteria: Mapped[list | None] = mapped_column(
         JSON, nullable=True, default=list
+    )
+
+    # F13 — Scoring multi-référentiels (1 EsgAssessment → N ReferentialScore)
+    referential_scores: Mapped[list["ReferentialScore"]] = relationship(
+        "ReferentialScore",
+        foreign_keys="ReferentialScore.assessment_id",
+        back_populates="assessment",
+        cascade="all, delete-orphan",
     )

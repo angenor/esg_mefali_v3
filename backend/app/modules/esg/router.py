@@ -2,7 +2,8 @@
 
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user
@@ -226,3 +227,174 @@ async def get_benchmark(
         top_criteria=[],
         weak_criteria=[],
     )
+
+
+# ---------------------------------------------------------------------------
+# F13 — Endpoints scoring multi-référentiels
+# ---------------------------------------------------------------------------
+
+
+def _serialize_referential_score(score, referential) -> dict:
+    """Sérialise un ReferentialScore + Referential pour la réponse API."""
+    return {
+        "id": str(score.id),
+        "assessment_id": str(score.assessment_id),
+        "referential_id": str(score.referential_id),
+        "referential_code": referential.code if referential else "",
+        "referential_name": referential.label if referential else "",
+        "referential_version": score.referential_version,
+        "overall_score": (
+            float(score.overall_score) if score.overall_score is not None else None
+        ),
+        "pillar_scores": score.pillar_scores or {},
+        "coverage_rate": float(score.coverage_rate),
+        "covered_criteria": score.covered_criteria or [],
+        "missing_criteria": score.missing_criteria or [],
+        "gap_to_threshold": (
+            float(score.gap_to_threshold) if score.gap_to_threshold is not None else None
+        ),
+        "eligibility": score.eligibility,
+        "computed_at": (
+            score.computed_at.isoformat()
+            if score.computed_at is not None
+            else None
+        ),
+        "computed_by": (
+            score.computed_by.value
+            if hasattr(score.computed_by, "value")
+            else score.computed_by
+        ),
+        "computed_request_id": (
+            str(score.computed_request_id) if score.computed_request_id else None
+        ),
+        "is_fallback": False,
+    }
+
+
+@router.get("/assessments/{assessment_id}/referential-scores")
+async def get_referential_scores(
+    assessment_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> list[dict]:
+    """Liste des referential_scores courants (superseded_by IS NULL) pour
+    une évaluation donnée.
+
+    Filtre RLS : un PME ne voit que les scores de son compte (404 sinon).
+    """
+    from app.models.esg import ESGAssessment
+    from app.models.referential import Referential
+    from app.models.referential_score import ReferentialScore
+
+    # Vérifier que l'assessment existe et appartient au user (RLS via account)
+    assessment = (
+        await db.execute(
+            select(ESGAssessment).where(
+                ESGAssessment.id == assessment_id,
+                ESGAssessment.user_id == current_user.id,
+            )
+        )
+    ).scalar_one_or_none()
+    if assessment is None:
+        raise HTTPException(status_code=404, detail="Évaluation introuvable.")
+
+    # Charger scores courants + referentials joints
+    rows = (
+        await db.execute(
+            select(ReferentialScore, Referential)
+            .join(Referential, ReferentialScore.referential_id == Referential.id)
+            .where(
+                ReferentialScore.assessment_id == assessment_id,
+                ReferentialScore.superseded_by.is_(None),
+            )
+            .order_by(ReferentialScore.computed_at.desc())
+        )
+    ).all()
+
+    return [_serialize_referential_score(score, ref) for score, ref in rows]
+
+
+@router.get("/assessments/{assessment_id}/referential-scores/history")
+async def get_referential_scores_history(
+    assessment_id: uuid.UUID,
+    referential_id: uuid.UUID | None = Query(
+        None, description="Filtrer sur un référentiel précis."
+    ),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> list[dict]:
+    """Historique des scores supersédés (versions antérieures F04)."""
+    from app.models.esg import ESGAssessment
+    from app.models.referential import Referential
+    from app.models.referential_score import ReferentialScore
+
+    assessment = (
+        await db.execute(
+            select(ESGAssessment).where(
+                ESGAssessment.id == assessment_id,
+                ESGAssessment.user_id == current_user.id,
+            )
+        )
+    ).scalar_one_or_none()
+    if assessment is None:
+        raise HTTPException(status_code=404, detail="Évaluation introuvable.")
+
+    q = (
+        select(ReferentialScore, Referential)
+        .join(Referential, ReferentialScore.referential_id == Referential.id)
+        .where(
+            ReferentialScore.assessment_id == assessment_id,
+            ReferentialScore.superseded_by.is_not(None),
+        )
+        .order_by(ReferentialScore.computed_at.desc())
+    )
+    if referential_id is not None:
+        q = q.where(ReferentialScore.referential_id == referential_id)
+
+    rows = (await db.execute(q)).all()
+    return [_serialize_referential_score(score, ref) for score, ref in rows]
+
+
+@router.post("/assessments/{assessment_id}/recompute-score", status_code=202)
+async def recompute_score(
+    assessment_id: uuid.UUID,
+    background_tasks: BackgroundTasks,
+    referentiel_id: uuid.UUID | None = Query(
+        None, description="UUID d'un référentiel à recalculer (optionnel : tous si vide)."
+    ),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    """Enqueue un recalcul async et retourne ``recompute_request_id``.
+
+    Si ``referentiel_id`` est fourni, recalcule uniquement ce référentiel.
+    Sinon recalcule tous les référentiels actifs.
+    """
+    from app.models.esg import ESGAssessment
+    from app.modules.esg.multi_referential_service import recompute_score_async
+
+    assessment = (
+        await db.execute(
+            select(ESGAssessment).where(
+                ESGAssessment.id == assessment_id,
+                ESGAssessment.user_id == current_user.id,
+            )
+        )
+    ).scalar_one_or_none()
+    if assessment is None:
+        raise HTTPException(status_code=404, detail="Évaluation introuvable.")
+
+    request_id = uuid.uuid4()
+    background_tasks.add_task(
+        recompute_score_async,
+        assessment_id=assessment_id,
+        referentiel_id=referentiel_id,
+        request_id=request_id,
+    )
+
+    return {
+        "status": "accepted",
+        "recompute_request_id": str(request_id),
+        "referentials_to_recompute": [str(referentiel_id)] if referentiel_id else [],
+        "estimated_duration_seconds": 5,
+    }

@@ -75,3 +75,6 @@ from app.models.attestation import Attestation  # noqa: F401
 
 # F05 — RGPD : Consentement granulaire
 from app.models.consent import Consent  # noqa: F401
+
+# F13 — Scoring ESG multi-référentiels
+from app.models.referential_score import ComputedByEnum, ReferentialScore  # noqa: F401
