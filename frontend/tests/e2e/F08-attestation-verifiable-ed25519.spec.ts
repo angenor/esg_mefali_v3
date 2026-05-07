@@ -35,7 +35,7 @@ test.describe('F08 — Attestation Vérifiable Ed25519', () => {
     await expect(page).toHaveURL(/\/verify\//)
 
     // Badge AUTHENTIQUE visible
-    await expect(page.getByText('AUTHENTIQUE')).toBeVisible()
+    await expect(page.getByRole('status', { name: 'AUTHENTIQUE', exact: true })).toBeVisible()
 
     // Identifiant affiché
     await expect(page.getByText(SAMPLE_AUTHENTIC.display_id)).toBeVisible()
@@ -47,7 +47,7 @@ test.describe('F08 — Attestation Vérifiable Ed25519', () => {
   test('Scenario 2 — Tampered PDF detection (HashCompareInput)', async ({ page }) => {
     await mockPublicVerify(page, SAMPLE_AUTHENTIC)
     await page.goto(`/verify/${SAMPLE_AUTHENTIC.attestation_id}`)
-    await expect(page.getByText('AUTHENTIQUE')).toBeVisible()
+    await expect(page.getByRole('status', { name: 'AUTHENTIQUE', exact: true })).toBeVisible()
 
     // Saisir un hash altéré dans HashCompareInput
     const tampered = 'b'.repeat(64)
@@ -61,7 +61,7 @@ test.describe('F08 — Attestation Vérifiable Ed25519', () => {
   test('Scenario 2bis — Hash conforme si match exact', async ({ page }) => {
     await mockPublicVerify(page, SAMPLE_AUTHENTIC)
     await page.goto(`/verify/${SAMPLE_AUTHENTIC.attestation_id}`)
-    await expect(page.getByText('AUTHENTIQUE')).toBeVisible()
+    await expect(page.getByRole('status', { name: 'AUTHENTIQUE', exact: true })).toBeVisible()
 
     // Saisir le hash exact (le même que SAMPLE_AUTHENTIC.pdf_hash_sha256)
     await page.locator('input#hash-compare').fill(SAMPLE_AUTHENTIC.pdf_hash_sha256)
@@ -77,7 +77,7 @@ test.describe('F08 — Attestation Vérifiable Ed25519', () => {
     await mockPublicVerify(page, SAMPLE_REVOKED)
     await page.goto(`/verify/${SAMPLE_REVOKED.attestation_id}`)
 
-    await expect(page.getByText('RÉVOQUÉE')).toBeVisible()
+    await expect(page.getByRole('status', { name: 'RÉVOQUÉE', exact: true })).toBeVisible()
     await expect(page.getByText(/Mise à jour majeure du profil/i)).toBeVisible()
   })
 
@@ -85,14 +85,14 @@ test.describe('F08 — Attestation Vérifiable Ed25519', () => {
     await mockPublicVerify(page, SAMPLE_EXPIRED)
     await page.goto(`/verify/${SAMPLE_EXPIRED.attestation_id}`)
 
-    await expect(page.getByText('EXPIRÉE')).toBeVisible()
+    await expect(page.getByRole('status', { name: 'EXPIRÉE', exact: true })).toBeVisible()
   })
 
   test('Scenario 5 — UUID invalide → INVALIDE sans fuite', async ({ page }) => {
     await mockPublicVerify(page, SAMPLE_INVALID)
     await page.goto('/verify/00000000-0000-0000-0000-000000000000')
 
-    await expect(page.getByText('INVALIDE')).toBeVisible()
+    await expect(page.getByRole('status', { name: 'INVALIDE', exact: true })).toBeVisible()
 
     // Vérifier qu'aucun champ technique sensible n'est exposé
     const html = await page.content()
