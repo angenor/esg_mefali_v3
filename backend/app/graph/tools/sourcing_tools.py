@@ -45,17 +45,16 @@ async def cite_source(
     source_id: str,
     config: RunnableConfig = None,  # type: ignore[assignment]
 ) -> str:
-    """Citer une source verifiee du catalogue.
+    """Cite une source verifiee du catalogue (F01) pour rattacher un chiffre/fait a une reference.
 
-    Use when : tu mentionnes un chiffre, un score, un seuil, un facteur d'emission
-        ou tout fait verifiable, et tu veux le rattacher a une source officielle.
-    Don't use when : la source que tu vises n'est pas en statut `verified`
-        (utilise `search_source` ou `flag_unsourced` a la place).
-
-    Exemple : pour citer la source ADEME Base Carbone v23, invoquer
-        cite_source(source_id="b3a7c1f2-...").
-    Anti-exemple : ne jamais inventer un identifiant (toujours passer par
-        `search_source` si tu ne connais pas l'UUID).
+    Use when:
+    - tu mentionnes un chiffre/seuil/facteur d'emission a rattacher a une source officielle.
+    - apres `search_source`, lorsqu'un UUID a ete identifie.
+    Don't use when:
+    - source non `verified` (utiliser `search_source` ou `flag_unsourced`).
+    - aucun chiffre dans la reponse (citation inutile).
+    Exemple: pour citer ADEME Base Carbone v23 -> cite_source(source_id="b3a7c1f2-...").
+    Anti: ne jamais inventer un UUID (toujours passer par `search_source`).
 
     Args:
         source_id: UUID de la source en statut `verified`.
@@ -105,18 +104,16 @@ async def search_source(
     limit: int = 5,
     config: RunnableConfig = None,  # type: ignore[assignment]
 ) -> str:
-    """Rechercher des sources verifiees du catalogue par mots-cles.
+    """Recherche des sources verifiees du catalogue (F01) par mots-cles + publisher optionnel.
 
-    Use when : tu as besoin d'une source pour citer un chiffre mais tu ne
-        connais pas l'UUID exact ; tu veux trouver les sources les plus
-        pertinentes pour un sujet (par exemple "facteur d'emission electricite").
-    Don't use when : tu connais deja l'UUID precis (utilise alors `cite_source`)
-        ou aucune source n'existe vraisemblablement (utilise `flag_unsourced`).
-
-    Exemple : pour trouver une source ADEME sur l'electricite,
-        search_source(query="electricite reseau", publisher="ADEME").
-    Anti-exemple : ne pas faire des requetes excessivement longues
-        (privilegie 2-5 mots-cles).
+    Use when:
+    - tu as besoin d'une source pour un chiffre mais tu n'as pas l'UUID.
+    - exploration : "facteur emission electricite", "taxonomie UEMOA".
+    Don't use when:
+    - UUID connu (utiliser `cite_source` directement).
+    - aucune source ne sera disponible (utiliser `flag_unsourced`).
+    Exemple: search_source(query="electricite reseau", publisher="ADEME").
+    Anti: requetes longues > 5 mots ; preferer 2-5 mots-cles.
 
     Args:
         query: Mots-cles de recherche (au moins 2 caracteres).
@@ -163,18 +160,16 @@ async def flag_unsourced(
     reason: str,
     config: RunnableConfig = None,  # type: ignore[assignment]
 ) -> str:
-    """Signaler une affirmation que tu ne peux pas sourcer.
+    """Signale explicitement une affirmation non sourcable (alternative a inventer une source).
 
-    Use when : tu as besoin de mentionner un chiffre/fait mais aucune source
-        verifiee n'est disponible ; tu veux signaler explicitement l'absence de
-        source plutot que d'inventer.
-    Don't use when : tu peux trouver une source via `search_source` (essaie
-        d'abord) ou tu connais deja l'UUID (utilise `cite_source`).
-
-    Exemple : flag_unsourced(claim="Le secteur informel represente 60% de
-        l'emploi", reason="aucune source UEMOA actuelle dans le catalogue").
-    Anti-exemple : ne pas utiliser pour eviter de chercher des sources
-        verifiees existantes (devoir : `search_source` d'abord).
+    Use when:
+    - tu dois mentionner un chiffre/fait sans source verifiee disponible.
+    - apres `search_source` infructueux, tracer l'absence de source.
+    Don't use when:
+    - une source existe (essayer d'abord `search_source` puis `cite_source`).
+    - tu connais l'UUID (utiliser `cite_source`).
+    Exemple: flag_unsourced(claim="Secteur informel = 60% emploi", reason="aucune source UEMOA actuelle").
+    Anti: utiliser pour eviter de chercher (devoir `search_source` d'abord).
 
     Args:
         claim: Texte de l'affirmation non sourcable (au moins 5 caracteres).

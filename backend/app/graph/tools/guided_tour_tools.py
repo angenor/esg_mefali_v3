@@ -29,10 +29,16 @@ async def trigger_guided_tour(
     context: dict | None = None,
     config: RunnableConfig = None,  # type: ignore[assignment]
 ) -> str:
-    """Declencher un parcours guide visuel pour l'utilisateur.
+    """Declenche un parcours guide visuel (overlay) sur l'interface utilisateur.
 
-    Utilise cet outil pour lancer un guidage interactif qui montre
-    visuellement a l'utilisateur les elements de l'interface.
+    Use when:
+    - "montre-moi", "guide-moi", apres une action a explication visuelle.
+    - apres un resultat ESG/carbone/credit, proposer un tour des elements.
+    Don't use when:
+    - simple consultation textuelle (utiliser les `get_*` tools de chat).
+    - sans `tour_id` valide (snake_case, lowercase).
+    Exemple: "Montre-moi mes resultats ESG" -> trigger_guided_tour(tour_id='show_esg_results').
+    Anti: "Donne mon score" -> NE PAS appeler (utiliser `get_esg_assessment_chat`).
 
     Args:
         tour_id: Identifiant du parcours (ex: show_esg_results, show_carbon_results).

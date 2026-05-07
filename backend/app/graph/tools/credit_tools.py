@@ -12,7 +12,7 @@ from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import tool
 from sqlalchemy import select
 
-from app.graph.tools.common import get_db_and_user
+from app.graph.tools.common import get_db_and_user, with_retry
 
 logger = logging.getLogger(__name__)
 
@@ -26,13 +26,29 @@ async def _resolve_account_id(db, user_id):
 
 
 @tool
+@with_retry(
+    max_retries=1,
+    node_name="credit_node",
+    fallback_message=(
+        "Je n'arrive pas à générer le score de crédit. "
+        "Pouvez-vous réessayer dans un instant ?"
+    ),
+)
 async def generate_credit_score(config: RunnableConfig) -> str:
-    """Calculer le score de credit vert alternatif de l'utilisateur.
+    """Calcule le score de credit vert alternatif (solvabilite + impact ESG/carbone).
 
-    Utilise cet outil quand l'utilisateur demande a calculer ou recalculer
-    son score de credit vert. Le score combine solvabilite et impact vert
-    a partir des donnees non-conventionnelles (profil, ESG, carbone).
-    N'estime JAMAIS un score manuellement — appelle toujours ce tool.
+    Use when:
+    - "calcule mon score credit", "credit vert", "solvabilite verte".
+    - apres saisie ESG + carbone, proposer un score combine au prospect.
+    Don't use when:
+    - simple consultation (utiliser `get_credit_score`).
+    - certificat demande (utiliser `generate_credit_certificate` apres
+      ce tool).
+    Exemple: "Donne-moi mon score credit vert" -> generate_credit_score().
+    Anti: "Mon score actuel ?" -> NE PAS appeler (utiliser `get_credit_score`).
+
+    Le score combine donnees non-conventionnelles (profil, ESG, carbone) ;
+    aucun chiffre ne doit etre estime manuellement par le LLM.
     """
     from app.modules.credit.service import generate_credit_score as gen_score
 
@@ -57,10 +73,16 @@ async def generate_credit_score(config: RunnableConfig) -> str:
 
 @tool
 async def get_credit_score(config: RunnableConfig) -> str:
-    """Consulter le dernier score de credit vert de l'utilisateur.
+    """Consulte le dernier score de credit vert calcule (lecture seule).
 
-    Utilise cet outil quand l'utilisateur demande son score de credit vert actuel,
-    son niveau de risque, ou sa solvabilite.
+    Use when:
+    - "mon score credit", "ma solvabilite verte".
+    - apres `generate_credit_score`, communiquer le score.
+    Don't use when:
+    - score jamais calcule (utiliser `generate_credit_score`).
+    - attestation demandee (utiliser `generate_credit_certificate`).
+    Exemple: "Mon score credit vert ?" -> get_credit_score().
+    Anti: "Recalcule mon score" -> NE PAS appeler (utiliser `generate_credit_score`).
     """
     from app.modules.credit.service import get_latest_score
 
@@ -90,14 +112,28 @@ async def get_credit_score(config: RunnableConfig) -> str:
 
 
 @tool
+@with_retry(
+    max_retries=1,
+    node_name="credit_node",
+    fallback_message=(
+        "Je n'arrive pas à émettre l'attestation de crédit. "
+        "Pouvez-vous réessayer ou contacter le support ?"
+    ),
+)
 async def generate_credit_certificate(config: RunnableConfig) -> str:
-    """Generer une attestation verifiable signee Ed25519 du score de credit vert (F08).
+    """Genere une attestation verifiable signee Ed25519 du score de credit vert (F08).
 
-    Utilise cet outil quand l'utilisateur demande un certificat, une attestation
-    ou un document officiel de son score de credit vert. Le service appele
-    genere reellement un PDF signe Ed25519 avec QR code et URL de verification
-    publique. Le tool retourne l'URL de verification que tu DOIS communiquer
-    a l'utilisateur dans ta reponse texte.
+    Use when:
+    - "attestation officielle", "certificat verifiable", "document signe".
+    - apres `generate_credit_score`, l'utilisateur veut partager son score.
+    Don't use when:
+    - score non calcule (calculer d'abord via `generate_credit_score`).
+    - simple consultation (utiliser `get_credit_score`).
+    Exemple: "Donne-moi un certificat de mon score" -> generate_credit_certificate().
+    Anti: "Mon score actuel ?" -> NE PAS appeler (utiliser `get_credit_score`).
+
+    Le tool retourne l'URL de verification publique que le LLM DOIT communiquer
+    en clair a l'utilisateur dans la reponse texte.
     """
     from app.core.audit_context import source_of_change_scope
     from app.modules.attestations.service import (

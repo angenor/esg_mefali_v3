@@ -22,11 +22,16 @@ async def analyze_uploaded_document(
     document_id: str,
     config: RunnableConfig,
 ) -> str:
-    """Analyser un document uploade par l'utilisateur.
+    """Analyse un document uploade (PDF/DOCX/XLSX) avec OCR/extraction et resume IA.
 
-    Utilise cet outil quand un document est uploade et doit etre analyse.
-    N'analyse JAMAIS un document sur la base du nom de fichier seul —
-    appelle toujours ce tool pour obtenir l'analyse reelle.
+    Use when:
+    - un document vient d'etre uploade (`status='pending'` ou `'uploaded'`).
+    - re-analyse explicitement demandee (changement de modele).
+    Don't use when:
+    - document deja analyse (utiliser `get_document_analysis`).
+    - simple liste demandee (utiliser `list_user_documents`).
+    Exemple: "Analyse mon bilan financier" + document_id -> analyze_uploaded_document(document_id=...).
+    Anti: "Que disait mon document ?" -> NE PAS appeler (utiliser `get_document_analysis`).
 
     Args:
         document_id: Identifiant UUID du document a analyser.
@@ -62,10 +67,16 @@ async def get_document_analysis(
     document_id: str,
     config: RunnableConfig,
 ) -> str:
-    """Consulter les resultats d'analyse d'un document deja analyse.
+    """Consulte les resultats d'analyse d'un document deja analyse (resume + points cles).
 
-    Utilise cet outil quand l'utilisateur demande les resultats d'analyse,
-    le resume ou les points cles d'un document specifique.
+    Use when:
+    - "que dit mon document", "resume du PDF", apres analyse achevee.
+    - decision basee sur le contenu (matching financement, plan).
+    Don't use when:
+    - document non analyse (utiliser `analyze_uploaded_document`).
+    - liste de documents (utiliser `list_user_documents`).
+    Exemple: "Resume mon business plan" -> get_document_analysis(document_id=...).
+    Anti: "Documents disponibles ?" -> NE PAS appeler (utiliser `list_user_documents`).
 
     Args:
         document_id: Identifiant UUID du document.
@@ -106,10 +117,16 @@ async def list_user_documents(
     config: RunnableConfig,
     document_type: str | None = None,
 ) -> str:
-    """Lister les documents uploades par l'utilisateur.
+    """Liste les documents uploades par l'utilisateur (avec filtre type optionnel).
 
-    Utilise cet outil quand l'utilisateur demande a voir ses documents,
-    cherche un document specifique, ou veut connaitre les documents disponibles.
+    Use when:
+    - "mes documents", "qu'est-ce que j'ai uploade".
+    - decider quel document analyser ensuite (filtre par type).
+    Don't use when:
+    - analyse demandee (utiliser `analyze_uploaded_document`).
+    - resultats d'un document precis (utiliser `get_document_analysis`).
+    Exemple: "Liste mes documents PDF" -> list_user_documents(document_type='pdf').
+    Anti: "Analyse mon dernier document" -> NE PAS appeler (utiliser `analyze_uploaded_document`).
 
     Args:
         document_type: Filtrer par type de document (optionnel).

@@ -17,7 +17,7 @@ from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import tool
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.graph.tools.common import UUID_PATTERN, get_db_and_user
+from app.graph.tools.common import UUID_PATTERN, get_db_and_user, with_retry
 from app.models.application import TargetType
 
 logger = logging.getLogger(__name__)
@@ -159,6 +159,14 @@ async def _export_application(db, application, fmt: str) -> str:
 
 
 @tool(args_schema=CreateFundApplicationArgs)
+@with_retry(
+    max_retries=1,
+    node_name="application_node",
+    fallback_message=(
+        "Je n'arrive pas à créer ce dossier de candidature. "
+        "Pouvez-vous me redonner l'identifiant du fonds ou de l'offre ?"
+    ),
+)
 async def create_fund_application(
     fund_id: str,
     config: RunnableConfig,

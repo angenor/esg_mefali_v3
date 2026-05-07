@@ -1,0 +1,83 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "$id": "https://esg-mefali.com/schemas/F22/eval_report.json",
+  "title": "Eval Report F22 — Sortie golden set runner",
+  "type": "object",
+  "required": [
+    "run_id",
+    "started_at",
+    "completed_at",
+    "duration_seconds",
+    "model",
+    "total_cases",
+    "passed",
+    "failed",
+    "results",
+    "metrics"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "run_id": {"type": "string", "format": "uuid"},
+    "started_at": {"type": "string", "format": "date-time"},
+    "completed_at": {"type": "string", "format": "date-time"},
+    "duration_seconds": {"type": "number", "minimum": 0},
+    "model": {"type": "string", "examples": ["anthropic/claude-3-5-sonnet-20241022"]},
+    "total_cases": {"type": "integer", "minimum": 1},
+    "passed": {"type": "integer", "minimum": 0},
+    "failed": {"type": "integer", "minimum": 0},
+    "results": {
+      "type": "array",
+      "items": {"$ref": "#/definitions/CaseResult"}
+    },
+    "metrics": {"$ref": "#/definitions/Metrics"}
+  },
+  "definitions": {
+    "CaseResult": {
+      "type": "object",
+      "required": ["case_id", "status", "expected_tool", "latency_ms"],
+      "additionalProperties": false,
+      "properties": {
+        "case_id": {"type": "string"},
+        "status": {"type": "string", "enum": ["pass", "fail", "partial"]},
+        "actual_tool": {"type": ["string", "null"]},
+        "expected_tool": {
+          "oneOf": [
+            {"type": "string"},
+            {"type": "array", "items": {"type": "string"}}
+          ]
+        },
+        "payload_diff": {
+          "type": ["object", "null"],
+          "description": "Diff entre payload attendu et payload reçu, null si OK."
+        },
+        "latency_ms": {"type": "integer", "minimum": 0},
+        "tokens_used": {"type": "integer", "minimum": 0},
+        "error": {"type": "string"}
+      }
+    },
+    "Metrics": {
+      "type": "object",
+      "required": ["tool_match_rate", "payload_valid_rate", "hallucination_rate", "fallback_rate"],
+      "additionalProperties": false,
+      "properties": {
+        "tool_match_rate": {"type": "number", "minimum": 0, "maximum": 1},
+        "payload_valid_rate": {"type": "number", "minimum": 0, "maximum": 1},
+        "hallucination_rate": {"type": "number", "minimum": 0, "maximum": 1},
+        "fallback_rate": {"type": "number", "minimum": 0, "maximum": 1},
+        "by_category": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "required": ["cases", "tool_match_rate", "payload_valid_rate"],
+            "additionalProperties": false,
+            "properties": {
+              "cases": {"type": "integer", "minimum": 0},
+              "tool_match_rate": {"type": "number", "minimum": 0, "maximum": 1},
+              "payload_valid_rate": {"type": "number", "minimum": 0, "maximum": 1}
+            }
+          }
+        }
+      }
+    }
+  }
+}

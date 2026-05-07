@@ -33,7 +33,7 @@ from sqlalchemy.exc import IntegrityError
 
 from app.core.audit_context import source_of_change_scope
 from app.core.money import Money
-from app.graph.tools.common import get_db_and_user
+from app.graph.tools.common import get_db_and_user, with_retry
 from app.models.user import User
 from app.modules.projects import service as project_service
 from app.modules.projects.schemas import (
@@ -331,14 +331,16 @@ async def list_projects(
     maturity: str | None = None,
     auto_generated: bool | None = None,
 ) -> str:
-    """Liste les projets verts de l'entreprise (nom, statut, maturité, montant cible, impact CO2e, nb candidatures).
+    """Liste les projets verts de l'entreprise (nom, statut, maturite, montant cible, impact CO2e, nb candidatures).
 
     Use when:
     - "Quels sont mes projets ?", "Liste mes projets actifs".
-    - Avant de créer une candidature de financement (identifier le projet).
+    - Avant de creer une candidature de financement (identifier le projet).
     Don't use when:
-    - Demande de détail précis (utiliser `get_project`).
-    Exemple: "Mes projets en quête de financement" -> list_projects(status='seeking_funding').
+    - Demande de detail precis (utiliser `get_project`).
+    - Creation directe (utiliser `create_project`).
+    Exemple: "Mes projets en quete de financement" -> list_projects(status='seeking_funding').
+    Anti: "Detail de mon projet solaire" -> NE PAS appeler (utiliser `get_project`).
     """
     try:
         db, _user_id, account_id = await _get_account_id_from_config(config)
@@ -363,13 +365,16 @@ async def get_project(
     config: RunnableConfig,
     project_id: uuid.UUID,
 ) -> str:
-    """Récupère le détail complet d'un projet par son ID (documents associés + nb candidatures).
+    """Recupere le detail complet d'un projet par son UUID (documents lies + nb candidatures).
 
     Use when:
-    - "Détails du projet X", "Quel est le statut du projet Y".
+    - "Details du projet X", "Quel est le statut du projet Y".
+    - Avant `update_project` ou `delete_project`, valider l'identifiant.
     Don't use when:
-    - Liste générale (utiliser `list_projects`).
+    - Liste generale (utiliser `list_projects`).
+    - Mise a jour (utiliser `update_project`).
     Exemple: "Montre-moi le projet panneaux solaires" -> get_project(project_id=...).
+    Anti: "Mes projets" -> NE PAS appeler (utiliser `list_projects`).
     """
     try:
         db, _user_id, account_id = await _get_account_id_from_config(config)
@@ -405,19 +410,19 @@ async def create_project(
     location_country: str | None = None,
     location_region: str | None = None,
 ) -> str:
-    """Crée un nouveau projet vert pour l'entreprise.
-
-    AVANT d'appeler ce tool avec un ``target_amount`` ou un ``expected_impact_tco2e``,
-    tu DOIS appeler ``cite_source(source_id)`` pour citer la référence du chiffre,
-    OU appeler ``flag_unsourced(reason)`` si tu cites un chiffre fourni par
-    l'utilisateur sans source externe (reason='user_input').
-
-    Le projet est créé avec ``source_of_change='llm'`` dans l'audit log.
+    """Cree un nouveau projet vert pour l'entreprise (audit log = source_of_change='llm').
 
     Use when:
-    - L'utilisateur décrit une initiative à financer ("je veux installer des panneaux solaires").
+    - L'utilisateur decrit une initiative a financer ("installer panneaux solaires").
+    - Apres collecte des elements minimum (nom + objectif env).
     Don't use when:
-    - Mise à jour d'un projet existant (utiliser `update_project`).
+    - Projet existant a modifier (utiliser `update_project`).
+    - Simple consultation (utiliser `list_projects`/`get_project`).
+    Exemple: "Je veux ajouter mon projet d'installation solaire" -> create_project(name='Solaire Bamako', objective_env=['energy']).
+    Anti: "Modifier mon projet X" -> NE PAS appeler (utiliser `update_project`).
+
+    AVANT ce tool avec ``target_amount`` ou ``expected_impact_tco2e``, tu DOIS
+    appeler ``cite_source(source_id)`` ou ``flag_unsourced(reason='user_input')``.
     """
     try:
         db, _user_id, account_id = await _get_account_id_from_config(config)
@@ -456,19 +461,33 @@ async def create_project(
 
 
 @tool(args_schema=UpdateProjectArgs)
+@with_retry(
+    max_retries=1,
+    node_name="project_node",
+    fallback_message=(
+        "Je n'arrive pas à mettre à jour ce projet. "
+        "Pouvez-vous reformuler les modifications souhaitées ?"
+    ),
+)
 async def update_project(
     config: RunnableConfig,
     project_id: uuid.UUID,
     fields: dict[str, Any],
 ) -> str:
-    """Met à jour les champs d'un projet existant.
+    """Met a jour les champs d'un projet existant (montant, statut, maturite, impact).
+
+    Use when:
+    - L'utilisateur precise un montant cible, un delai, un impact attendu.
+    - Changement de statut/maturite signale.
+    Don't use when:
+    - Creation initiale (utiliser `create_project`).
+    - Suppression demandee (utiliser `delete_project` avec confirm).
+    Exemple: "Mon projet solaire passe a 50M FCFA" -> update_project(project_id=..., fields={'target_amount_amount': 50_000_000}).
+    Anti: "Cree un nouveau projet" -> NE PAS appeler (utiliser `create_project`).
 
     Tu peux modifier n'importe quel champ sauf ``id``, ``account_id``,
     ``auto_generated``, ``created_at``. Pour ajouter ou retirer des objectifs
     environnementaux, fournis le tableau ``objective_env`` complet.
-
-    Use when:
-    - L'utilisateur précise un montant cible, un délai, un impact attendu.
     """
     try:
         db, _user_id, account_id = await _get_account_id_from_config(config)
@@ -499,27 +518,41 @@ async def update_project(
 
 
 @tool(args_schema=DeleteProjectArgs)
+@with_retry(
+    max_retries=1,
+    node_name="project_node",
+    fallback_message=(
+        "Je n'arrive pas à supprimer ce projet. "
+        "Pouvez-vous me redonner l'identifiant du projet à supprimer ?"
+    ),
+)
 async def delete_project(
     config: RunnableConfig,
     project_id: uuid.UUID,
     force: bool = False,
     confirm: bool = False,
 ) -> str:
-    """Supprime (soft-delete : statut passe à 'cancelled') un projet.
+    """Supprime (soft-delete : statut -> 'cancelled') un projet, avec confirmation destructive.
+
+    Use when:
+    - L'utilisateur demande explicitement la suppression d'un projet.
+    - Apres confirmation utilisateur via `ask_yes_no(destructive=True)`.
+    Don't use when:
+    - Aucune confirmation (le tool retournera `requires_destructive_confirmation`).
+    - Mise a jour souhaitee (utiliser `update_project`).
+    Exemple: ask_yes_no(destructive=True) + reponse oui -> delete_project(project_id=..., confirm=True).
+    Anti: appel direct sans `ask_yes_no` -> NE PAS le faire (le tool refusera).
 
     PATTERN DESTRUCTIF F10 (Module 1.1.3) :
     - Premier appel sans ``confirm`` : retourne ``{requires_confirmation: True}``
       sans toucher la BDD. Le LLM doit alors invoquer ``ask_yes_no(destructive=True)``.
-    - Second appel avec ``confirm=True`` après réponse utilisateur : exécute la suppression.
+    - Second appel avec ``confirm=True`` apres reponse utilisateur : execute la suppression.
 
     Si le projet a des candidatures actives (status NOT IN rejected/accepted/cancelled),
-    le tool refuse par défaut et retourne la liste des candidatures bloquantes.
+    le tool refuse par defaut et retourne la liste des candidatures bloquantes.
     Tu peux alors appeler ``ask_interactive_question`` pour demander confirmation
-    à l'utilisateur, puis re-appeler ``delete_project(project_id, force=true, confirm=true)``
+    a l'utilisateur, puis re-appeler ``delete_project(project_id, force=true, confirm=true)``
     si l'utilisateur confirme.
-
-    Use when:
-    - L'utilisateur demande explicitement la suppression d'un projet.
     """
     # F10 — Garde-fou destructif (Module 1.1.3)
     if not confirm:
@@ -552,15 +585,21 @@ async def duplicate_project(
     project_id: uuid.UUID,
     new_name: str | None = None,
 ) -> str:
-    """Duplique un projet existant.
-
-    Le nouveau projet hérite de tous les champs métier sauf ``id``,
-    ``created_at``, ``updated_at``, ``auto_generated`` et ``project_documents``.
-    Le statut est forcé à 'draft'. Si ``new_name`` est absent, le nom source
-    reçoit le suffixe ' (copie)'.
+    """Duplique un projet existant (statut force a 'draft', suffixe ' (copie)' si pas de new_name).
 
     Use when:
-    - L'utilisateur veut préparer un projet similaire sur un autre site.
+    - L'utilisateur veut preparer un projet similaire sur un autre site.
+    - Variante d'un projet existant en draft (nouveau montant, nouveau pays).
+    Don't use when:
+    - Mise a jour du projet source (utiliser `update_project`).
+    - Creation from scratch (utiliser `create_project`).
+    Exemple: "Duplique mon projet solaire pour Bamako" -> duplicate_project(project_id=..., new_name='Solaire Bamako').
+    Anti: "Modifier le projet" -> NE PAS appeler (utiliser `update_project`).
+
+    Le nouveau projet herite de tous les champs metier sauf ``id``,
+    ``created_at``, ``updated_at``, ``auto_generated`` et ``project_documents``.
+    Le statut est force a 'draft'. Si ``new_name`` est absent, le nom source
+    recoit le suffixe ' (copie)'.
     """
     try:
         db, _user_id, account_id = await _get_account_id_from_config(config)
@@ -588,12 +627,18 @@ async def link_document_to_project(
     document_id: uuid.UUID,
     doc_type: str,
 ) -> str:
-    """Associe un document existant à un projet, en spécifiant le type.
-
-    Échoue si l'association existe déjà (UNIQUE constraint).
+    """Associe un document deja uploade a un projet vert (lien project_documents).
 
     Use when:
-    - L'utilisateur veut associer un document uploadé à un projet.
+    - L'utilisateur veut lier un business plan, un titre foncier ou une etude a un projet.
+    - Apres `analyze_uploaded_document` ou `list_user_documents`, lier au projet.
+    Don't use when:
+    - Document non uploade (utiliser `analyze_uploaded_document` apres upload).
+    - Creation projet (utiliser `create_project`).
+    Exemple: "Associe mon business plan au projet solaire" -> link_document_to_project(project_id=..., document_id=..., doc_type='business_plan').
+    Anti: "Cree un projet avec ce document" -> NE PAS appeler (creer projet d'abord via `create_project`).
+
+    Echoue si l'association existe deja (UNIQUE constraint).
     """
     try:
         db, _user_id, account_id = await _get_account_id_from_config(config)

@@ -57,17 +57,15 @@ def _build_sse_marker(tool_name: str, payload: dict) -> str:
 
 @tool(args_schema=KPICardArgs)
 async def show_kpi_card(**kwargs) -> str:
-    """Afficher une carte KPI typée pour un chiffre clé sourcé.
+    """Affiche une carte KPI typee pour un chiffre cle source (score, total, montant, compteur).
 
     Use when:
-    - tu présentes un chiffre clé synthétique (score ESG, empreinte carbone totale,
-      score crédit, montant total levé, nombre de critères validés).
-    - une comparaison temporelle ou cible est pertinente (delta vs période/objectif).
-
+    - tu presentes un chiffre cle synthetique (score ESG, empreinte carbone, score credit, montant leve).
+    - une comparaison temporelle ou cible est pertinente (delta vs periode/objectif).
     Don't use when:
-    - tu présentes plusieurs valeurs à comparer (utiliser `show_comparison_table`).
-    - tu présentes une évolution temporelle (utiliser le richblock chart line).
-    - tu présentes une répartition en catégories (utiliser le richblock chart pie/donut).
+    - tu presentes plusieurs valeurs a comparer (utiliser `show_comparison_table`).
+    - tu presentes une evolution temporelle (utiliser fence ` ```chart ` line).
+    - tu presentes une repartition en categories (utiliser fence ` ```chart ` pie/donut).
 
     Exemple:
         show_kpi_card(title="Empreinte carbone 2026", value="45 tCO2e",
@@ -154,17 +152,14 @@ async def show_match_card(**kwargs) -> str:
 
 @tool(args_schema=MapArgs)
 async def show_map(**kwargs) -> str:
-    """Afficher une carte géographique des entités liées au projet.
+    """Affiche une carte geographique des entites liees (projet, intermediaire, fonds, UEMOA).
 
     Use when:
-    - l'utilisateur demande où se trouve un projet, un intermédiaire, un bureau de fonds.
-    - tu veux contextualiser géographiquement une recommandation (ex: intermédiaire
-      le plus proche).
-
+    - l'utilisateur demande ou se trouve un projet, un intermediaire, un bureau de fonds.
+    - tu veux contextualiser geographiquement une recommandation (intermediaire le plus proche).
     Don't use when:
-    - aucune coordonnée géographique précise n'est disponible (utiliser texte avec
-      ville/pays).
-    - une seule adresse à présenter sans contexte régional (utiliser texte simple).
+    - aucune coordonnee geographique precise n'est disponible (utiliser `cite_source` + texte).
+    - une seule adresse a presenter sans contexte regional (utiliser texte simple).
 
     Exemple:
         show_map(title="Vos interlocuteurs UEMOA",

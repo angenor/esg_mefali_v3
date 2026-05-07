@@ -38,6 +38,28 @@ def run_migrations_offline() -> None:
 
 def do_run_migrations(connection):  # noqa: ANN001
     """Exécuter les migrations avec une connexion."""
+    # F22 — la colonne alembic_version.version_num est par défaut VARCHAR(32),
+    # ce qui devient limitant pour des révisions descriptives (ex. F22 :
+    # ``032_add_validation_error_tool_call_logs`` = 39 caractères).
+    # On élargit la colonne à VARCHAR(64) AVANT d'ouvrir la transaction de
+    # migration (idempotent, AUTOCOMMIT). Compatible PG (no-op si déjà 64+).
+    try:
+        if connection.dialect.name == "postgresql":
+            connection.exec_driver_sql(
+                "ALTER TABLE alembic_version "
+                "ALTER COLUMN version_num TYPE VARCHAR(64)"
+            )
+            # Commit immédiat pour que la nouvelle taille soit visible avant
+            # le UPDATE alembic_version dans la transaction de migration.
+            connection.commit()
+    except Exception:
+        # Table absente (premier run) ou opération en échec : on ignore.
+        # La migration suivante échouera avec un message explicite si nécessaire.
+        try:
+            connection.rollback()
+        except Exception:
+            pass
+
     context.configure(connection=connection, target_metadata=target_metadata)
 
     with context.begin_transaction():

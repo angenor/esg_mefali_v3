@@ -16,11 +16,16 @@ logger = logging.getLogger(__name__)
 
 @tool
 async def get_user_dashboard_summary(config: RunnableConfig) -> str:
-    """Obtenir le resume du tableau de bord de l'utilisateur.
+    """Obtient le resume du tableau de bord (ESG, carbone, credit, financements).
 
-    Utilise cet outil quand l'utilisateur pose des questions generales sur
-    ses resultats, sa progression, ou demande un resume de sa situation.
-    Retourne les scores ESG, carbone, credit et financements.
+    Use when:
+    - questions generales : "ou j'en suis", "mon dashboard", "ma progression".
+    - decider la prochaine etape (matching, plan d'action, evaluation manquante).
+    Don't use when:
+    - lecture d'un module specifique (utiliser `get_esg_assessment_chat`/`get_carbon_summary_chat`).
+    - mise a jour profil (utiliser `update_company_profile`).
+    Exemple: "Donne-moi un resume de ma situation" -> get_user_dashboard_summary().
+    Anti: "Mon score ESG ?" -> NE PAS appeler (utiliser `get_esg_assessment_chat`).
     """
     from app.modules.dashboard.service import get_dashboard_summary
 
@@ -78,10 +83,16 @@ async def get_user_dashboard_summary(config: RunnableConfig) -> str:
 
 @tool
 async def get_company_profile_chat(config: RunnableConfig) -> str:
-    """Consulter le profil de l'entreprise de l'utilisateur.
+    """Consulte le profil entreprise et son taux de completion (lecture seule).
 
-    Utilise cet outil quand l'utilisateur demande des informations sur
-    son profil entreprise, ses donnees, ou veut verifier ce qui est enregistre.
+    Use when:
+    - "mon profil", "que sais-tu de mon entreprise", "donnees enregistrees".
+    - decider quel module ouvrir (besoin de secteur/taille/pays).
+    Don't use when:
+    - mise a jour de fait (utiliser `update_company_profile`).
+    - score ESG demande (utiliser `get_esg_assessment_chat`).
+    Exemple: "Montre mon profil" -> get_company_profile_chat().
+    Anti: "Mon CA est 50M FCFA" -> NE PAS appeler (utiliser `update_company_profile`).
     """
     from app.modules.company.service import FIELD_LABELS, compute_completion, get_profile
 
@@ -131,10 +142,16 @@ async def get_esg_assessment_chat(
     config: RunnableConfig,
     assessment_id: str | None = None,
 ) -> str:
-    """Consulter l'evaluation ESG la plus recente de l'utilisateur.
+    """Consulte l'evaluation ESG la plus recente (score global + scores E/S/G).
 
-    Utilise cet outil quand l'utilisateur demande son score ESG,
-    ses resultats d'evaluation, ou veut connaitre sa performance ESG.
+    Use when:
+    - "mon score ESG", "ma performance E/S/G", "resultats evaluation".
+    - apres finalisation, montrer le score a l'utilisateur.
+    Don't use when:
+    - saisie d'un critere (utiliser `save_esg_criterion_score`/`batch_save_esg_criteria`).
+    - cloture (utiliser `finalize_esg_assessment`).
+    Exemple: "Mon score ESG ?" -> get_esg_assessment_chat().
+    Anti: "Je veux noter mes politiques" -> NE PAS appeler (saisie -> `batch_save_esg_criteria`).
 
     Args:
         assessment_id: Identifiant UUID de l'evaluation (optionnel, prend la plus recente par defaut).
@@ -187,10 +204,16 @@ async def get_carbon_summary_chat(
     config: RunnableConfig,
     assessment_id: str | None = None,
 ) -> str:
-    """Consulter le bilan carbone le plus recent de l'utilisateur.
+    """Consulte le bilan carbone le plus recent (emissions tCO2e + secteur + statut).
 
-    Utilise cet outil quand l'utilisateur demande son empreinte carbone,
-    ses emissions, ou veut connaitre son bilan carbone.
+    Use when:
+    - "mon empreinte carbone", "mes emissions", "tCO2e".
+    - apres finalisation, communiquer le total a l'utilisateur.
+    Don't use when:
+    - saisie d'une entree (utiliser `save_emission_entry`).
+    - cloture demandee (utiliser `finalize_carbon_assessment`).
+    Exemple: "Mon empreinte 2026 ?" -> get_carbon_summary_chat().
+    Anti: "200L de diesel" -> NE PAS appeler (saisie -> `save_emission_entry`).
 
     Args:
         assessment_id: Identifiant UUID du bilan (optionnel, prend le plus recent par defaut).

@@ -215,26 +215,18 @@ async def recall_history(
     include_current_conversation: bool = False,
     config: RunnableConfig | None = None,  # type: ignore[assignment]
 ) -> list[dict]:
-    """Récupère des messages anciens de l'historique conversationnel sémantiquement proches.
+    """Recupere des messages anciens de l'historique conversationnel semantiquement proches.
 
-    Use when :
-      - L'utilisateur fait référence à un échange passé (« tu te souviens »,
-        « la dernière fois », « il y a X temps »).
-      - Le contexte récent (15 derniers messages + 3 résumés) est insuffisant.
-      - L'utilisateur cite un projet, un fonds, un montant ou un détail
-        qu'il a partagé dans le passé.
-
-    Don't use when :
-      - L'information est dans les 15 derniers messages (déjà dans le contexte).
-      - L'information est dans le profil entreprise, les projets actifs,
-        ou les scores ESG/carbon récents.
-      - La requête est générale et ne fait pas explicitement référence au passé.
-
-    Exemple :
-      User : « Tu te souviens du nom du fonds qu'on évoquait pour mes panneaux solaires
-              il y a 2 mois ? »
-      → recall_history(query="fonds panneaux solaires", max_results=3)
-      Retourne les 3 messages historiques les plus pertinents.
+    Use when:
+    - l'utilisateur fait reference a un echange passe ("tu te souviens", "la derniere fois").
+    - le contexte recent (15 derniers messages + 3 resumes) est insuffisant.
+    - l'utilisateur cite un projet/fonds/montant qu'il a partage dans le passe.
+    Don't use when:
+    - l'information est dans les 15 derniers messages (deja dans le contexte).
+    - l'information est dans le profil/projets/scores recents (utiliser `get_company_profile_chat`).
+    - requete generale sans reference au passe.
+    Exemple: "Tu te souviens du fonds pour mes panneaux ?" -> recall_history(query="fonds panneaux solaires", max_results=3).
+    Anti: "Mon score ESG actuel ?" -> NE PAS appeler (utiliser `get_esg_assessment_chat`).
 
     Args:
         query: Requête textuelle libre (2..500 caractères).
