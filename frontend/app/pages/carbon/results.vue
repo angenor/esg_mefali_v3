@@ -15,6 +15,8 @@ import { useUiStore } from '~/stores/ui'
 import { useSources } from '~/composables/useSources'
 import SourceLink from '~/components/sources/SourceLink.vue'
 import SourceModal from '~/components/sources/SourceModal.vue'
+// F17 — Badge facteur d'emission avec source cliquable.
+import EmissionFactorBadge from '~/components/EmissionFactorBadge.vue'
 import type { CarbonSummary, BenchmarkResponse } from '~/types/carbon'
 
 ChartJS.register(ArcElement, Tooltip, Legend, CategoryScale, LinearScale, BarElement)
@@ -103,6 +105,8 @@ const categoryLabels: Record<string, string> = {
   waste: 'Dechets',
   industrial: 'Processus industriels',
   agriculture: 'Agriculture',
+  // F17 — categorie Achats (matieres premieres).
+  purchases: 'Achats',
 }
 
 const categoryColors: Record<string, string> = {
@@ -111,6 +115,8 @@ const categoryColors: Record<string, string> = {
   waste: '#10B981',
   industrial: '#8B5CF6',
   agriculture: '#EC4899',
+  // F17 — Achats : couleur ardoise.
+  purchases: '#64748B',
 }
 
 // Donnees pour le graphique donut
@@ -308,16 +314,72 @@ function positionColor(position: string): string {
           </div>
         </div>
 
-        <!-- Plan de reduction (Phase 5) -->
+        <!-- Plan de reduction (F17 schema canonique : actions[] avec source_id) -->
         <div
-          v-if="summary.reduction_plan"
+          v-if="summary.reduction_plan && summary.reduction_plan.actions?.length"
           class="bg-white dark:bg-dark-card border border-gray-200 dark:border-dark-border rounded-xl p-6"
           data-guide-target="carbon-reduction-plan"
         >
           <h2 class="text-lg font-semibold text-surface-text dark:text-surface-dark-text mb-4">
             Plan de reduction
           </h2>
-          <!-- Quick wins -->
+          <div class="space-y-3">
+            <div
+              v-for="(action, idx) in summary.reduction_plan.actions"
+              :key="idx"
+              class="p-4 rounded-lg bg-gray-50 dark:bg-dark-hover border border-gray-200 dark:border-dark-border"
+            >
+              <div class="flex items-start justify-between gap-3">
+                <div class="flex-1 min-w-0">
+                  <h3 class="text-sm font-semibold text-surface-text dark:text-surface-dark-text">
+                    {{ action.title }}
+                  </h3>
+                  <p class="text-xs text-gray-600 dark:text-gray-400 mt-1">
+                    {{ action.description }}
+                  </p>
+                  <p class="text-xs text-gray-500 dark:text-gray-500 mt-1">
+                    Echeance : {{ action.timeline }}
+                  </p>
+                </div>
+                <div class="text-right shrink-0">
+                  <span class="text-sm font-semibold text-emerald-600 dark:text-emerald-400">
+                    -{{ action.estimated_reduction_tco2e }} tCO2e
+                  </span>
+                  <p
+                    v-if="action.cost_estimate_fcfa"
+                    class="text-xs text-gray-500 dark:text-gray-400 mt-1"
+                  >
+                    {{ action.cost_estimate_fcfa.toLocaleString('fr-FR') }} FCFA
+                  </p>
+                </div>
+              </div>
+              <div class="mt-2 flex items-center gap-2">
+                <SourceLink
+                  v-if="action.source_id"
+                  :source-id="action.source_id"
+                  :aria-label="`Voir la source justifiant l'action ${action.title}`"
+                  @open="handleOpenSource"
+                />
+                <span
+                  v-else-if="action.unsourced"
+                  class="inline-flex items-center px-2 py-0.5 text-xs rounded-full bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300"
+                >
+                  Recommandation generale (non sourcee)
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Plan de reduction LEGACY (quick_wins / long_term) — retro-compat 2 sprints -->
+        <div
+          v-else-if="summary.reduction_plan && (summary.reduction_plan.quick_wins?.length || summary.reduction_plan.long_term?.length)"
+          class="bg-white dark:bg-dark-card border border-gray-200 dark:border-dark-border rounded-xl p-6"
+          data-guide-target="carbon-reduction-plan"
+        >
+          <h2 class="text-lg font-semibold text-surface-text dark:text-surface-dark-text mb-4">
+            Plan de reduction
+          </h2>
           <div v-if="summary.reduction_plan.quick_wins?.length" class="mb-6">
             <h3 class="text-sm font-semibold text-emerald-600 dark:text-emerald-400 uppercase mb-3">
               Quick wins (0-6 mois)
@@ -340,7 +402,6 @@ function positionColor(position: string): string {
               </div>
             </div>
           </div>
-          <!-- Long terme -->
           <div v-if="summary.reduction_plan.long_term?.length">
             <h3 class="text-sm font-semibold text-blue-600 dark:text-blue-400 uppercase mb-3">
               Long terme (6-24 mois)

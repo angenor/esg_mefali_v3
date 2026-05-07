@@ -1,7 +1,8 @@
 // Types TypeScript pour le module Calculateur d'Empreinte Carbone
 
 export type CarbonStatus = 'in_progress' | 'completed'
-export type EmissionCategory = 'energy' | 'transport' | 'waste' | 'industrial' | 'agriculture'
+// F17 — ajout de 'purchases' (achats matieres premieres).
+export type EmissionCategory = 'energy' | 'transport' | 'waste' | 'industrial' | 'agriculture' | 'purchases'
 export type BenchmarkPosition = 'well_below_average' | 'below_average' | 'average' | 'above_average' | 'well_above_average' | 'unknown'
 
 export interface CarbonEmissionEntry {
@@ -13,9 +14,24 @@ export interface CarbonEmissionEntry {
   emission_factor: number
   emissions_tco2e: number
   source_description: string | null
+  // F17 — sourcage et snapshot facteur (optionnels pour anciennes entries).
+  source_id?: string | null
+  factor_id?: string | null
   created_at: string
 }
 
+// F17 — Action conforme au schema canonique avec source_id + unsourced.
+export interface ReductionPlanActionV2 {
+  title: string
+  description: string
+  estimated_reduction_tco2e: number
+  cost_estimate_fcfa: number | null
+  timeline: string
+  source_id: string | null
+  unsourced: boolean
+}
+
+// Action legacy (avant F17) — conservee 2 sprints pour retro-compatibilite.
 export interface ReductionAction {
   action: string
   reduction_tco2e: number
@@ -23,9 +39,13 @@ export interface ReductionAction {
   timeline: string
 }
 
+// ReductionPlan accepte les 2 schemas (F17 actions[] OU legacy quick_wins/long_term).
 export interface ReductionPlan {
-  quick_wins: ReductionAction[]
-  long_term: ReductionAction[]
+  // Nouveau schema F17.
+  actions?: ReductionPlanActionV2[]
+  // Schema legacy.
+  quick_wins?: ReductionAction[]
+  long_term?: ReductionAction[]
 }
 
 export interface CarbonAssessment {

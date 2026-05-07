@@ -25,7 +25,13 @@ class CarbonAssessmentCreate(BaseModel):
 
 
 class EmissionEntryCreate(BaseModel):
-    """Creation d'une entree d'emission."""
+    """Creation d'une entree d'emission.
+
+    F17 : ``source_id`` et ``factor_id`` (UUID) sont desormais obligatoires
+    pour le sourcage F01 et la tracabilite snapshot du facteur applique.
+    Le champ legacy ``source_description`` reste accepte (texte libre)
+    pour la compatibilite, mais sera deprecie 2 sprints apres F17.
+    """
 
     category: str = Field(min_length=1, max_length=30)
     subcategory: str = Field(min_length=1, max_length=50)
@@ -34,6 +40,25 @@ class EmissionEntryCreate(BaseModel):
     emission_factor: float = Field(gt=0)
     emissions_tco2e: float = Field(gt=0)
     source_description: str | None = None
+    # F17 — FK obligatoires pour sourcage et snapshot.
+    source_id: uuid.UUID
+    factor_id: uuid.UUID
+
+
+class EmissionFactorResolutionResponse(BaseModel):
+    """Reponse exposant un facteur d'emission resolu (F17).
+
+    Utilise par les tools LangChain et l'API pour signaler au LLM/UI :
+        - ``factor_used`` : le code/label/value/unit du facteur applique.
+        - ``source_id`` : la source a citer via ``cite_source``.
+        - ``is_approximate`` : True si fallback (annee tres anterieure ou pays global).
+        - ``fallback_reason`` : ``year_older``, ``country_global`` ou None.
+    """
+
+    factor_used: dict
+    source_id: uuid.UUID
+    is_approximate: bool
+    fallback_reason: str | None = None
 
 
 class AddEntriesRequest(BaseModel):
@@ -57,6 +82,10 @@ class EmissionEntryResponse(BaseModel):
     emission_factor: float
     emissions_tco2e: float
     source_description: str | None = None
+    # F17 — sourcage + snapshot facteur (optionnels pour les anciennes
+    # entries non backfillees ou backfill en cours).
+    source_id: uuid.UUID | None = None
+    factor_id: uuid.UUID | None = None
     created_at: datetime
 
     model_config = {"from_attributes": True}

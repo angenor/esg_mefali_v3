@@ -75,11 +75,18 @@ async def seed_emission_factors(db: AsyncSession) -> int:
             sid = ademe_source_id
         # Pays : Cote d'Ivoire pour _ci, sinon WORLD/UEMOA generique.
         country = "CI" if "_ci" in code else "UEMOA"
+        # F17 — Pour respecter UNIQUE (category, country, year), on derive
+        # une categorie unique par code legacy (ex. 'energy' -> 'energy_<code>').
+        # Le service factor_service privilegie les facteurs F17 sources (ADEME/IEA/IPCC) ;
+        # ces lignes legacy sont conservees pour compatibilite tests F01.
+        legacy_category = f"{entry['category']}_{code}"
         ef = EmissionFactor(
             code=code,
             label=entry["label"],
-            category=entry["category"],
+            category=legacy_category,
             country=country,
+            # F17 — annee par defaut 2024 pour les facteurs legacy migres.
+            year=2024,
             value=float(entry["factor"]),
             unit=entry["unit"],
             source_id=sid,

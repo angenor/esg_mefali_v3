@@ -114,10 +114,32 @@ async def test_create_carbon_assessment_no_profile(mock_config):
 
 @pytest.mark.asyncio
 async def test_save_emission_entry_success(mock_config):
-    """Enregistrer une entree d'emission avec succes."""
+    """F17 — Enregistrer une entree d'emission via factor_service."""
+    from app.modules.carbon.factor_service import EmissionFactorResolution
+
     fake_assessment = MagicMock()
     fake_assessment.id = uuid.UUID("aaaaaaaa-0000-0000-0000-000000000001")
     fake_assessment.status.value = "in_progress"
+    fake_assessment.year = 2024
+
+    fake_factor = MagicMock()
+    fake_factor.id = uuid.UUID("bbbbbbbb-0000-0000-0000-000000000001")
+    fake_factor.code = "electricity_ci_2024"
+    fake_factor.label = "Electricite reseau Cote d'Ivoire 2024"
+    fake_factor.country = "CI"
+    fake_factor.year = 2024
+    fake_factor.value = 0.456
+    fake_factor.unit = "kgCO2e/kWh"
+    fake_factor.source_id = uuid.UUID("cccccccc-0000-0000-0000-000000000001")
+
+    fake_resolution = EmissionFactorResolution(
+        factor=fake_factor,
+        is_approximate=False,
+        fallback_reason=None,
+    )
+
+    fake_profile = MagicMock()
+    fake_profile.country = "CI"
 
     with (
         patch(
@@ -126,16 +148,26 @@ async def test_save_emission_entry_success(mock_config):
             return_value=fake_assessment,
         ),
         patch(
+            f"{_COMPANY_SVC}.get_profile",
+            new_callable=AsyncMock,
+            return_value=fake_profile,
+        ),
+        patch(
+            "app.modules.carbon.factor_service.get_emission_factor",
+            new_callable=AsyncMock,
+            return_value=fake_resolution,
+        ),
+        patch(
             f"{_CARBON_SVC}.add_entries",
             new_callable=AsyncMock,
-            return_value=(1, 0.2050, ["energy"]),
+            return_value=(1, 0.228, ["energy"]),
         ) as mock_add,
     ):
         result = await save_emission_entry.ainvoke(
             {
                 "assessment_id": "aaaaaaaa-0000-0000-0000-000000000001",
                 "category": "energy",
-                "subcategory": "electricity_ci",
+                "subcategory": "electricity",
                 "quantity": 500.0,
                 "unit": "kWh",
                 "source_description": "Electricite bureau",
@@ -145,19 +177,56 @@ async def test_save_emission_entry_success(mock_config):
 
     data = json.loads(result)
     assert data["status"] == "success"
-    assert data["entry"]["subcategory"] == "electricity_ci"
-    assert data["entry"]["emission_factor_kgco2e"] == 0.41
-    # 500 * 0.41 / 1000 = 0.205
-    assert data["entry"]["emissions_tco2e"] == 0.205
-    assert data["total_emissions_tco2e"] == 0.2050
+    # F17 : la subcategory finale est le code complet du facteur.
+    assert data["entry"]["subcategory"] == "electricity_ci_2024"
+    assert data["entry"]["emission_factor_kgco2e"] == 0.456
+    # 500 * 0.456 / 1000 = 0.228
+    assert data["entry"]["emissions_tco2e"] == 0.228
+    assert data["total_emissions_tco2e"] == 0.228
+    # F17 : factor_used + source_id sont presents.
+    assert data["factor_used"]["code"] == "electricity_ci_2024"
+    assert data["factor_used"]["country"] == "CI"
+    assert data["source_id"] == "cccccccc-0000-0000-0000-000000000001"
+    assert data["is_approximate"] is False
     mock_add.assert_awaited_once()
 
 
 @pytest.mark.asyncio
 async def test_save_emission_entry_fallback_category(mock_config):
-    """Si subcategory est None, chercher par categorie."""
+    """F17 — Si subcategory n'est pas trouve, fallback sur category."""
+    from app.modules.carbon.factor_service import (
+        EmissionFactorNotFoundError,
+        EmissionFactorResolution,
+    )
+
     fake_assessment = MagicMock()
     fake_assessment.id = uuid.UUID("aaaaaaaa-0000-0000-0000-000000000001")
+    fake_assessment.year = 2024
+
+    fake_factor = MagicMock()
+    fake_factor.id = uuid.UUID("bbbbbbbb-0000-0000-0000-000000000002")
+    fake_factor.code = "fuel_diesel_global_2024"
+    fake_factor.label = "Gasoil"
+    fake_factor.country = "global"
+    fake_factor.year = 2024
+    fake_factor.value = 2.68
+    fake_factor.unit = "kgCO2e/L"
+    fake_factor.source_id = uuid.UUID("cccccccc-0000-0000-0000-000000000002")
+
+    fake_resolution = EmissionFactorResolution(
+        factor=fake_factor,
+        is_approximate=True,
+        fallback_reason="country_global",
+    )
+
+    fake_profile = MagicMock()
+    fake_profile.country = "ZZ"  # Pays inconnu, fallback global.
+
+    # Simule : 1er appel echoue (lookup avec subcategory='diesel'), 2eme reussit avec category='transport'.
+    side_effects = [
+        EmissionFactorNotFoundError("diesel", "ZZ", 2024),
+        fake_resolution,
+    ]
 
     with (
         patch(
@@ -166,15 +235,26 @@ async def test_save_emission_entry_fallback_category(mock_config):
             return_value=fake_assessment,
         ),
         patch(
+            f"{_COMPANY_SVC}.get_profile",
+            new_callable=AsyncMock,
+            return_value=fake_profile,
+        ),
+        patch(
+            "app.modules.carbon.factor_service.get_emission_factor",
+            new_callable=AsyncMock,
+            side_effect=side_effects,
+        ),
+        patch(
             f"{_CARBON_SVC}.add_entries",
             new_callable=AsyncMock,
-            return_value=(1, 0.1, []),
+            return_value=(1, 0.268, []),
         ),
     ):
         result = await save_emission_entry.ainvoke(
             {
                 "assessment_id": "aaaaaaaa-0000-0000-0000-000000000001",
-                "category": "transport",
+                "category": "fuel_diesel",
+                "subcategory": "diesel",
                 "quantity": 100.0,
                 "unit": "L",
                 "source_description": "Carburant vehicule",
@@ -184,8 +264,10 @@ async def test_save_emission_entry_fallback_category(mock_config):
 
     data = json.loads(result)
     assert data["status"] == "success"
-    # Premier facteur de la categorie transport est "gasoline"
-    assert data["entry"]["subcategory"] == "gasoline"
+    # F17 : code du facteur retenu apres fallback.
+    assert data["entry"]["subcategory"] == "fuel_diesel_global_2024"
+    assert data["is_approximate"] is True
+    assert data["fallback_reason"] == "country_global"
 
 
 @pytest.mark.asyncio
@@ -215,14 +297,37 @@ async def test_save_emission_entry_assessment_not_found(mock_config):
 
 @pytest.mark.asyncio
 async def test_save_emission_entry_unknown_factor(mock_config):
-    """Erreur si aucun facteur d'emission ne correspond."""
+    """F17 — Erreur si aucun facteur d'emission ne correspond
+    (ni subcategory, ni category fallback).
+    """
+    from app.modules.carbon.factor_service import EmissionFactorNotFoundError
+
     fake_assessment = MagicMock()
     fake_assessment.id = uuid.UUID("aaaaaaaa-0000-0000-0000-000000000001")
+    fake_assessment.year = 2024
 
-    with patch(
-        f"{_CARBON_SVC}.get_assessment",
-        new_callable=AsyncMock,
-        return_value=fake_assessment,
+    fake_profile = MagicMock()
+    fake_profile.country = None
+
+    # Les 2 appels factor_service echouent (subcategory + category fallback).
+    with (
+        patch(
+            f"{_CARBON_SVC}.get_assessment",
+            new_callable=AsyncMock,
+            return_value=fake_assessment,
+        ),
+        patch(
+            f"{_COMPANY_SVC}.get_profile",
+            new_callable=AsyncMock,
+            return_value=fake_profile,
+        ),
+        patch(
+            "app.modules.carbon.factor_service.get_emission_factor",
+            new_callable=AsyncMock,
+            side_effect=EmissionFactorNotFoundError(
+                "unknown_category", None, 2024
+            ),
+        ),
     ):
         result = await save_emission_entry.ainvoke(
             {
@@ -238,6 +343,7 @@ async def test_save_emission_entry_unknown_factor(mock_config):
 
     data = json.loads(result)
     assert data["status"] == "error"
+    assert data.get("error_code") == "factor_not_found"
     assert "Aucun facteur" in data["message"]
 
 
