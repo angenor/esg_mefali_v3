@@ -173,10 +173,14 @@ test.describe('F03 — Audit Log Append-Only', () => {
 
     await page.goto('/historique')
     await expect(page.getByTestId('historique-title')).toBeVisible()
-    await expect(page.getByText('Modification')).toBeVisible()
-    await expect(page.getByText('Profil entreprise')).toBeVisible()
-    await expect(page.getByText('sector : agriculture → energie')).toBeVisible()
-    await expect(page.getByText('Manuel')).toBeVisible()
+    // Scope au badge d'evenement (li[data-action]) pour eviter l'ambiguite avec
+    // les <option> du filtre Action et le paragraphe descriptif de la page.
+    const updateEntry = page.locator('li[data-action="update"]').first()
+    await expect(updateEntry).toBeVisible()
+    await expect(updateEntry.getByText('Modification')).toBeVisible()
+    await expect(updateEntry.getByText('Profil entreprise')).toBeVisible()
+    await expect(updateEntry.getByText('sector : agriculture → energie')).toBeVisible()
+    await expect(updateEntry.getByText('Manuel')).toBeVisible()
   })
 
   test('US1.llm — création candidature via LLM produit un audit `llm` avec actor_metadata', async ({
@@ -199,9 +203,13 @@ test.describe('F03 — Audit Log Append-Only', () => {
     })
 
     await page.goto('/historique')
-    await expect(page.getByText('Création')).toBeVisible()
-    await expect(page.getByText('Candidature au fonds')).toBeVisible()
-    await expect(page.getByText("L'assistant IA")).toBeVisible()
+    // Scope au badge d'evenement (li[data-action="create"]) pour eviter l'ambiguite
+    // avec les <option> du filtre Action.
+    const createEntry = page.locator('li[data-action="create"]').first()
+    await expect(createEntry).toBeVisible()
+    await expect(createEntry.getByText('Création')).toBeVisible()
+    await expect(createEntry.getByText('Candidature au fonds')).toBeVisible()
+    await expect(createEntry.getByText("L'assistant IA")).toBeVisible()
   })
 
   test('US2 — consultation admin du compte PME crée un audit view_admin côté PME', async ({
@@ -225,8 +233,12 @@ test.describe('F03 — Audit Log Append-Only', () => {
     })
 
     await page.goto('/historique')
-    await expect(page.getByText('Consultation Admin')).toBeVisible()
-    await expect(page.getByText('admin Mefali').first()).toBeVisible()
+    // Scope au badge d'evenement (li[data-action="view_admin"]) pour eviter l'ambiguite
+    // avec les <option> du filtre Action et le paragraphe descriptif de la page.
+    const viewAdminEntry = page.locator('li[data-action="view_admin"]').first()
+    await expect(viewAdminEntry).toBeVisible()
+    await expect(viewAdminEntry.getByText('Consultation Admin')).toBeVisible()
+    await expect(viewAdminEntry.getByText('admin Mefali')).toBeVisible()
   })
 
   test('US3 — export CSV avec accents français préservés (BOM UTF-8)', async ({
