@@ -144,6 +144,13 @@ EXEMPT_MODELS: frozenset[str] = frozenset(
         # Les mutations sont admin-only (cron exchangerate-api.com) et tracées
         # via les logs structurés ERROR/INFO du module currency.
         "ExchangeRate",
+        # F12 — Index de cache (chunks d'embedding) : pas une entité métier.
+        # Les chunks sont insérés en arrière-plan via un hook après-insertion
+        # de Message ; aucune mutation utilisateur directe. La traçabilité de
+        # la donnée originale est sur Message (déjà en EXEMPT_MODELS comme
+        # contenu conversationnel). Les logs structurés `message_embedded`
+        # couvrent l'observabilité (FR-029, SC-007).
+        "MessageChunk",
     }
 )
 

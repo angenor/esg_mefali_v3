@@ -60,3 +60,6 @@ from app.models.unsourced_flag import UnsourcedFlag  # noqa: F401
 
 # F04 — Versioning + Money + Multi-devises
 from app.models.exchange_rate import ExchangeRate  # noqa: F401
+
+# F12 — Mémoire contextuelle pgvector (chunks de messages indexés pour recherche sémantique)
+from app.models.message_chunk import MessageChunk  # noqa: F401

@@ -17,10 +17,11 @@ from __future__ import annotations
 
 import re
 
-# Borne dure : le LLM ne doit jamais voir plus de 13 tools par tour.
-# F01 ajoute cite_source/search_source/flag_unsourced en GLOBAL_WHITELIST,
-# d'ou la borne portee a 13 (10 metiers + 3 sourcing).
-MAX_TOOLS_PER_TURN: int = 13
+# Borne dure : le LLM ne doit jamais voir plus de 14 tools par tour.
+# F01 ajoute cite_source/search_source/flag_unsourced en GLOBAL_WHITELIST (3 tools),
+# F12 ajoute recall_history (1 tool transverse), d'ou la borne portee a 14
+# (10 metiers + 4 globaux).
+MAX_TOOLS_PER_TURN: int = 14
 
 # Whitelist transverse : tools toujours disponibles, ajoutes a chaque selection.
 # Source de verite : seuls les tools EFFECTIVEMENT exposes par le code peuvent
@@ -33,6 +34,9 @@ GLOBAL_WHITELIST: frozenset[str] = frozenset({
     "cite_source",
     "search_source",
     "flag_unsourced",
+    # F12 — recall_history transverse pour permettre la recherche sémantique
+    # dans l'historique depuis n'importe quel noeud spécialiste.
+    "recall_history",
 })
 
 

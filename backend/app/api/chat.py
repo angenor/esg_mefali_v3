@@ -153,6 +153,7 @@ async def stream_graph_events(
     current_page: str | None = None,
     guidance_stats: dict | None = None,
     active_entities: dict | None = None,
+    account_id: uuid.UUID | None = None,
 ) -> AsyncGenerator[dict, None]:
     """Streamer les événements du graphe LangGraph via astream_events().
 
@@ -204,6 +205,8 @@ async def stream_graph_events(
             "db": db,
             "conversation_id": uuid.UUID(conversation_id) if isinstance(conversation_id, str) else conversation_id,
             "widget_response": widget_response,
+            # F12 — exposé au tool recall_history (filtre RLS multi-tenant)
+            "account_id": account_id,
         },
     }
 
@@ -380,10 +383,69 @@ async def _load_profile_for_state(
     return profile_dict if profile_dict else None
 
 
+def format_relative_time(
+    dt: "datetime", now: "datetime | None" = None
+) -> str:
+    """Formater un horodatage en français court (clarification Q4).
+
+    - âge < 1 minute → « à l'instant »
+    - âge < 60 minutes → « il y a N minutes »
+    - âge < 24 heures → « il y a N heures »
+    - âge < 48 heures → « hier »
+    - âge ≤ 30 jours → « il y a N jours »
+    - âge > 30 jours → « le DD/MM/YYYY »
+    """
+    from datetime import datetime, timezone
+
+    if now is None:
+        now = datetime.now(timezone.utc)
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+
+    delta = now - dt
+    seconds = int(delta.total_seconds())
+
+    if seconds < 60:
+        return "à l'instant"
+    if seconds < 3600:
+        minutes = seconds // 60
+        suffix = "s" if minutes > 1 else ""
+        return f"il y a {minutes} minute{suffix}"
+    if seconds < 86400:
+        hours = seconds // 3600
+        suffix = "s" if hours > 1 else ""
+        return f"il y a {hours} heure{suffix}"
+    if seconds < 172800:
+        return "hier"
+
+    days = delta.days
+    if days <= 30:
+        return f"il y a {days} jours"
+    return f"le {dt.strftime('%d/%m/%Y')}"
+
+
 async def _load_context_memory(
-    db: AsyncSession, user_id: uuid.UUID
+    db: AsyncSession,
+    user_id: uuid.UUID,
+    conversation_id: uuid.UUID | None = None,
 ) -> list[str]:
-    """Charger les 3 derniers résumés de conversation."""
+    """Charger le contexte mémoire pour le LLM (F12).
+
+    Compose :
+    1. Les 3 derniers résumés de conversation (existant).
+    2. Les 15 derniers messages bruts de la conversation courante (F12),
+       formatés ``[<relative_time>, <role>] <content>``.
+
+    Args:
+        db: Session SQLAlchemy async.
+        user_id: UUID de l'utilisateur courant.
+        conversation_id: UUID de la conversation courante (optionnel).
+            Si fourni, charge les 15 derniers messages de cette conversation.
+
+    Returns:
+        Liste de chaînes : résumés en tête, messages bruts en queue.
+    """
+    # 1. Résumés (mécanisme existant)
     result = await db.execute(
         select(Conversation.summary)
         .where(
@@ -393,7 +455,34 @@ async def _load_context_memory(
         .order_by(Conversation.updated_at.desc())
         .limit(3)
     )
-    return [row[0] for row in result.all() if row[0]]
+    summaries = [row[0] for row in result.all() if row[0]]
+
+    # 2. Derniers messages bruts (F12)
+    raw_messages: list[str] = []
+    if conversation_id is not None:
+        msg_result = await db.execute(
+            select(Message)
+            .where(Message.conversation_id == conversation_id)
+            .order_by(Message.created_at.desc())
+            .limit(15)
+        )
+        rows = list(msg_result.scalars().all())
+        # Inverser pour avoir l'ordre chronologique (du plus ancien au plus récent)
+        rows.reverse()
+        for msg in rows:
+            role_label = "utilisateur" if msg.role == "user" else "assistant"
+            try:
+                rel_time = format_relative_time(msg.created_at)
+            except Exception:
+                rel_time = ""
+            content = msg.content or ""
+            # Borne défensive : ne pas dépasser 1500 chars par message en contexte
+            if len(content) > 1500:
+                content = content[:1497] + "..."
+            line = f"[{rel_time}, {role_label}] {content}" if rel_time else f"[{role_label}] {content}"
+            raw_messages.append(line)
+
+    return [*summaries, *raw_messages]
 
 
 async def _summarize_previous_conversation(
@@ -834,7 +923,7 @@ async def send_message(
 
     # Charger le profil et la mémoire contextuelle pour le prompt
     user_profile = await _load_profile_for_state(db, user_id)
-    context_memory = await _load_context_memory(db, user_id)
+    context_memory = await _load_context_memory(db, user_id, conversation_id=conv_id)
 
     async def generate_sse() -> AsyncGenerator[str, None]:
         """Générer les événements SSE via le graphe LangGraph avec tool calling."""
@@ -887,6 +976,7 @@ async def send_message(
                     current_page=current_page,
                     guidance_stats=parsed_guidance_stats,
                     active_entities=parsed_active_entities,
+                    account_id=current_user.account_id,
                 ):
                     event_type = event.get("type")
 

@@ -16,6 +16,18 @@ logger = logging.getLogger(__name__)
 MAX_TOOL_CALLS_PER_TURN = 5
 
 
+def _import_memory_tools() -> list:
+    """Importer MEMORY_TOOLS de manière paresseuse (évite cycles d'import).
+
+    F12 — Le tool recall_history est ajouté au ToolNode de chaque noeud
+    spécialiste pour permettre la recherche sémantique dans l'historique
+    conversationnel.
+    """
+    from app.graph.tools.memory_tools import MEMORY_TOOLS
+
+    return MEMORY_TOOLS
+
+
 def _route_after_router(state: ConversationState) -> str:
     """Décider du prochain nœud après le routeur.
 
@@ -129,17 +141,21 @@ def build_graph() -> StateGraph:
     graph.add_node("router", router_node)
     graph.add_node("document", document_node)
 
+    # F12 — recall_history (mémoire sémantique) injecté en transverse dans tous les noeuds.
+    MEMORY_TOOLS = _import_memory_tools()
+
     # Noeuds avec boucle tool calling — INTERACTIVE_TOOLS injecte partout (feature 018),
-    # GUIDED_TOUR_TOOLS injecte dans les 6 noeuds eligibles au guidage (feature 019).
+    # GUIDED_TOUR_TOOLS injecte dans les 6 noeuds eligibles au guidage (feature 019),
+    # MEMORY_TOOLS (recall_history) injecte partout (F12).
     # Le tool doit figurer AUSSI dans le ToolNode (et pas seulement bind_tools cote LLM),
     # sinon l'executeur rejette le tool_call et le LLM hallucine "tool indisponible".
-    create_tool_loop(graph, "chat", chat_node, tools=PROFILING_TOOLS + CHAT_TOOLS + DOCUMENT_TOOLS + INTERACTIVE_TOOLS + GUIDED_TOUR_TOOLS)
-    create_tool_loop(graph, "esg_scoring", esg_scoring_node, tools=ESG_TOOLS + INTERACTIVE_TOOLS + GUIDED_TOUR_TOOLS)
-    create_tool_loop(graph, "carbon", carbon_node, tools=CARBON_TOOLS + INTERACTIVE_TOOLS + GUIDED_TOUR_TOOLS)
-    create_tool_loop(graph, "financing", financing_node, tools=FINANCING_TOOLS + INTERACTIVE_TOOLS + GUIDED_TOUR_TOOLS)
-    create_tool_loop(graph, "application", application_node, tools=APPLICATION_TOOLS + INTERACTIVE_TOOLS)
-    create_tool_loop(graph, "credit", credit_node, tools=CREDIT_TOOLS + INTERACTIVE_TOOLS + GUIDED_TOUR_TOOLS)
-    create_tool_loop(graph, "action_plan", action_plan_node, tools=ACTION_PLAN_TOOLS + INTERACTIVE_TOOLS + GUIDED_TOUR_TOOLS)
+    create_tool_loop(graph, "chat", chat_node, tools=PROFILING_TOOLS + CHAT_TOOLS + DOCUMENT_TOOLS + INTERACTIVE_TOOLS + GUIDED_TOUR_TOOLS + MEMORY_TOOLS)
+    create_tool_loop(graph, "esg_scoring", esg_scoring_node, tools=ESG_TOOLS + INTERACTIVE_TOOLS + GUIDED_TOUR_TOOLS + MEMORY_TOOLS)
+    create_tool_loop(graph, "carbon", carbon_node, tools=CARBON_TOOLS + INTERACTIVE_TOOLS + GUIDED_TOUR_TOOLS + MEMORY_TOOLS)
+    create_tool_loop(graph, "financing", financing_node, tools=FINANCING_TOOLS + INTERACTIVE_TOOLS + GUIDED_TOUR_TOOLS + MEMORY_TOOLS)
+    create_tool_loop(graph, "application", application_node, tools=APPLICATION_TOOLS + INTERACTIVE_TOOLS + MEMORY_TOOLS)
+    create_tool_loop(graph, "credit", credit_node, tools=CREDIT_TOOLS + INTERACTIVE_TOOLS + GUIDED_TOUR_TOOLS + MEMORY_TOOLS)
+    create_tool_loop(graph, "action_plan", action_plan_node, tools=ACTION_PLAN_TOOLS + INTERACTIVE_TOOLS + GUIDED_TOUR_TOOLS + MEMORY_TOOLS)
 
     graph.set_entry_point("router")
     graph.add_conditional_edges(
@@ -161,13 +177,22 @@ def build_graph() -> StateGraph:
     return graph
 
 
-async def create_compiled_graph():
+async def create_compiled_graph(checkpointer: Any | None = None):
     """Compiler le graphe avec le checkpointer.
 
-    Appelé dans le lifespan FastAPI.
-    Utilise MemorySaver par défaut (le checkpointer PostgreSQL nécessite
-    une gestion de connexion async context manager dans le lifespan).
+    Appelé dans le lifespan FastAPI. Si ``checkpointer`` est fourni
+    (typiquement ``AsyncPostgresSaver`` initialisé par le lifespan), on
+    l'utilise pour la persistance des conversations (F12). Sinon on retombe
+    sur ``MemorySaver`` (RAM volatile — utile pour scripts CLI/tests).
+
+    Args:
+        checkpointer: Instance de checkpointer LangGraph (optionnel).
+
+    Returns:
+        Graphe compilé prêt à l'emploi.
     """
     graph = build_graph()
-    from langgraph.checkpoint.memory import MemorySaver
-    return graph.compile(checkpointer=MemorySaver())
+    if checkpointer is None:
+        from langgraph.checkpoint.memory import MemorySaver
+        checkpointer = MemorySaver()
+    return graph.compile(checkpointer=checkpointer)
