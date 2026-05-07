@@ -7,7 +7,7 @@ from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import tool
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.graph.tools.common import UUID_PATTERN, get_db_and_user
+from app.graph.tools.common import UUID_PATTERN, get_db_and_user, with_retry
 
 logger = logging.getLogger(__name__)
 
@@ -197,6 +197,14 @@ async def save_esg_criterion_score(
 
 
 @tool(args_schema=FinalizeESGAssessmentArgs)
+@with_retry(
+    max_retries=1,
+    node_name="esg_scoring_node",
+    fallback_message=(
+        "Je n'arrive pas à finaliser l'évaluation ESG. "
+        "Pouvez-vous confirmer à nouveau ou réessayer ?"
+    ),
+)
 async def finalize_esg_assessment(
     assessment_id: str,
     config: RunnableConfig,
@@ -328,6 +336,14 @@ async def get_esg_assessment(
 
 
 @tool(args_schema=BatchSaveESGCriteriaArgs)
+@with_retry(
+    max_retries=1,
+    node_name="esg_scoring_node",
+    fallback_message=(
+        "Je n'arrive pas à enregistrer cette série de critères ESG. "
+        "Pouvez-vous reformuler ou les saisir un par un ?"
+    ),
+)
 async def batch_save_esg_criteria(
     assessment_id: str,
     criteria: list[dict],

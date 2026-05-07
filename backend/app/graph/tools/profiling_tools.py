@@ -12,7 +12,7 @@ from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import tool
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.graph.tools.common import get_db_and_user
+from app.graph.tools.common import get_db_and_user, with_retry
 from app.models.company import SectorEnum
 from app.modules.company.schemas import CompanyProfileUpdate
 from app.modules.company.service import FIELD_LABELS, compute_completion
@@ -50,6 +50,14 @@ class GetCompanyProfileArgs(BaseModel):
 
 
 @tool(args_schema=UpdateCompanyProfileArgs)
+@with_retry(
+    max_retries=1,
+    node_name="profiling_node",
+    fallback_message=(
+        "Je n'arrive pas à formaliser cette mise à jour de profil. "
+        "Pouvez-vous me reformuler ?"
+    ),
+)
 async def update_company_profile(
     config: RunnableConfig,
     company_name: str | None = None,

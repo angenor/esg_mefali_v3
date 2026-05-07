@@ -1,0 +1,525 @@
+{
+  "version": "1.0",
+  "description": "Golden Set F22 — 50 cas annotés (10 profilage / 8 ESG / 6 carbone / 6 financement / 6 applications / 5 crédit / 4 plan / 5 conversationnels). Réf : specs/032-decision-tree-with-retry-eval/spec.md.",
+  "generated_at": "2026-05-07T12:00:00Z",
+  "cases": [
+    {
+      "id": "01-profile-set-sector",
+      "category": "profilage",
+      "context": {"current_page": "/profile", "active_module": null},
+      "user_message": "Mon entreprise est dans l'agriculture biologique au Sénégal",
+      "expected": {
+        "tool_called": "update_company_profile",
+        "payload_contains": {"sector": "agriculture", "country": "Sénégal"}
+      },
+      "tags": ["mutation", "profile"]
+    },
+    {
+      "id": "02-profile-set-employees",
+      "category": "profilage",
+      "context": {"current_page": "/profile", "active_module": null},
+      "user_message": "Nous sommes 25 employés à Dakar",
+      "expected": {
+        "tool_called": "update_company_profile",
+        "payload_contains": {"employee_count": 25, "city": "Dakar"}
+      },
+      "tags": ["mutation", "profile"]
+    },
+    {
+      "id": "03-profile-read-current",
+      "category": "profilage",
+      "context": {"current_page": "/profile", "active_module": null},
+      "user_message": "Que sais-tu de mon entreprise ?",
+      "expected": {
+        "tool_called": ["get_company_profile", "get_company_profile_chat"]
+      },
+      "tags": ["read", "profile"]
+    },
+    {
+      "id": "04-profile-set-revenue",
+      "category": "profilage",
+      "context": {"current_page": "/profile", "active_module": "profiling"},
+      "user_message": "Notre chiffre d'affaires annuel est de 50 millions FCFA",
+      "expected": {
+        "tool_called": "update_company_profile",
+        "payload_contains": {"annual_revenue_xof": 50000000}
+      },
+      "tags": ["mutation", "profile"]
+    },
+    {
+      "id": "05-project-list",
+      "category": "profilage",
+      "context": {"current_page": "/projects", "active_module": null},
+      "user_message": "Quels sont mes projets actifs ?",
+      "expected": {
+        "tool_called": "list_projects"
+      },
+      "tags": ["read", "project"]
+    },
+    {
+      "id": "06-project-create-solar",
+      "category": "profilage",
+      "context": {"current_page": "/projects", "active_module": null},
+      "user_message": "Je veux ajouter un projet d'installation de panneaux solaires à Bamako",
+      "expected": {
+        "tool_called": "create_project",
+        "payload_contains": {"location_country": "Mali"}
+      },
+      "tags": ["mutation", "project"]
+    },
+    {
+      "id": "07-project-update-amount",
+      "category": "profilage",
+      "context": {"current_page": "/projects", "active_module": null},
+      "user_message": "Mon projet solaire passe à 80 millions FCFA",
+      "expected": {
+        "tool_called": "update_project"
+      },
+      "tags": ["mutation", "project"]
+    },
+    {
+      "id": "08-project-delete-confirm",
+      "category": "profilage",
+      "context": {"current_page": "/projects", "active_module": null},
+      "user_message": "Supprime mon ancien projet brouillon",
+      "expected": {
+        "tool_called": ["ask_yes_no", "delete_project"]
+      },
+      "tags": ["destructive", "project"]
+    },
+    {
+      "id": "09-project-detail",
+      "category": "profilage",
+      "context": {"current_page": "/projects/abc-123", "active_module": null},
+      "user_message": "Détails de mon projet d'agroécologie",
+      "expected": {
+        "tool_called": "get_project"
+      },
+      "tags": ["read", "project"]
+    },
+    {
+      "id": "10-profile-add-policy",
+      "category": "profilage",
+      "context": {"current_page": "/profile", "active_module": "profiling"},
+      "user_message": "Nous avons une politique de gestion des déchets en place",
+      "expected": {
+        "tool_called": "update_company_profile",
+        "payload_contains": {"has_waste_management": true}
+      },
+      "tags": ["mutation", "profile", "esg"]
+    },
+    {
+      "id": "11-esg-create",
+      "category": "esg",
+      "context": {"current_page": "/esg", "active_module": null},
+      "user_message": "Je veux démarrer mon évaluation ESG",
+      "expected": {
+        "tool_called": "create_esg_assessment"
+      },
+      "tags": ["mutation", "esg"]
+    },
+    {
+      "id": "12-esg-save-criterion",
+      "category": "esg",
+      "context": {"current_page": "/esg", "active_module": "esg_scoring"},
+      "user_message": "Pour le critère E1, je donnerais 8/10",
+      "expected": {
+        "tool_called": "save_esg_criterion_score",
+        "payload_contains": {"criterion_code": "E1", "score": 8}
+      },
+      "tags": ["mutation", "esg"]
+    },
+    {
+      "id": "13-esg-batch-save",
+      "category": "esg",
+      "context": {"current_page": "/esg", "active_module": "esg_scoring"},
+      "user_message": "Je voudrais évaluer d'un coup E1=8, E2=7, E3=9",
+      "expected": {
+        "tool_called": "batch_save_esg_criteria"
+      },
+      "tags": ["mutation", "esg", "batch"]
+    },
+    {
+      "id": "14-esg-finalize",
+      "category": "esg",
+      "context": {"current_page": "/esg", "active_module": "esg_scoring"},
+      "user_message": "J'ai tout évalué, finalise mon évaluation ESG",
+      "expected": {
+        "tool_called": ["ask_yes_no", "finalize_esg_assessment"]
+      },
+      "tags": ["mutation", "esg", "destructive_data"]
+    },
+    {
+      "id": "15-esg-read-score",
+      "category": "esg",
+      "context": {"current_page": "/esg/results", "active_module": null},
+      "user_message": "Quel est mon score ESG ?",
+      "expected": {
+        "tool_called": ["get_esg_assessment", "get_esg_assessment_chat", "show_kpi_card"]
+      },
+      "tags": ["read", "esg", "kpi"]
+    },
+    {
+      "id": "16-esg-multi-ref",
+      "category": "esg",
+      "context": {"current_page": "/esg", "active_module": "esg_scoring"},
+      "user_message": "Compare mon évaluation Mefali vs IFC vs GRI",
+      "expected": {
+        "tool_called": ["compare_referentials", "show_comparison_table"]
+      },
+      "tags": ["read", "esg", "multi_referential"]
+    },
+    {
+      "id": "17-esg-recompute",
+      "category": "esg",
+      "context": {"current_page": "/esg/results", "active_module": null},
+      "user_message": "Recalcule mon score ESG avec le référentiel BOAD",
+      "expected": {
+        "tool_called": "recompute_score"
+      },
+      "tags": ["mutation", "esg", "multi_referential"]
+    },
+    {
+      "id": "18-esg-finalize-multi",
+      "category": "esg",
+      "context": {"current_page": "/esg", "active_module": "esg_scoring"},
+      "user_message": "Finalise avec scoring Mefali et GCF en parallèle",
+      "expected": {
+        "tool_called": "finalize_esg_assessment_multi_ref"
+      },
+      "tags": ["mutation", "esg", "multi_referential"]
+    },
+    {
+      "id": "19-carbon-create",
+      "category": "carbon",
+      "context": {"current_page": "/carbon", "active_module": null},
+      "user_message": "Je veux faire mon bilan carbone 2026",
+      "expected": {
+        "tool_called": "create_carbon_assessment",
+        "payload_contains": {"year": 2026}
+      },
+      "tags": ["mutation", "carbon"]
+    },
+    {
+      "id": "20-carbon-save-energy",
+      "category": "carbon",
+      "context": {"current_page": "/carbon", "active_module": "carbon"},
+      "user_message": "Nous consommons 500 kWh d'électricité par mois",
+      "expected": {
+        "tool_called": "save_emission_entry",
+        "payload_contains": {"category": "energy", "quantity": 500, "unit": "kWh"}
+      },
+      "tags": ["mutation", "carbon"]
+    },
+    {
+      "id": "21-carbon-save-transport",
+      "category": "carbon",
+      "context": {"current_page": "/carbon", "active_module": "carbon"},
+      "user_message": "Notre flotte consomme 200 litres de diesel par semaine",
+      "expected": {
+        "tool_called": "save_emission_entry",
+        "payload_contains": {"category": "transport", "unit": "L"}
+      },
+      "tags": ["mutation", "carbon"]
+    },
+    {
+      "id": "22-carbon-finalize",
+      "category": "carbon",
+      "context": {"current_page": "/carbon", "active_module": "carbon"},
+      "user_message": "C'est bon, je valide mon bilan carbone",
+      "expected": {
+        "tool_called": ["ask_yes_no", "finalize_carbon_assessment"]
+      },
+      "tags": ["mutation", "carbon"]
+    },
+    {
+      "id": "23-carbon-read",
+      "category": "carbon",
+      "context": {"current_page": "/carbon/results", "active_module": null},
+      "user_message": "Donne-moi mon empreinte carbone totale",
+      "expected": {
+        "tool_called": ["get_carbon_summary", "get_carbon_summary_chat", "show_kpi_card"]
+      },
+      "tags": ["read", "carbon", "kpi"]
+    },
+    {
+      "id": "24-carbon-cite-source",
+      "category": "carbon",
+      "context": {"current_page": "/carbon", "active_module": "carbon"},
+      "user_message": "Quel est le facteur d'émission du diesel ?",
+      "expected": {
+        "tool_called": ["search_source", "cite_source"]
+      },
+      "tags": ["sourcing", "carbon"]
+    },
+    {
+      "id": "25-financing-search",
+      "category": "financing",
+      "context": {"current_page": "/financing", "active_module": null},
+      "user_message": "Quels fonds correspondent à mon profil ?",
+      "expected": {
+        "tool_called": "search_compatible_funds"
+      },
+      "tags": ["matching", "financing"]
+    },
+    {
+      "id": "26-financing-fund-detail",
+      "category": "financing",
+      "context": {"current_page": "/financing", "active_module": null},
+      "user_message": "Donne-moi les détails du Green Climate Fund",
+      "expected": {
+        "tool_called": "get_fund_details"
+      },
+      "tags": ["read", "financing"]
+    },
+    {
+      "id": "27-financing-save-interest",
+      "category": "financing",
+      "context": {"current_page": "/financing", "active_module": "financing"},
+      "user_message": "Le GCF m'intéresse beaucoup, je voudrais en savoir plus",
+      "expected": {
+        "tool_called": "save_fund_interest"
+      },
+      "tags": ["mutation", "financing"]
+    },
+    {
+      "id": "28-financing-list-offers",
+      "category": "financing",
+      "context": {"current_page": "/financing", "active_module": null},
+      "user_message": "Liste les offres en Côte d'Ivoire",
+      "expected": {
+        "tool_called": "list_offers",
+        "payload_contains": {"country": "Côte d'Ivoire"}
+      },
+      "tags": ["read", "financing", "offers"]
+    },
+    {
+      "id": "29-financing-compare-offers",
+      "category": "financing",
+      "context": {"current_page": "/financing", "active_module": "financing"},
+      "user_message": "Compare GCF via BOAD et GCF via UNDP",
+      "expected": {
+        "tool_called": ["compare_offers_for_fund", "show_comparison_table"]
+      },
+      "tags": ["read", "financing", "comparison"]
+    },
+    {
+      "id": "30-financing-show-match",
+      "category": "financing",
+      "context": {"current_page": "/financing", "active_module": null},
+      "user_message": "Quelle offre correspond le mieux à mon projet solaire ?",
+      "expected": {
+        "tool_called": ["search_compatible_funds", "show_match_card"]
+      },
+      "tags": ["matching", "financing", "viz"]
+    },
+    {
+      "id": "31-app-create",
+      "category": "applications",
+      "context": {"current_page": "/applications", "active_module": null},
+      "user_message": "Je veux candidater au GCF",
+      "expected": {
+        "tool_called": "create_fund_application"
+      },
+      "tags": ["mutation", "applications"]
+    },
+    {
+      "id": "32-app-generate-section",
+      "category": "applications",
+      "context": {"current_page": "/applications/abc", "active_module": "application"},
+      "user_message": "Génère la section impact environnemental de mon dossier",
+      "expected": {
+        "tool_called": "generate_application_section"
+      },
+      "tags": ["mutation", "applications"]
+    },
+    {
+      "id": "33-app-update-section",
+      "category": "applications",
+      "context": {"current_page": "/applications/abc", "active_module": "application"},
+      "user_message": "Modifie la section budget pour ajouter les frais légaux",
+      "expected": {
+        "tool_called": "update_application_section"
+      },
+      "tags": ["mutation", "applications"]
+    },
+    {
+      "id": "34-app-checklist",
+      "category": "applications",
+      "context": {"current_page": "/applications/abc", "active_module": "application"},
+      "user_message": "Quels documents me manquent encore pour ma candidature ?",
+      "expected": {
+        "tool_called": "get_application_checklist"
+      },
+      "tags": ["read", "applications"]
+    },
+    {
+      "id": "35-app-simulate",
+      "category": "applications",
+      "context": {"current_page": "/applications/abc", "active_module": "application"},
+      "user_message": "Simule le financement pour mon dossier",
+      "expected": {
+        "tool_called": "simulate_financing"
+      },
+      "tags": ["read", "applications"]
+    },
+    {
+      "id": "36-app-export",
+      "category": "applications",
+      "context": {"current_page": "/applications/abc", "active_module": "application"},
+      "user_message": "Exporte mon dossier en PDF",
+      "expected": {
+        "tool_called": "export_application",
+        "payload_contains": {"format": "pdf"}
+      },
+      "tags": ["mutation", "applications"]
+    },
+    {
+      "id": "37-credit-generate",
+      "category": "credit",
+      "context": {"current_page": "/credit-score", "active_module": null},
+      "user_message": "Calcule mon score de crédit vert",
+      "expected": {
+        "tool_called": "generate_credit_score"
+      },
+      "tags": ["mutation", "credit"]
+    },
+    {
+      "id": "38-credit-read",
+      "category": "credit",
+      "context": {"current_page": "/credit-score", "active_module": null},
+      "user_message": "Quel est mon score de crédit vert actuel ?",
+      "expected": {
+        "tool_called": ["get_credit_score", "show_kpi_card"]
+      },
+      "tags": ["read", "credit"]
+    },
+    {
+      "id": "39-credit-momo-upload",
+      "category": "credit",
+      "context": {"current_page": "/credit-score", "active_module": "credit"},
+      "user_message": "J'ai 3 mois de relevés Mobile Money à uploader",
+      "expected": {
+        "tool_called": "ask_file_upload"
+      },
+      "tags": ["upload", "credit"]
+    },
+    {
+      "id": "40-credit-certificate",
+      "category": "credit",
+      "context": {"current_page": "/credit-score", "active_module": null},
+      "user_message": "Je veux une attestation officielle de mon score de crédit",
+      "expected": {
+        "tool_called": "generate_credit_certificate"
+      },
+      "tags": ["mutation", "credit", "attestation"]
+    },
+    {
+      "id": "41-credit-photo-upload",
+      "category": "credit",
+      "context": {"current_page": "/credit-score", "active_module": "credit"},
+      "user_message": "Voici les photos de mon stock à analyser",
+      "expected": {
+        "tool_called": "ask_file_upload"
+      },
+      "tags": ["upload", "credit"]
+    },
+    {
+      "id": "42-action-plan-generate",
+      "category": "action_plan",
+      "context": {"current_page": "/action-plan", "active_module": null},
+      "user_message": "Donne-moi un plan d'action sur 12 mois",
+      "expected": {
+        "tool_called": "generate_action_plan",
+        "payload_contains": {"timeframe": 12}
+      },
+      "tags": ["mutation", "action_plan"]
+    },
+    {
+      "id": "43-action-plan-read",
+      "category": "action_plan",
+      "context": {"current_page": "/action-plan", "active_module": null},
+      "user_message": "Mon plan d'action actuel ?",
+      "expected": {
+        "tool_called": "get_action_plan"
+      },
+      "tags": ["read", "action_plan"]
+    },
+    {
+      "id": "44-action-plan-update",
+      "category": "action_plan",
+      "context": {"current_page": "/action-plan", "active_module": "action_plan"},
+      "user_message": "J'ai terminé l'action de formation des employés",
+      "expected": {
+        "tool_called": "update_action_item",
+        "payload_contains": {"status": "completed"}
+      },
+      "tags": ["mutation", "action_plan"]
+    },
+    {
+      "id": "45-action-plan-progress",
+      "category": "action_plan",
+      "context": {"current_page": "/action-plan", "active_module": null},
+      "user_message": "L'action documents stratégiques est à 50% de progression",
+      "expected": {
+        "tool_called": "update_action_item",
+        "payload_contains": {"completion_percentage": 50}
+      },
+      "tags": ["mutation", "action_plan"]
+    },
+    {
+      "id": "46-conversational-greeting",
+      "category": "conversational",
+      "context": {"current_page": "/", "active_module": null},
+      "user_message": "Bonjour !",
+      "expected": {
+        "tool_called": [],
+        "fallback_acceptable": true
+      },
+      "tags": ["greeting"]
+    },
+    {
+      "id": "47-conversational-yes",
+      "category": "conversational",
+      "context": {"current_page": "/esg", "active_module": "esg_scoring"},
+      "user_message": "Oui, vas-y",
+      "expected": {
+        "tool_called": [],
+        "fallback_acceptable": true
+      },
+      "tags": ["confirmation"]
+    },
+    {
+      "id": "48-conversational-recall",
+      "category": "conversational",
+      "context": {"current_page": "/", "active_module": null},
+      "user_message": "Tu te souviens du fonds qu'on évoquait pour mes panneaux solaires ?",
+      "expected": {
+        "tool_called": "recall_history"
+      },
+      "tags": ["recall", "memory"]
+    },
+    {
+      "id": "49-conversational-ambiguous",
+      "category": "conversational",
+      "context": {"current_page": "/", "active_module": null},
+      "user_message": "Aide-moi",
+      "expected": {
+        "tool_called": [],
+        "fallback_acceptable": true
+      },
+      "tags": ["ambiguous"]
+    },
+    {
+      "id": "50-conversational-explain",
+      "category": "conversational",
+      "context": {"current_page": "/dashboard", "active_module": null},
+      "user_message": "Explique-moi ce que veut dire un score ESG de 65/100",
+      "expected": {
+        "tool_called": [],
+        "fallback_acceptable": true
+      },
+      "tags": ["explanation"]
+    }
+  ]
+}

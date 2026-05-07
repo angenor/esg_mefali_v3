@@ -12,18 +12,31 @@ import uuid
 from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import tool
 
-from app.graph.tools.common import get_db_and_user
+from app.graph.tools.common import get_db_and_user, with_retry
 
 logger = logging.getLogger(__name__)
 
 
 @tool
+@with_retry(
+    max_retries=1,
+    node_name="action_plan_node",
+    fallback_message=(
+        "Je n'arrive pas à générer le plan d'action. "
+        "Pouvez-vous me préciser l'horizon souhaité (6, 12 ou 24 mois) ?"
+    ),
+)
 async def generate_action_plan(timeframe: int, config: RunnableConfig) -> str:
-    """Generer un plan d'action ESG personnalise pour l'entreprise.
+    """Genere un plan d'action ESG personnalise (feuille de route 6/12/24 mois).
 
-    Utilise cet outil quand l'utilisateur demande a creer ou generer un plan
-    d'action, une feuille de route, ou un programme d'amelioration ESG.
-    Le plan est sauvegarde en base et visible sur /action-plan.
+    Use when:
+    - "feuille de route", "plan d'action", "que faire en priorite".
+    - apres evaluation ESG ou bilan carbone, transformer en actions concretes.
+    Don't use when:
+    - plan deja actif (utiliser `get_action_plan`).
+    - mise a jour d'une action precise (utiliser `update_action_item`).
+    Exemple: "Donne-moi un plan 12 mois" -> generate_action_plan(timeframe=12).
+    Anti: "Mes actions du moment ?" -> NE PAS appeler (utiliser `get_action_plan`).
 
     Args:
         timeframe: Horizon du plan en mois (6, 12 ou 24).
@@ -55,16 +68,30 @@ async def generate_action_plan(timeframe: int, config: RunnableConfig) -> str:
 
 
 @tool
+@with_retry(
+    max_retries=1,
+    node_name="action_plan_node",
+    fallback_message=(
+        "Je n'arrive pas à mettre à jour cette action. "
+        "Pouvez-vous me redonner l'identifiant et le statut visé ?"
+    ),
+)
 async def update_action_item(
     action_id: str,
     config: RunnableConfig,
     status: str | None = None,
     completion_percentage: int | None = None,
 ) -> str:
-    """Mettre a jour le statut ou la progression d'une action du plan.
+    """Met a jour le statut ou la progression d'une action du plan (in_progress, completed, %).
 
-    Utilise cet outil quand l'utilisateur indique avoir progresse sur une action,
-    l'avoir completee, ou souhaite changer son statut.
+    Use when:
+    - l'utilisateur signale une progression ou completion d'action.
+    - changement de statut explicite (cancelled, in_progress).
+    Don't use when:
+    - generation initiale (utiliser `generate_action_plan`).
+    - simple consultation (utiliser `get_action_plan`).
+    Exemple: "J'ai fait l'action XYZ" -> update_action_item(action_id=..., status='completed').
+    Anti: "Comment va mon plan ?" -> NE PAS appeler (utiliser `get_action_plan`).
 
     Args:
         action_id: Identifiant UUID de l'action a mettre a jour.
@@ -107,11 +134,16 @@ async def update_action_item(
 
 @tool
 async def get_action_plan(config: RunnableConfig) -> str:
-    """Consulter le plan d'action actif de l'utilisateur et sa progression.
+    """Consulte le plan d'action actif et sa progression (lecture seule).
 
-    Utilise cet outil quand l'utilisateur demande a voir son plan d'action,
-    sa progression, ou les prochaines actions a realiser.
-    Ne necessite aucun parametre.
+    Use when:
+    - "mon plan d'action", "progression", "prochaines etapes".
+    - decision sur l'action a prioriser.
+    Don't use when:
+    - generation initiale (utiliser `generate_action_plan`).
+    - mise a jour d'une action (utiliser `update_action_item`).
+    Exemple: "Mon plan ?" -> get_action_plan().
+    Anti: "Genere un nouveau plan" -> NE PAS appeler (utiliser `generate_action_plan`).
     """
     from app.modules.action_plan.service import get_active_plan
 

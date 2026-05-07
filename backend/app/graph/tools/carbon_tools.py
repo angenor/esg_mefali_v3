@@ -7,20 +7,26 @@ import uuid
 from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import tool
 
-from app.graph.tools.common import get_db_and_user
+from app.graph.tools.common import get_db_and_user, with_retry
 
 logger = logging.getLogger(__name__)
 
 
 @tool
 async def create_carbon_assessment(year: int, config: RunnableConfig) -> str:
-    """Creer un nouveau bilan carbone annuel pour l'utilisateur.
+    """Cree un nouveau bilan carbone annuel pour l'utilisateur.
 
-    Utilise le secteur du profil entreprise si disponible.
-    Un seul bilan par annee est autorise.
+    Use when:
+    - l'utilisateur veut commencer son empreinte carbone pour une annee donnee.
+    - aucun bilan ``in_progress`` n'existe deja pour cette annee.
+    Don't use when:
+    - bilan deja existant pour l'annee (utiliser `get_carbon_summary` ou `save_emission_entry`).
+    - simple consultation (utiliser `get_carbon_summary`).
+    Exemple: "Je veux faire mon bilan carbone 2026" -> create_carbon_assessment(year=2026).
+    Anti: "Quelle est mon empreinte ?" -> NE PAS appeler (utiliser `get_carbon_summary`).
 
     Args:
-        year: Annee du bilan carbone (ex: 2025).
+        year: Annee du bilan carbone (ex: 2026).
     """
     from app.modules.carbon.service import create_assessment
     from app.modules.company.service import get_profile
@@ -81,13 +87,21 @@ async def save_emission_entry(
     subcategory: str | None = None,
     config: RunnableConfig = None,
 ) -> str:
-    """Enregistrer une entree d'emission dans le bilan carbone.
+    """Enregistre une entree d'emission dans un bilan carbone (energie, transport, dechets, etc.).
+
+    Use when:
+    - l'utilisateur fournit une quantite consommee (kWh, L, kg) liee a une categorie d'emission.
+    - le bilan ``assessment_id`` est en cours et l'annee/pays sont connus.
+    Don't use when:
+    - aucun bilan ouvert (creer d'abord via `create_carbon_assessment`).
+    - simple consultation (utiliser `get_carbon_summary`).
+    Exemple: "500 kWh d'electricite ce mois" -> save_emission_entry(assessment_id=..., category='energy', quantity=500, unit='kWh', subcategory='electricity').
+    Anti: "Quelle est ma facture energie ?" -> NE PAS appeler (consultation, pas saisie).
 
     F17 — Le facteur d'emission est selectionne automatiquement selon la
-    categorie, le pays du profil entreprise et l'annee du bilan. Le facteur
-    est cite via la table sources (F01) ; le LLM doit appeler
-    ``cite_source(source_id)`` apres ce tool pour respecter l'invariant
-    n°1 (sourcage obligatoire).
+    categorie, le pays du profil entreprise et l'annee du bilan. Apres ce
+    tool, invoquer ``cite_source(source_id)`` (invariant n°1 — sourcage
+    obligatoire pour tout chiffre publie).
 
     Args:
         assessment_id: UUID du bilan carbone.
@@ -231,14 +245,28 @@ async def save_emission_entry(
 
 
 @tool
+@with_retry(
+    max_retries=1,
+    node_name="carbon_node",
+    fallback_message=(
+        "Je n'arrive pas à finaliser ce bilan carbone. "
+        "Pouvez-vous confirmer à nouveau ou réessayer ?"
+    ),
+)
 async def finalize_carbon_assessment(
     assessment_id: str,
     config: RunnableConfig,
 ) -> str:
-    """Finaliser un bilan carbone et calculer le total des emissions.
+    """Finalise un bilan carbone (status -> completed) et calcule le total tCO2e.
 
-    IMPORTANT : N'appelle ce tool que si l'utilisateur a explicitement confirme
-    vouloir finaliser. Demande d'abord confirmation.
+    Use when:
+    - l'utilisateur a confirme la cloture (cf. `ask_yes_no`) avec toutes les categories saisies.
+    - bilan en statut ``in_progress`` avec >= 1 entree.
+    Don't use when:
+    - aucune confirmation explicite (demander d'abord via `ask_yes_no`).
+    - bilan deja ``completed`` (utiliser `get_carbon_summary`).
+    Exemple: "Je valide mon bilan carbone" + ask_yes_no=true -> finalize_carbon_assessment(assessment_id=...).
+    Anti: "Resume rapide ?" -> NE PAS appeler (consultation, utiliser `get_carbon_summary`).
 
     Args:
         assessment_id: UUID du bilan carbone a finaliser.
@@ -287,9 +315,19 @@ async def get_carbon_summary(
     assessment_id: str | None = None,
     config: RunnableConfig = None,
 ) -> str:
-    """Obtenir le resume complet d'un bilan carbone (emissions, repartition, equivalences, benchmark).
+    """Obtient le resume complet d'un bilan carbone (total tCO2e, repartition, benchmark, equivalences).
 
-    Si aucun assessment_id n'est fourni, cherche le bilan en cours de l'utilisateur.
+    Use when:
+    - "mon empreinte carbone", "mon bilan", "combien de tonnes ?".
+    - decider la prochaine etape apres saisie (plan reduction, partage).
+    Don't use when:
+    - saisie en cours (utiliser `save_emission_entry`).
+    - cloture demandee (utiliser `finalize_carbon_assessment` apres confirmation).
+    Exemple: "Donne-moi mon empreinte 2026" -> get_carbon_summary().
+    Anti: "Je veux saisir 200L de diesel" -> NE PAS appeler (utiliser `save_emission_entry`).
+
+    Si aucun assessment_id n'est fourni, cherche le bilan en cours puis le
+    plus recent quel que soit son statut.
 
     Args:
         assessment_id: UUID du bilan carbone (optionnel).

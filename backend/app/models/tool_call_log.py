@@ -82,6 +82,17 @@ class ToolCallLog(Base):
         JSON,
         nullable=True,
     )
+    # F22 — Pydantic ValidationError.errors() sérialisée en JSONB.
+    # Null si le tool a réussi du premier coup ou si l'erreur n'est pas
+    # une ValidationError (runtime exception). Alimente l'endpoint admin
+    # /api/admin/metrics/validation-failures pour le monitoring qualité.
+    # ``none_as_null=True`` impose stockage SQL NULL (et non JSON "null")
+    # pour que ``validation_error IS NOT NULL`` discrimine correctement les
+    # echecs reels — comportement uniforme PG (JSONB) et SQLite (tests).
+    validation_error: Mapped[list | None] = mapped_column(
+        JSON(none_as_null=True),
+        nullable=True,
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),

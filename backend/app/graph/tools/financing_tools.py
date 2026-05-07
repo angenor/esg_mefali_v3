@@ -20,12 +20,16 @@ logger = logging.getLogger(__name__)
 
 @tool
 async def search_compatible_funds(config: RunnableConfig) -> str:
-    """Rechercher les fonds de financement compatibles avec le profil de l'utilisateur.
+    """Recherche les fonds verts compatibles avec le profil (matching multi-criteres).
 
-    Utilise cet outil quand l'utilisateur demande quels financements sont
-    disponibles, quels fonds correspondent a son profil, ou cherche des
-    subventions ou credits verts. Collecte automatiquement le profil,
-    le score ESG et le bilan carbone pour le matching.
+    Use when:
+    - "quels financements ?", "subventions GCF/FEM/BOAD", "credit vert".
+    - apres ESG/carbone, proposer des matches qualifies au prospect.
+    Don't use when:
+    - fond precis demande (utiliser `get_fund_details`).
+    - candidature directe (utiliser `create_fund_application`).
+    Exemple: "Quels fonds matchent mon entreprise ?" -> search_compatible_funds().
+    Anti: "Detail du GCF" -> NE PAS appeler (utiliser `get_fund_details`).
     """
     from app.modules.company.service import get_profile
     from app.modules.financing.service import get_fund_matches
@@ -90,10 +94,16 @@ async def search_compatible_funds(config: RunnableConfig) -> str:
 
 @tool
 async def save_fund_interest(fund_id: str, config: RunnableConfig) -> str:
-    """Enregistrer l'interet de l'utilisateur pour un fonds specifique.
+    """Enregistre l'interet de l'utilisateur pour un fonds (statut interested).
 
-    Utilise cet outil quand l'utilisateur indique etre interesse par un fonds,
-    souhaite en savoir plus, ou veut demarrer une candidature.
+    Use when:
+    - apres `search_compatible_funds`, l'utilisateur dit "ce fonds m'interesse".
+    - tracking de l'engagement avant candidature.
+    Don't use when:
+    - candidature deja creee (utiliser `create_fund_application`).
+    - simple consultation (utiliser `get_fund_details`).
+    Exemple: "Le GCF m'interesse" -> save_fund_interest(fund_id=...).
+    Anti: "Donne-moi les details du GCF" -> NE PAS appeler (utiliser `get_fund_details`).
 
     Args:
         fund_id: Identifiant UUID du fonds.
@@ -129,10 +139,16 @@ async def save_fund_interest(fund_id: str, config: RunnableConfig) -> str:
 
 @tool
 async def get_fund_details(fund_id: str, config: RunnableConfig) -> str:
-    """Consulter les details complets d'un fonds de financement.
+    """Consulte les details complets d'un fonds (criteres, montants, secteurs cibles).
 
-    Utilise cet outil quand l'utilisateur demande des informations detaillees
-    sur un fonds specifique : criteres d'eligibilite, montants, secteurs cibles.
+    Use when:
+    - "details du GCF", "criteres FEM", "que finance la BOAD".
+    - apres matching, approfondir une fiche fonds avant decision.
+    Don't use when:
+    - matching demande (utiliser `search_compatible_funds`).
+    - candidature directe (utiliser `create_fund_application`).
+    Exemple: "Donne-moi les details du fonds GCF" -> get_fund_details(fund_id=...).
+    Anti: "Quels fonds pour moi ?" -> NE PAS appeler (utiliser `search_compatible_funds`).
 
     Args:
         fund_id: Identifiant UUID du fonds.
@@ -194,10 +210,20 @@ async def create_fund_application(
     config: RunnableConfig,
     intermediary_id: str | None = None,
 ) -> str:
-    """Creer un dossier de candidature pour un fonds de financement.
+    """Cree un dossier de candidature (statut draft) pour un fonds vert (mode legacy financing).
 
-    Utilise cet outil quand l'utilisateur souhaite demarrer une candidature
-    ou postuler a un fonds. Cree le dossier en base avec le statut 'draft'.
+    Use when:
+    - "je veux candidater au GCF", "demarrer un dossier".
+    - apres `save_fund_interest`, l'utilisateur passe a l'action.
+    Don't use when:
+    - simple consultation (utiliser `get_fund_details`).
+    - simulation financiere (utiliser `simulate_financing`).
+    Exemple: "Cree un dossier pour le GCF" -> create_fund_application(fund_id=...).
+    Anti: "Detail du fonds" -> NE PAS appeler (utiliser `get_fund_details`).
+
+    Note: ce tool est aussi exporte par ``application_tools.create_fund_application``
+    (variante avec ``offer_id``/`project_id``). En cas d'offer_id, preferer la
+    version application.
 
     Args:
         fund_id: Identifiant UUID du fonds cible.
@@ -240,16 +266,25 @@ async def list_offers(
     country: str | None = None,
     limit: int = 10,
 ) -> str:
-    """Liste les offres (couples Fonds × Intermédiaire) publiées et actives.
+    """Liste les offres (couples Fonds x Intermediaire) publiees et actives.
 
-    Une Offre est l'unité commercialement actionnable côté PME : c'est ce qui
-    peut être candidaté. Filtrable par fonds, intermédiaire ou pays.
+    Use when:
+    - exploration du catalogue offres (filtres par fonds/intermediaire/pays).
+    - presenter une short-list d'offres avant matching personnalise.
+    Don't use when:
+    - matching personnalise demande (utiliser `search_compatible_funds`).
+    - detail d'une offre (utiliser `get_offer`).
+    Exemple: "Liste les offres GCF" -> list_offers(fund_id=...).
+    Anti: "Quelle offre pour mon profil ?" -> NE PAS appeler (utiliser `search_compatible_funds`).
+
+    Une Offre est l'unite commercialement actionnable cote PME : c'est ce qui
+    peut etre candidate. Filtrable par fonds, intermediaire ou pays.
 
     Args:
         fund_id: Filtre optionnel par UUID de fonds.
-        intermediary_id: Filtre optionnel par UUID d'intermédiaire.
-        country: Filtre optionnel par pays de l'intermédiaire.
-        limit: Nombre maximum d'offres (défaut 10, max 50).
+        intermediary_id: Filtre optionnel par UUID d'intermediaire.
+        country: Filtre optionnel par pays de l'intermediaire.
+        limit: Nombre maximum d'offres (defaut 10, max 50).
     """
     from app.modules.offers.service import list_offers as svc_list_offers
 
@@ -288,7 +323,16 @@ async def list_offers(
 
 @tool
 async def get_offer(offer_id: str, config: RunnableConfig) -> str:
-    """Récupère le détail d'une offre par son UUID.
+    """Recupere le detail d'une offre (Fonds x Intermediaire) par son UUID.
+
+    Use when:
+    - apres `list_offers` ou `compare_offers_for_fund`, approfondir une offre.
+    - decider de candidater apres consultation des criteres precis.
+    Don't use when:
+    - exploration generale (utiliser `list_offers`).
+    - candidature directe (utiliser `create_fund_application`).
+    Exemple: "Detail de l'offre 8a3f..." -> get_offer(offer_id='8a3f-...').
+    Anti: "Quelles offres GCF ?" -> NE PAS appeler (utiliser `list_offers`).
 
     Args:
         offer_id: UUID de l'offre.
@@ -325,7 +369,16 @@ async def get_offer(offer_id: str, config: RunnableConfig) -> str:
 
 @tool
 async def compare_offers_for_fund(fund_id: str, config: RunnableConfig) -> str:
-    """Compare toutes les offres publiées pour un fonds donné (côte-à-côte).
+    """Compare cote-a-cote toutes les offres (Fonds x Intermediaires) publiees pour un fonds.
+
+    Use when:
+    - "compare GCF via BOAD vs UNDP", "quel intermediaire choisir".
+    - decision sur l'intermediaire optimal pour un fonds donne.
+    Don't use when:
+    - liste exploratoire (utiliser `list_offers`).
+    - detail d'une offre precise (utiliser `get_offer`).
+    Exemple: "Compare les offres pour le GCF" -> compare_offers_for_fund(fund_id=...).
+    Anti: "Liste des offres" -> NE PAS appeler (utiliser `list_offers`).
 
     Args:
         fund_id: UUID du fonds.
