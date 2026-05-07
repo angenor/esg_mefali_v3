@@ -176,7 +176,9 @@ test.describe('F05 — RGPD Mes Données + Consentements + Export/Suppression', 
     await expect(
       page.getByRole('heading', { name: 'Politique de confidentialité' }),
     ).toBeVisible()
-    await expect(page.getByText('privacy@esg-mefali.com')).toBeVisible()
+    await expect(
+      page.getByRole('link', { name: 'privacy@esg-mefali.com' }).first(),
+    ).toBeVisible()
 
     // 2. Footer contient le lien
     await expect(
