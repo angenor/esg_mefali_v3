@@ -1,9 +1,9 @@
 # Implementation Plan: F17 — Carbone Mix UEMOA + Facteurs ADEME/IPCC Sourcés + Catégorie Achats
 
-**Branch**: `feat/F17-carbone-mix-uemoa-source` (alias SpecKit `021-carbone-mix-uemoa-source`)
+**Branch**: `feat/F17-carbone-mix-uemoa-source` (alias SpecKit `024-carbone-mix-uemoa-source`)
 **Date**: 2026-05-07
 **Spec**: [spec.md](./spec.md)
-**Input**: Feature specification from `/specs/021-carbone-mix-uemoa-source/spec.md`
+**Input**: Feature specification from `/specs/024-carbone-mix-uemoa-source/spec.md`
 
 ## Summary
 
@@ -66,7 +66,7 @@ F17 migre les facteurs d'émission carbone codés en dur (`backend/app/modules/c
 ### Documentation (this feature)
 
 ```text
-specs/021-carbone-mix-uemoa-source/
+specs/024-carbone-mix-uemoa-source/
 ├── plan.md              # This file (/speckit.plan command output)
 ├── research.md          # Phase 0 output
 ├── data-model.md        # Phase 1 output
@@ -85,7 +85,7 @@ specs/021-carbone-mix-uemoa-source/
 backend/
 ├── alembic/
 │   └── versions/
-│       └── 0XX_f17_emission_factors_year_and_carbon_entries_fk.py    # NEW migration
+│       └── 024_carbone_mix_uemoa.py    # NEW migration
 ├── app/
 │   ├── models/
 │   │   ├── emission_factor.py        # MODIFIED : ajoute colonne `year` + UNIQUE constraint

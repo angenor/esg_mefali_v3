@@ -1,7 +1,7 @@
 # Phase 1 — Data Model : F17 Carbone Mix UEMOA + Facteurs Sourcés
 
 Date : 2026-05-07
-Branche : `feat/F17-carbone-mix-uemoa-source` (alias SpecKit `021-carbone-mix-uemoa-source`)
+Branche : `feat/F17-carbone-mix-uemoa-source` (alias SpecKit `024-carbone-mix-uemoa-source`)
 
 ## 1. Modèle `EmissionFactor` (existant F01, étendu F17)
 
@@ -166,7 +166,7 @@ Le ciblage de ~50 lignes est atteint en ajoutant les variantes suivantes (par ex
 ## 6. Migration Alembic — pseudo-code
 
 ```python
-# Fichier : backend/alembic/versions/0XX_f17_emission_factors_year_and_carbon_entries_fk.py
+# Fichier : backend/alembic/versions/024_carbone_mix_uemoa.py
 
 def upgrade():
     # 1. Ajouter colonne `year` nullable + valeur par défaut 2024 pour les entries F01 existantes

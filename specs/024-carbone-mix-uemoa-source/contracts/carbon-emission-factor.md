@@ -1,7 +1,7 @@
 # Contract — F17 Carbone : Service `get_emission_factor`, Tool `save_emission_entry`, Endpoint Admin
 
 Date : 2026-05-07
-Branche : `feat/F17-carbone-mix-uemoa-source` (alias SpecKit `021-carbone-mix-uemoa-source`)
+Branche : `feat/F17-carbone-mix-uemoa-source` (alias SpecKit `024-carbone-mix-uemoa-source`)
 
 Ce document décrit les interfaces (services Python, tools LangChain, endpoints REST) introduites ou modifiées par F17.
 

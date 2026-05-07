@@ -33,4 +33,4 @@
 
 - Tous les critères passent à l'itération 1.
 - Décisions de scope auto-résolues par /speckit.specify selon les invariants ESG Mefali (sourçage F01 obligatoire, multi-tenant F02, dark mode, français avec accents).
-- Numérotation SpecKit `021-carbone-mix-uemoa-source` susceptible de collision avec F12/F03/F04 développés en parallèle ; l'orchestrateur résoudra avant Phase B.
+- Numérotation SpecKit `024-carbone-mix-uemoa-source` susceptible de collision avec F12/F03/F04 développés en parallèle ; l'orchestrateur résoudra avant Phase B.

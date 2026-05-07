@@ -1,6 +1,6 @@
 # Feature Specification: F17 — Carbone Mix UEMOA + Facteurs ADEME/IPCC Sourcés + Catégorie Achats
 
-**Feature Branch**: `feat/F17-carbone-mix-uemoa-source` (alias SpecKit `021-carbone-mix-uemoa-source`)
+**Feature Branch**: `feat/F17-carbone-mix-uemoa-source` (alias SpecKit `024-carbone-mix-uemoa-source`)
 **Created**: 2026-05-07
 **Status**: Draft
 **Input**: User description: "F17 — Migration des facteurs d'émission carbone codés en dur (Python) vers la table BDD `emission_factors` créée par F01, avec sourçage obligatoire (ADEME Base Carbone v23, IPCC AR6 WG3, IEA Africa Energy Outlook 2024). Couverture du mix électrique des 8 pays UEMOA, refactor `CarbonEmissionEntry` pour FK `source_id` + `factor_id`, ajout d'une catégorie « Achats » (matières premières), service `get_emission_factor(category, country, year)` avec priorité pays/année, plan de réduction sourcé, composant Vue `<EmissionFactorBadge>`, intégration `<SourceLink>` sur chaque facteur affiché."
@@ -190,7 +190,7 @@ L'utilisateur indique au chat qu'il a acheté plusieurs tonnes de ciment et d'ac
 - **H6** : Pour la conversion FCFA → tonnes (US3 scénario 2), on réutilise exclusivement la table `simulation_factors` de F01 (clarification Q2 du 2026-05-07). On ne pollue pas `emission_factors` avec des valeurs économiques. Le tool `save_emission_entry` interroge `simulation_factors` dès qu'un montant FCFA est fourni.
 - **H7** : Le test E2E Playwright `F17-carbone-mix-uemoa-source.spec.ts` mocke le backend pour les scénarios déterministes (pas de vrai LLM en E2E), conformément à la convention projet « Mock par défaut, vrai LLM uniquement pour `tests/llm_eval/` ».
 - **H8** : Les valeurs concrètes des facteurs (par exemple `electricity_ci_2024 = 0.456`) sont déterminées au moment de la rédaction du seed et basées sur les sources publiques ADEME/IEA. Les valeurs précises sont inscrites dans la migration/seed et documentées dans `data-model.md` (Phase Plan).
-- **H9** : La numérotation SpecKit attribuée par le script (`021-carbone-mix-uemoa-source`) entre potentiellement en collision avec d'autres features développées en parallèle (notamment F12 qui peut aussi recevoir le numéro 021 sur sa propre branche, F03/F04 qui pourraient prendre 021/022/023). L'orchestrateur résoudra la collision avant Phase B en renommant le dossier spec et la migration Alembic. La branche git réelle reste `feat/F17-carbone-mix-uemoa-source`.
+- **H9** : La numérotation SpecKit attribuée par le script (`024-carbone-mix-uemoa-source`) entre potentiellement en collision avec d'autres features développées en parallèle (notamment F12 qui peut aussi recevoir le numéro 021 sur sa propre branche, F03/F04 qui pourraient prendre 021/022/023). L'orchestrateur résoudra la collision avant Phase B en renommant le dossier spec et la migration Alembic. La branche git réelle reste `feat/F17-carbone-mix-uemoa-source`.
 
 ### Hors-scope (post-MVP, exclus de F17)
 

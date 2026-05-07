@@ -5,10 +5,10 @@ description: "Task list — F17 Carbone Mix UEMOA + Facteurs ADEME/IPCC Sourcés
 
 # Tasks: F17 — Carbone Mix UEMOA + Facteurs ADEME/IPCC Sourcés + Catégorie Achats
 
-**Input** : Design documents from `/specs/021-carbone-mix-uemoa-source/`
+**Input** : Design documents from `/specs/024-carbone-mix-uemoa-source/`
 **Prerequisites** : plan.md (required), spec.md (required for user stories), research.md, data-model.md, contracts/
 
-**Branch** : `feat/F17-carbone-mix-uemoa-source` (alias SpecKit `021-carbone-mix-uemoa-source`)
+**Branch** : `feat/F17-carbone-mix-uemoa-source` (alias SpecKit `024-carbone-mix-uemoa-source`)
 
 **Tests** : Tests TDD obligatoires (cycle Red-Green-Refactor enforce, couverture ≥ 80 %).
 
@@ -24,7 +24,7 @@ description: "Task list — F17 Carbone Mix UEMOA + Facteurs ADEME/IPCC Sourcés
 
 - **Backend** : `backend/app/`, `backend/tests/`, `backend/alembic/versions/`
 - **Frontend** : `frontend/app/`, `frontend/tests/`
-- **Specs** : `specs/021-carbone-mix-uemoa-source/`
+- **Specs** : `specs/024-carbone-mix-uemoa-source/`
 
 ---
 
@@ -56,7 +56,7 @@ description: "Task list — F17 Carbone Mix UEMOA + Facteurs ADEME/IPCC Sourcés
 - [ ] T008 Créer `backend/app/modules/carbon/reduction_plan_schema.py` avec `ReductionPlanAction` et `ReductionPlan` Pydantic conformément au contrat `contracts/carbon-emission-factor.md` § 5 (validateur `model_validator` sur cohérence source_id/unsourced).
 - [ ] T009 Créer `backend/app/modules/carbon/factor_service.py` avec dataclass `EmissionFactorResolution`, exception `EmissionFactorNotFoundError`, fonction async `get_emission_factor(db, category, country, year)` selon l'algorithme priorité pays/année du contrat § 1.
 - [ ] T010 Créer `backend/app/modules/carbon/seed_factors.py` avec constante `SEED_DATA` (~50 lignes : 8 électricité UEMOA + combustibles + transport + déchets + 6 achats + variantes années antérieures pour priorité fallback) et fonction async `seed_emission_factors(db, admin_user_id) -> SeedResult` utilisant `INSERT ON CONFLICT (code) DO NOTHING` ; intègre les valeurs documentées dans `research.md` § 6.
-- [ ] T011 Créer la migration Alembic `backend/alembic/versions/0XX_f17_emission_factors_year_and_carbon_entries_fk.py` (numéro à déterminer en Phase B selon ordre de merge ; alias placeholder `0XX`) — voir `data-model.md` § 6 : (1) ajout colonne `year` Integer NOT NULL avec backfill 2024, (2) index composite + UNIQUE constraint, (3) appel `seed_emission_factors`, (4) ajout `source_id` + `factor_id` nullable sur `carbon_emission_entries`, (5) backfill matching subcategory→code + fallback générique global, (6) NOT NULL + FK ; downgrade symétrique sans suppression de `source_description` (legacy 2 sprints).
+- [ ] T011 Créer la migration Alembic `backend/alembic/versions/024_carbone_mix_uemoa.py` (revision=`024_carbone_mix_uemoa`, down_revision=`023_create_message_chunks`) — voir `data-model.md` § 6 : (1) ajout colonne `year` Integer NOT NULL avec backfill 2024, (2) index composite + UNIQUE constraint, (3) appel `seed_emission_factors`, (4) ajout `source_id` + `factor_id` nullable sur `carbon_emission_entries`, (5) backfill matching subcategory→code + fallback générique global, (6) NOT NULL + FK ; downgrade symétrique sans suppression de `source_description` (legacy 2 sprints).
 - [ ] T012 Étendre `backend/app/models/emission_factor.py` avec `year: Mapped[int] = mapped_column(Integer, nullable=False)` + ajouter UNIQUE constraint `(category, country, year)` + index composite `idx_emission_factors_lookup` (synchronisé avec la migration T011).
 - [ ] T013 Étendre `backend/app/models/carbon.py` (`CarbonEmissionEntry`) avec `source_id: Mapped[uuid.UUID]` (FK `sources.id`, NOT NULL après backfill) et `factor_id: Mapped[uuid.UUID]` (FK `emission_factors.id`, NOT NULL après backfill) ; conserver `source_description` Mapped[str | None] avec commentaire `# TODO(F17+1): drop after stabilisation` ; élargir `VALID_CATEGORIES` pour inclure `"purchases"`.
 - [ ] T014 Étendre `backend/app/modules/carbon/schemas.py` (`EmissionEntryCreate`) avec `source_id: uuid.UUID` et `factor_id: uuid.UUID` obligatoires ; mettre à jour `EmissionEntryResponse` ; ajouter `EmissionFactorResolutionResponse` Pydantic pour exposer `is_approximate`, `fallback_reason`, `factor_used`.
@@ -177,7 +177,7 @@ description: "Task list — F17 Carbone Mix UEMOA + Facteurs ADEME/IPCC Sourcés
 - [ ] T051 [P] Mettre à jour `CLAUDE.md` (Active Technologies + Recent Changes) via `.specify/scripts/bash/update-agent-context.sh claude` (relance après finalisation) ou édition manuelle pour refléter F17.
 - [ ] T052 [P] Vérifier l'absence de régression : exécuter la suite complète backend `cd backend && source venv/bin/activate && pytest tests/ -v --cov=app --cov-report=term-missing` ; vérifier que tous les anciens tests passent toujours (notamment carbon, esg_scoring, financing, application).
 - [ ] T053 [P] Vérifier l'absence de régression frontend : `cd frontend && npm run test -- --coverage` ; vérifier la couverture globale ≥ 80 %.
-- [ ] T054 Exécuter le quickstart complet `specs/021-carbone-mix-uemoa-source/quickstart.md` étapes 1 à 14 manuellement (ou via script automation) pour valider le flux end-to-end.
+- [ ] T054 Exécuter le quickstart complet `specs/024-carbone-mix-uemoa-source/quickstart.md` étapes 1 à 14 manuellement (ou via script automation) pour valider le flux end-to-end.
 - [ ] T055 [P] Audit sécurité : vérifier qu'aucun secret n'est hardcodé (`grep -rE '(api_key|secret|password|token)\s*=\s*["\047][A-Za-z0-9]' backend/ frontend/` retourne 0 résultat) ; vérifier que l'endpoint `POST /api/admin/carbon/seed-factors` est bien protégé par `Depends(get_current_admin)`.
 - [ ] T056 Préparer le commit final : `git add backend/ frontend/ specs/ CLAUDE.md` ; vérifier `git diff --staged` ; commit avec message conventional `feat(F17): mix UEMOA + facteurs sourcés ADEME/IPCC + catégorie Achats` (NE PAS exécuter en Phase A — commit final orchestré en Phase B).
 
@@ -290,4 +290,4 @@ Avec une équipe de 3 :
 - Commit recommandé après chaque task ou groupe logique (sauf en Phase A — commit unique « chore(F17): SpecKit artifacts »).
 - Stop à chaque checkpoint pour valider l'incrémentation indépendamment.
 - Avoid : tâches vagues, conflits sur même fichier, dépendances cross-story qui cassent l'indépendance.
-- La numérotation Alembic `0XX` dans T011 est un placeholder ; le numéro effectif sera attribué en Phase B selon l'ordre de merge des features parallèles (collisions potentielles avec F03/F04/F12).
+- La migration Alembic est `024_carbone_mix_uemoa` (down_revision=`023_create_message_chunks`) — numérotation attribuée après collision résolue avec F03 (021)/F04 (022)/F12 (023) déjà mergés sur `main`.

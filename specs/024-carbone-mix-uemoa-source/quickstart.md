@@ -1,7 +1,7 @@
 # Quickstart — F17 Carbone Mix UEMOA + Facteurs Sourcés
 
 Date : 2026-05-07
-Branche : `feat/F17-carbone-mix-uemoa-source` (alias SpecKit `021-carbone-mix-uemoa-source`)
+Branche : `feat/F17-carbone-mix-uemoa-source` (alias SpecKit `024-carbone-mix-uemoa-source`)
 
 ## Objectif du quickstart
 
