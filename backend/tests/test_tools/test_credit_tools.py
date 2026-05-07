@@ -98,26 +98,81 @@ class TestGetCreditScore:
 
 
 class TestGenerateCreditCertificate:
-    """Tests pour generate_credit_certificate."""
-
-    @pytest.mark.asyncio
-    @patch("app.graph.tools.credit_tools._generate_certificate", new_callable=AsyncMock)
-    async def test_certificate_success(self, mock_gen, mock_config):
-        """Generation du certificat retourne l'URL."""
-        mock_gen.return_value = "/uploads/certificates/attestation.pdf"
-
-        result = await generate_credit_certificate.ainvoke({}, config=mock_config)
-
-        assert "pdf" in result.lower() or "attestation" in result.lower() or "certificat" in result.lower()
+    """Tests pour generate_credit_certificate (F08 — refactor → service réel)."""
 
     @pytest.mark.asyncio
     @patch(
-        "app.graph.tools.credit_tools._generate_certificate",
+        "app.graph.tools.credit_tools._resolve_account_id",
         new_callable=AsyncMock,
-        side_effect=Exception("No score"),
     )
-    async def test_certificate_handles_error(self, mock_gen, mock_config):
-        """Erreur retourne un message lisible."""
+    @patch(
+        "app.modules.attestations.service.generate_attestation",
+        new_callable=AsyncMock,
+    )
+    async def test_certificate_success(
+        self, mock_generate, mock_resolve_acct, mock_config,
+    ):
+        """Génération du certificat retourne l'URL de vérification publique."""
+        mock_resolve_acct.return_value = uuid.uuid4()
+        a = MagicMock()
+        a.display_id = "ATT-2026-00042"
+        a.verification_url = "https://esg-mefali.com/verify/abc-1234"
+        a.pdf_hash_sha256 = "a" * 64
+        mock_generate.return_value = a
+
+        result = await generate_credit_certificate.ainvoke({}, config=mock_config)
+
+        assert "ATT-2026-00042" in result
+        assert "verify" in result
+        assert "vérification" in result.lower() or "verification" in result.lower()
+        mock_generate.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    @patch(
+        "app.graph.tools.credit_tools._resolve_account_id",
+        new_callable=AsyncMock,
+    )
+    async def test_certificate_no_account_returns_error_message(
+        self, mock_resolve_acct, mock_config,
+    ):
+        """Sans account_id, retourne un message d'erreur explicite."""
+        mock_resolve_acct.return_value = None
+
+        result = await generate_credit_certificate.ainvoke({}, config=mock_config)
+
+        assert "tenant" in result.lower() or "support" in result.lower()
+
+    @pytest.mark.asyncio
+    @patch(
+        "app.graph.tools.credit_tools._resolve_account_id",
+        new_callable=AsyncMock,
+    )
+    @patch(
+        "app.modules.attestations.service.generate_attestation",
+        new_callable=AsyncMock,
+    )
+    async def test_certificate_no_credit_score_friendly(
+        self, mock_generate, mock_resolve_acct, mock_config,
+    ):
+        """CreditScoreMissingError → message clair en français."""
+        from app.modules.attestations.service import CreditScoreMissingError
+
+        mock_resolve_acct.return_value = uuid.uuid4()
+        mock_generate.side_effect = CreditScoreMissingError("absent")
+
+        result = await generate_credit_certificate.ainvoke({}, config=mock_config)
+
+        assert "score" in result.lower()
+        assert "crédit" in result.lower() or "credit" in result.lower()
+
+    @pytest.mark.asyncio
+    @patch(
+        "app.graph.tools.credit_tools._resolve_account_id",
+        new_callable=AsyncMock,
+        side_effect=Exception("DB error"),
+    )
+    async def test_certificate_handles_error(self, mock_resolve, mock_config):
+        """Erreur inattendue retourne un message lisible."""
         result = await generate_credit_certificate.ainvoke({}, config=mock_config)
 
         assert "Erreur" in result

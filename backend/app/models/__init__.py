@@ -67,3 +67,6 @@ from app.models.message_chunk import MessageChunk  # noqa: F401
 # F06 — Entité Projet Vert (Module 1.3)
 from app.models.project import Project  # noqa: F401
 from app.models.project_document import ProjectDocument  # noqa: F401
+
+# F08 — Attestation Vérifiable Ed25519
+from app.models.attestation import Attestation  # noqa: F401

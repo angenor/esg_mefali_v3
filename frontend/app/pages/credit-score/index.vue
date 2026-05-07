@@ -1,11 +1,44 @@
 <script setup lang="ts">
+import { ref } from 'vue'
+import { useAttestations } from '~/composables/useAttestations'
 import { useCreditScore } from '~/composables/useCreditScore'
 import { useCreditScoreStore } from '~/stores/creditScore'
 
 definePageMeta({ layout: 'default' })
 
 const store = useCreditScoreStore()
-const { fetchScore, fetchBreakdown, fetchHistory, generateScore, downloadCertificate, loading, error } = useCreditScore()
+const { fetchScore, fetchBreakdown, fetchHistory, generateScore, loading, error } = useCreditScore()
+// F08 — Génération réelle d'attestation vérifiable Ed25519.
+const { generateAttestation, copyToClipboard } = useAttestations()
+const attestationLoading = ref(false)
+const lastAttestationUrl = ref('')
+const toastMessage = ref('')
+
+async function generateVerifiableAttestation() {
+  attestationLoading.value = true
+  toastMessage.value = ''
+  try {
+    const a = await generateAttestation('combined')
+    if (a) {
+      lastAttestationUrl.value = a.verification_url
+      toastMessage.value = `Attestation ${a.display_id} générée avec succès`
+      // Copie automatique en presse-papier (UX)
+      await copyToClipboard(a.verification_url)
+    } else {
+      toastMessage.value = "Échec de la génération de l'attestation"
+    }
+  } finally {
+    attestationLoading.value = false
+    setTimeout(() => (toastMessage.value = ''), 6000)
+  }
+}
+
+async function copyVerificationUrl() {
+  if (!lastAttestationUrl.value) return
+  const ok = await copyToClipboard(lastAttestationUrl.value)
+  toastMessage.value = ok ? 'URL copiée dans le presse-papier' : 'Échec de la copie'
+  setTimeout(() => (toastMessage.value = ''), 3000)
+}
 
 const generating = computed(() => store.generating)
 
@@ -220,12 +253,57 @@ onMounted(async () => {
           </p>
         </div>
 
-        <!-- Bouton attestation -->
-        <div v-if="store.hasScore && !store.isExpired" class="bg-white dark:bg-dark-card border border-gray-200 dark:border-dark-border rounded-xl p-6 text-center">
-          <CertificateButton
-            :loading="loading"
-            @download="downloadCertificate"
-          />
+        <!-- Bouton attestation vérifiable Ed25519 (F08) -->
+        <div v-if="store.hasScore && !store.isExpired" class="bg-white dark:bg-dark-card border border-gray-200 dark:border-dark-border rounded-xl p-6 text-center space-y-3">
+          <h3 class="text-base font-semibold text-gray-900 dark:text-white">
+            Attestation vérifiable
+          </h3>
+          <p class="text-sm text-gray-600 dark:text-gray-400">
+            Générez une attestation signée numériquement (Ed25519) avec QR code que
+            votre banquier ou un fonds vert pourra vérifier hors-plateforme.
+          </p>
+          <button
+            type="button"
+            class="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:opacity-50 transition-colors text-sm font-medium"
+            :disabled="attestationLoading"
+            @click="generateVerifiableAttestation"
+          >
+            {{ attestationLoading ? 'Génération…' : 'Générer une attestation vérifiable' }}
+          </button>
+          <div
+            v-if="lastAttestationUrl"
+            class="mt-3 p-3 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-700 rounded-md text-left"
+          >
+            <p class="text-xs font-medium text-emerald-800 dark:text-emerald-200 mb-1">
+              URL de vérification publique :
+            </p>
+            <p class="font-mono text-xs text-emerald-900 dark:text-emerald-100 break-all">
+              {{ lastAttestationUrl }}
+            </p>
+            <div class="flex gap-2 mt-2 flex-wrap">
+              <button
+                type="button"
+                class="px-3 py-1 text-xs font-medium bg-emerald-600 text-white rounded hover:bg-emerald-700"
+                @click="copyVerificationUrl"
+              >
+                Copier l'URL
+              </button>
+              <NuxtLink
+                to="/attestations"
+                class="px-3 py-1 text-xs font-medium bg-white dark:bg-dark-input text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-700 rounded hover:bg-emerald-50 dark:hover:bg-emerald-900/30"
+              >
+                Voir mes attestations
+              </NuxtLink>
+            </div>
+          </div>
+          <p
+            v-if="toastMessage"
+            class="text-xs text-emerald-700 dark:text-emerald-300"
+            role="status"
+            aria-live="polite"
+          >
+            {{ toastMessage }}
+          </p>
         </div>
       </div>
     </div>

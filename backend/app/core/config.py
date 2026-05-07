@@ -49,6 +49,17 @@ class Settings(BaseSettings):
     exchangerate_api_base_url: str = "https://v6.exchangerate-api.com/v6"
     currency_fetch_daily_quota: int = 50
 
+    # F08 — Attestation Vérifiable Ed25519
+    # Clé privée Ed25519 au format PEM PKCS8 (multi-lignes encodées avec \n).
+    # En production, doit être renseignée via secret manager.
+    # En développement/tests, si vide, ``SigningKeyStore`` génère une paire éphémère.
+    attestation_private_key_pem: str = ""
+    attestation_public_key_id: str = "v1"
+    attestation_validity_days: int = 365
+    attestation_verification_base_url: str = "https://esg-mefali.com"
+    # Environnement applicatif (production exige la clé Ed25519).
+    env: str = "development"
+
     # Application
     app_version: str = "0.1.0"
     debug: bool = False

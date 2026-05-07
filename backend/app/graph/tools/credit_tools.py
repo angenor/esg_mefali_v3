@@ -3,35 +3,26 @@
 Trois tools exposes au LLM :
 - generate_credit_score : calculer le score de credit vert
 - get_credit_score : consulter le dernier score
-- generate_credit_certificate : generer une attestation PDF
+- generate_credit_certificate : generer une attestation verifiable signee Ed25519 (F08)
 """
 
 import logging
 
 from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import tool
+from sqlalchemy import select
 
 from app.graph.tools.common import get_db_and_user
 
 logger = logging.getLogger(__name__)
 
 
-async def _generate_certificate(db, user_id) -> str:
-    """Generer un certificat PDF d'attestation du score de credit vert.
+async def _resolve_account_id(db, user_id):
+    """Charge le ``account_id`` du user (None si admin sans tenant)."""
+    from app.models.user import User
 
-    Retourne le chemin du fichier genere.
-    """
-    from app.modules.credit.service import get_latest_score
-
-    score = await get_latest_score(db=db, user_id=user_id)
-    if score is None:
-        raise ValueError("Aucun score de credit vert disponible pour generer l'attestation.")
-
-    # Placeholder — la generation PDF via WeasyPrint sera implementee
-    # quand le template sera pret
-    cert_path = f"/uploads/certificates/{user_id}_credit_v{score.version}.pdf"
-    logger.info("Certificat credit genere pour user %s -> %s", user_id, cert_path)
-    return cert_path
+    result = await db.execute(select(User.account_id).where(User.id == user_id))
+    return result.scalar_one_or_none()
 
 
 @tool
@@ -100,23 +91,71 @@ async def get_credit_score(config: RunnableConfig) -> str:
 
 @tool
 async def generate_credit_certificate(config: RunnableConfig) -> str:
-    """Generer une attestation PDF du score de credit vert.
+    """Generer une attestation verifiable signee Ed25519 du score de credit vert (F08).
 
     Utilise cet outil quand l'utilisateur demande un certificat, une attestation
-    ou un document officiel de son score de credit vert.
+    ou un document officiel de son score de credit vert. Le service appele
+    genere reellement un PDF signe Ed25519 avec QR code et URL de verification
+    publique. Le tool retourne l'URL de verification que tu DOIS communiquer
+    a l'utilisateur dans ta reponse texte.
     """
+    from app.core.audit_context import source_of_change_scope
+    from app.modules.attestations.service import (
+        AttestationError,
+        CreditScoreMissingError,
+        EsgAssessmentMissingError,
+        PdfGenerationError,
+        generate_attestation,
+    )
+
     try:
         db, user_id = get_db_and_user(config)
+        account_id = await _resolve_account_id(db, user_id)
+        if account_id is None:
+            return (
+                "Erreur : votre compte n'est pas lié à un tenant. Contactez le support "
+                "pour finaliser la création de votre espace."
+            )
 
-        cert_path = await _generate_certificate(db, user_id)
+        with source_of_change_scope("llm"):
+            attestation = await generate_attestation(
+                db,
+                account_id=account_id,
+                user_id=user_id,
+                attestation_type="credit_score",
+                source_of_change="llm",
+            )
 
         return (
-            f"Attestation de score de credit vert generee avec succes.\n"
-            f"- URL de telechargement : {cert_path}"
+            f"Attestation vérifiable générée avec succès !\n"
+            f"- Identifiant : {attestation.display_id}\n"
+            f"- URL de vérification publique : {attestation.verification_url}\n"
+            f"- Hash SHA-256 du PDF : {attestation.pdf_hash_sha256}\n\n"
+            f"Vous pouvez télécharger le PDF depuis votre espace /attestations "
+            f"et partager l'URL de vérification avec un partenaire fonds. "
+            f"Le QR code embarqué dans le PDF mène à cette même URL."
         )
-    except Exception as e:
-        logger.exception("Erreur lors de la generation de l'attestation")
-        return f"Erreur lors de la generation de l'attestation : {e}"
+    except CreditScoreMissingError as exc:
+        logger.info("generate_credit_certificate sans score credit : %s", exc)
+        return (
+            "Aucun score de crédit calculé. Veuillez d'abord finaliser le scoring "
+            "crédit en utilisant le tool generate_credit_score."
+        )
+    except EsgAssessmentMissingError as exc:
+        logger.info("generate_credit_certificate sans evaluation ESG : %s", exc)
+        return (
+            "Aucune évaluation ESG finalisée. Veuillez d'abord compléter votre "
+            "évaluation ESG."
+        )
+    except PdfGenerationError as exc:
+        logger.exception("Echec generation PDF attestation")
+        return f"Erreur lors de la génération du PDF : {exc}"
+    except AttestationError as exc:
+        logger.exception("Erreur metier attestation")
+        return f"Erreur lors de la génération de l'attestation : {exc}"
+    except Exception as e:  # noqa: BLE001
+        logger.exception("Erreur inattendue lors de la generation de l'attestation")
+        return f"Erreur lors de la génération de l'attestation : {e}"
 
 
 CREDIT_TOOLS = [generate_credit_score, get_credit_score, generate_credit_certificate]

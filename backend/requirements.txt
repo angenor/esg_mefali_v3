@@ -42,3 +42,7 @@ jinja2>=3.1.0
 
 # Génération de documents Word
 python-docx>=1.1.0
+
+# F08 — Attestation Vérifiable Ed25519
+cryptography>=41.0
+segno>=1.5
