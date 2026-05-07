@@ -190,8 +190,9 @@ async def test_delete_project_tool_success(db_session):
     )
     await db_session.flush()
     config = _make_config(db_session, user.id, account.id)
+    # F10 — confirm=True obligatoire après le pattern destructif
     result = await delete_project.ainvoke(
-        {"project_id": str(detail.id)}, config=config,
+        {"project_id": str(detail.id), "confirm": True}, config=config,
     )
     payload = json.loads(result)
     assert payload.get("ok") is True
@@ -202,8 +203,9 @@ async def test_delete_project_tool_not_found(db_session):
     account = await make_account(db_session, name="A")
     user = await make_pme_user(db_session, account=account)
     config = _make_config(db_session, user.id, account.id)
+    # F10 — confirm=True pour bypass du garde-fou destructif
     result = await delete_project.ainvoke(
-        {"project_id": str(uuid.uuid4())}, config=config,
+        {"project_id": str(uuid.uuid4()), "confirm": True}, config=config,
     )
     payload = json.loads(result)
     assert payload.get("ok") is False

@@ -67,9 +67,9 @@ async def test_esg_scoring_node_binds_filtered_tools_only() -> None:
     assert bound_names == expected_names, (
         f"Tools binds {bound_names} != attendu {expected_names}"
     )
-    # F11 : show_kpi_card ajouté à la page esg → borne portée à 14
-    # (6 ESG + 4 globaux + 4 visu max — page esg expose 13).
-    assert len(captured["bind_tools_arg"]) <= 14, "Plus de 14 tools binds"
+    # F10 : 7 widgets globaux ajoutes (yes_no/select/number/date/date_range/
+    # rating/file_upload) → borne MAX_TOOLS_PER_TURN portee a 22.
+    assert len(captured["bind_tools_arg"]) <= 22, "Plus de 22 tools binds"
     assert debug["page_slug"] == "esg"
     assert debug["fallback_used"] is False
 

@@ -4,7 +4,9 @@ import type { ProfileUpdateEvent, CompletionResponse } from '~/types/company'
 import type {
   InteractiveQuestion,
   InteractiveQuestionAnswer,
+  InteractiveQuestionAnswerExt,
   InteractiveOption,
+  InteractiveQuestionResponsePayload,
   InteractiveQuestionType,
   InteractiveQuestionState,
 } from '~/types/interactive-question'
@@ -620,7 +622,7 @@ export function useChat() {
 
   async function submitInteractiveAnswer(
     questionId: string,
-    answer: InteractiveQuestionAnswer,
+    answer: InteractiveQuestionAnswer | InteractiveQuestionAnswerExt,
   ): Promise<void> {
     if (!currentConversation.value || isStreaming.value) return
 
@@ -638,14 +640,25 @@ export function useChat() {
     const pendingRefusal = isConsentQ && answer.values.includes('no')
     const pendingAcceptance = isConsentQ && answer.values.includes('yes')
 
-    const labels = question
-      ? question.options
-          .filter(opt => answer.values.includes(opt.id))
-          .map(opt => opt.label)
-      : answer.values
-    const displayContent = labels.join(', ') + (
-      answer.justification ? `\n_${answer.justification}_` : ''
-    )
+    // F10 — Détection de la réponse étendue (avec response_payload structuré).
+    const ext = answer as InteractiveQuestionAnswerExt
+    const responsePayload: InteractiveQuestionResponsePayload | undefined =
+      ext.response_payload
+
+    // F10 — Si le widget fournit son texte canonique (ex: « ✓ Oui »), l'utiliser.
+    // Sinon, fallback F18 sur les labels des options sélectionnées.
+    let displayContent: string
+    if (ext.display_text) {
+      displayContent = ext.display_text
+    } else {
+      const opts = question?.options ?? []
+      const labels = opts
+        .filter(opt => answer.values.includes(opt.id))
+        .map(opt => opt.label)
+      displayContent = labels.join(', ') + (
+        answer.justification ? `\n_${answer.justification}_` : ''
+      )
+    }
 
     const userMessage: Message = {
       id: crypto.randomUUID(),
@@ -698,6 +711,13 @@ export function useChat() {
       formData.append('interactive_question_values', JSON.stringify(answer.values))
       if (answer.justification) {
         formData.append('interactive_question_justification', answer.justification)
+      }
+      // F10 — payload structuré (envoyé au backend pour stockage en métadonnée)
+      if (responsePayload) {
+        formData.append(
+          'interactive_question_response_payload',
+          JSON.stringify(responsePayload),
+        )
       }
 
       // Review 6.4 P5 — armer le flag AVANT l'appel. handleGuidedTourEvent

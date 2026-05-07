@@ -20,8 +20,9 @@ import re
 # Borne dure : le LLM ne doit jamais voir plus de 14 tools par tour.
 # F01 ajoute cite_source/search_source/flag_unsourced en GLOBAL_WHITELIST (3 tools),
 # F12 ajoute recall_history (1 tool transverse), d'ou la borne portee a 14
-# (10 metiers + 4 globaux).
-MAX_TOOLS_PER_TURN: int = 14
+# (10 metiers + 4 globaux). F10 ajoute 7 widgets globaux (yes_no/select/number/
+# date/date_range/rating/file_upload) ce qui requiert une elevation a 22.
+MAX_TOOLS_PER_TURN: int = 22
 
 # Whitelist transverse : tools toujours disponibles, ajoutes a chaque selection.
 # Source de verite : seuls les tools EFFECTIVEMENT exposes par le code peuvent
@@ -37,6 +38,15 @@ GLOBAL_WHITELIST: frozenset[str] = frozenset({
     # F12 — recall_history transverse pour permettre la recherche sémantique
     # dans l'historique depuis n'importe quel noeud spécialiste.
     "recall_history",
+    # F10 — 7 widgets transverses disponibles partout (FR-014, FR-015).
+    # show_form / show_summary_card sont contextuels (ajoutés par MODULE_TOOL_MAPPING).
+    "ask_yes_no",
+    "ask_select",
+    "ask_number",
+    "ask_date",
+    "ask_date_range",
+    "ask_rating",
+    "ask_file_upload",
 })
 
 
@@ -65,6 +75,8 @@ PAGE_TOOL_MAPPING: dict[str, frozenset[str]] = {
         "get_project",
         # F11 — Map visible sur la page profil pour visualiser les sites projet
         "show_map",
+        # F10 — formulaire pour création/édition profil rapide
+        "show_form",
     }),
     # F06 — Page projets : 7 tools projet exclusifs.
     "profile_projects": frozenset({
@@ -77,6 +89,8 @@ PAGE_TOOL_MAPPING: dict[str, frozenset[str]] = {
         "link_document_to_project",
         # F11 — Map pour visualiser les projets dans la zone UEMOA
         "show_map",
+        # F10 — formulaire pour création projet en un seul écran
+        "show_form",
     }),
     # Evaluation ESG (pages /esg, /esg/results).
     "esg": frozenset({
@@ -88,6 +102,8 @@ PAGE_TOOL_MAPPING: dict[str, frozenset[str]] = {
         "get_esg_assessment_chat",
         # F11 — KPICard pour synthèses ESG (score global, scores par pilier)
         "show_kpi_card",
+        # F10 — summary card pour valider extractions critères ESG
+        "show_summary_card",
     }),
     # Bilan carbone (pages /carbon, /carbon/results).
     "carbon": frozenset({
@@ -98,6 +114,8 @@ PAGE_TOOL_MAPPING: dict[str, frozenset[str]] = {
         "get_carbon_summary_chat",
         # F11 — KPICard pour résumé tCO2e + delta vs année précédente
         "show_kpi_card",
+        # F10 — formulaire pour saisie rapide d'un poste d'émission
+        "show_form",
     }),
     # Catalogue de financement vert et fiches fonds.
     "financing": frozenset({
@@ -109,6 +127,8 @@ PAGE_TOOL_MAPPING: dict[str, frozenset[str]] = {
         "show_match_card",
         "show_comparison_table",
         "show_map",
+        # F10 — summary card pour valider extractions de fond
+        "show_summary_card",
     }),
     # Dossiers de candidature (pages /applications, /applications/[id]).
     "candidatures": frozenset({
@@ -121,6 +141,8 @@ PAGE_TOOL_MAPPING: dict[str, frozenset[str]] = {
         # F11 — Match/Comparison pour comparer offres concurrentes
         "show_match_card",
         "show_comparison_table",
+        # F10 — formulaire pour création candidature
+        "show_form",
     }),
     # Score credit alternatif.
     "credit": frozenset({
@@ -151,6 +173,8 @@ PAGE_TOOL_MAPPING: dict[str, frozenset[str]] = {
         "analyze_uploaded_document",
         "get_document_analysis",
         "list_user_documents",
+        # F10 — summary card pour valider l'extraction d'un document
+        "show_summary_card",
     }),
     # Rapports PDF : lecture seule (pas de tools dedies — fallback profil + esg).
     "reports": frozenset({
@@ -191,6 +215,8 @@ MODULE_TOOL_MAPPING: dict[str, frozenset[str]] = {
         "get_esg_assessment",
         # F11 — KPICard pour résumés ESG
         "show_kpi_card",
+        # F10 — summary card pour valider extractions critères ESG
+        "show_summary_card",
     }),
     "carbon": frozenset({
         "create_carbon_assessment",
@@ -199,6 +225,8 @@ MODULE_TOOL_MAPPING: dict[str, frozenset[str]] = {
         "get_carbon_summary",
         # F11 — KPICard pour résumé tCO2e
         "show_kpi_card",
+        # F10 — formulaire pour saisie rapide d'un poste d'émission
+        "show_form",
     }),
     "financing": frozenset({
         "search_compatible_funds",
@@ -209,6 +237,8 @@ MODULE_TOOL_MAPPING: dict[str, frozenset[str]] = {
         "show_match_card",
         "show_comparison_table",
         "show_map",
+        # F10 — summary card pour valider extractions de fond
+        "show_summary_card",
     }),
     "application": frozenset({
         "create_fund_application",
@@ -220,6 +250,8 @@ MODULE_TOOL_MAPPING: dict[str, frozenset[str]] = {
         # F11 — Match/Comparison pour comparaison cross-offres
         "show_match_card",
         "show_comparison_table",
+        # F10 — formulaire pour création candidature
+        "show_form",
     }),
     "credit": frozenset({
         "generate_credit_score",
@@ -239,6 +271,8 @@ MODULE_TOOL_MAPPING: dict[str, frozenset[str]] = {
         "analyze_uploaded_document",
         "get_document_analysis",
         "list_user_documents",
+        # F10 — summary card pour valider l'extraction d'un document
+        "show_summary_card",
     }),
 }
 

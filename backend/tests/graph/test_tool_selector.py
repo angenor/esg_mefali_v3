@@ -193,14 +193,15 @@ def test_select_tools_truncation_on_oversized_catalog(monkeypatch) -> None:
 
     from app.graph import tool_selector_config as cfg
 
-    # Catalogue synthetique de 15 tools fictifs (echo).
+    # Catalogue synthetique de 25 tools fictifs (echo) — F10 a porte la borne
+    # MAX_TOOLS_PER_TURN a 22, il faut donc > 22 pour declencher la troncature.
     fake_tools = [
         StructuredTool.from_function(
             func=lambda x=i: x,  # noqa: ARG005
             name=f"fake_tool_{i:02d}",
             description=f"fake tool {i}",
         )
-        for i in range(15)
+        for i in range(25)
     ]
     fake_names = frozenset(t.name for t in fake_tools)
 
@@ -233,7 +234,23 @@ def test_select_tools_filters_unavailable_tools() -> None:
         all_tools=INTERACTIVE_TOOLS,
     )
     names = {t.name for t in selected}
-    assert names <= {"ask_interactive_question"}
+    # F10 — INTERACTIVE_TOOLS contient maintenant 10 tools (1 F18 + 9 F10).
+    # Tous les tools globaux F10 (ask_yes_no/select/number/date/date_range/
+    # rating/file_upload) plus ask_interactive_question sont dans GLOBAL_WHITELIST.
+    # show_summary_card est dans le PAGE_TOOL_MAPPING['esg']. show_form n'y est pas.
+    expected_global_widgets = {
+        "ask_interactive_question",
+        "ask_yes_no",
+        "ask_select",
+        "ask_number",
+        "ask_date",
+        "ask_date_range",
+        "ask_rating",
+        "ask_file_upload",
+    }
+    # show_summary_card est exposé pour 'esg' (page) → autorisé.
+    expected_with_summary = expected_global_widgets | {"show_summary_card"}
+    assert names <= expected_with_summary
 
 
 # ---------------------------------------------------------------------------
@@ -285,6 +302,8 @@ def test_global_whitelist_is_frozenset() -> None:
     assert isinstance(GLOBAL_WHITELIST, frozenset)
     # F01 ajoute les sourcing tools en GLOBAL_WHITELIST.
     # F12 ajoute recall_history en GLOBAL_WHITELIST (mémoire transverse).
+    # F10 ajoute 7 widgets transverses (yes_no/select/number/date/date_range/
+    # rating/file_upload). show_form / show_summary_card sont contextuels.
     assert GLOBAL_WHITELIST == frozenset({
         "ask_interactive_question",
         "trigger_guided_tour",
@@ -292,6 +311,14 @@ def test_global_whitelist_is_frozenset() -> None:
         "search_source",
         "flag_unsourced",
         "recall_history",
+        # F10
+        "ask_yes_no",
+        "ask_select",
+        "ask_number",
+        "ask_date",
+        "ask_date_range",
+        "ask_rating",
+        "ask_file_upload",
     })
 
 
