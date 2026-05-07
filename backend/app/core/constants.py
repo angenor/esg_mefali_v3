@@ -1,6 +1,7 @@
 """Constantes globales et enums liés à l'authentification et au multi-tenant (F02)."""
 
 import enum
+from decimal import Decimal
 
 
 class UserRole(str, enum.Enum):
@@ -60,3 +61,18 @@ class AuditSourceOfChange(str, enum.Enum):
 # ``audit_log.old_value`` / ``audit_log.new_value``. Au-delà, la valeur est
 # tronquée et remplacée par un marqueur ``{"_truncated": true, ...}``.
 AUDIT_VALUE_MAX_BYTES: int = 10 * 1024  # 10 KiB
+
+
+# --- F04 — Devises et conversion Money ---
+
+# Peg fixe FCFA-EUR (Banque de France/BCEAO).
+# Source : 1 EUR = 655,957 XOF (parité fixe depuis 1999, garantie par la
+# Banque de France via le Trésor public français pour la zone UEMOA).
+FCFA_EUR_PEG: Decimal = Decimal("655.957")
+
+# Quota journalier d'appels HTTP exchangerate-api.com (free tier 1500/mois).
+# Notre usage : 1 fetch/jour suffit (un appel retourne toutes les paires).
+EXCHANGERATE_DAILY_QUOTA_MAX: int = 50
+
+# Devises supportées par la plateforme (alignées sur app.core.money.Currency).
+SUPPORTED_CURRENCIES: tuple[str, ...] = ("XOF", "EUR", "USD", "GBP", "JPY")

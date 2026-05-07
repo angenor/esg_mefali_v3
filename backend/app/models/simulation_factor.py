@@ -13,9 +13,10 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base, TimestampMixin, UUIDMixin
+from app.models.versioning_mixin import VersioningMixin
 
 
-class SimulationFactor(UUIDMixin, TimestampMixin, Base):
+class SimulationFactor(UUIDMixin, TimestampMixin, VersioningMixin, Base):
     """Constante numerique d'un simulateur (taux d'epargne, impact carbone par MFCFA, etc.).
 
     status='pending' avec source_id NULL est autorise quand aucune source officielle

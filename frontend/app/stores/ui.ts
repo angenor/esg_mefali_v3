@@ -10,6 +10,12 @@ export const WIDGET_MARGIN = 100
 
 const WIDGET_STORAGE_KEY = 'esg_mefali_widget_size'
 
+// F04 — Préférence d'affichage de devise (Money typed).
+const DISPLAY_CURRENCY_MODE_KEY = 'mefali.ui.displayCurrencyMode'
+export type DisplayCurrencyMode = 'native' | 'pme' | 'both'
+const DISPLAY_CURRENCY_MODE_VALUES: readonly DisplayCurrencyMode[] = ['native', 'pme', 'both']
+const DEFAULT_DISPLAY_CURRENCY_MODE: DisplayCurrencyMode = 'both'
+
 export const useUiStore = defineStore('ui', () => {
   const sidebarOpen = ref(true)
   const conversationDrawerOpen = ref(false)
@@ -21,6 +27,8 @@ export const useUiStore = defineStore('ui', () => {
   const chatWidgetHeight = ref(WIDGET_DEFAULT_HEIGHT)
   const theme = ref<'light' | 'dark'>('light')
   const prefersReducedMotion = ref(false)
+  // F04 — préférence affichage de devise (native, pme, both).
+  const displayCurrencyMode = ref<DisplayCurrencyMode>(DEFAULT_DISPLAY_CURRENCY_MODE)
   let _reducedMotionQuery: MediaQueryList | null = null
   let _reducedMotionHandler: ((e: MediaQueryListEvent) => void) | null = null
 
@@ -142,6 +150,27 @@ export const useUiStore = defineStore('ui', () => {
     applyTheme()
   }
 
+  // F04 — chargement / persistance du mode d'affichage devise.
+  function initDisplayCurrencyMode() {
+    if (import.meta.client) {
+      const saved = localStorage.getItem(DISPLAY_CURRENCY_MODE_KEY)
+      if (saved && DISPLAY_CURRENCY_MODE_VALUES.includes(saved as DisplayCurrencyMode)) {
+        displayCurrencyMode.value = saved as DisplayCurrencyMode
+      }
+    }
+  }
+
+  function setDisplayCurrencyMode(mode: DisplayCurrencyMode): void {
+    if (!DISPLAY_CURRENCY_MODE_VALUES.includes(mode)) {
+      // Validation : ignore silencieusement les valeurs invalides
+      return
+    }
+    displayCurrencyMode.value = mode
+    if (import.meta.client) {
+      localStorage.setItem(DISPLAY_CURRENCY_MODE_KEY, mode)
+    }
+  }
+
   return {
     sidebarOpen,
     conversationDrawerOpen,
@@ -153,6 +182,7 @@ export const useUiStore = defineStore('ui', () => {
     chatWidgetHeight,
     theme,
     prefersReducedMotion,
+    displayCurrencyMode,
     initTheme,
     initReducedMotion,
     destroyReducedMotion,
@@ -166,5 +196,7 @@ export const useUiStore = defineStore('ui', () => {
     closeChatWidget,
     toggleTheme,
     setTheme,
+    initDisplayCurrencyMode,
+    setDisplayCurrencyMode,
   }
 })

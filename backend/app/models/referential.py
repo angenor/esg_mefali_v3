@@ -19,9 +19,10 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base, TimestampMixin, UUIDMixin
 from app.models.source import PublicationStatus
+from app.models.versioning_mixin import VersioningMixin
 
 
-class Referential(UUIDMixin, TimestampMixin, Base):
+class Referential(UUIDMixin, TimestampMixin, VersioningMixin, Base):
     """Collection coherente d'indicateurs (par exemple 'Referentiel ESG UEMOA Standard')."""
 
     __tablename__ = "referentials"
@@ -61,7 +62,7 @@ class Referential(UUIDMixin, TimestampMixin, Base):
     )
 
 
-class ReferentialIndicator(UUIDMixin, TimestampMixin, Base):
+class ReferentialIndicator(UUIDMixin, TimestampMixin, VersioningMixin, Base):
     """Jointure N-N : associe un Indicator a un Referential avec poids et seuil."""
 
     __tablename__ = "referential_indicators"

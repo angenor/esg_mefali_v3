@@ -89,6 +89,11 @@ from app.modules.audit.router import (  # noqa: E402
     admin_router as audit_admin_router,
     router as audit_router,
 )
+# F04 — Currency (peg + table + pivot USD).
+from app.modules.currency.router import router as currency_router  # noqa: E402
+from app.modules.currency.admin_router import (  # noqa: E402
+    router as currency_admin_router,
+)
 
 app.include_router(auth_router, prefix="/api/auth", tags=["auth"])
 app.include_router(chat_router, prefix="/api/chat", tags=["chat"])
@@ -108,4 +113,9 @@ app.include_router(sources_router, prefix="/api/sources", tags=["sources"])
 # F03 — Audit log endpoints PME et admin.
 app.include_router(audit_router, prefix="/api/audit", tags=["audit"])
 app.include_router(audit_admin_router, prefix="/api/admin/audit", tags=["admin", "audit"])
+# F04 — Currency endpoints (publics + admin).
+app.include_router(currency_router, prefix="/api/currency", tags=["currency"])
+app.include_router(
+    currency_admin_router, prefix="/api/admin/currency", tags=["admin", "currency"],
+)
 app.include_router(health_router, prefix="/api", tags=["health"])

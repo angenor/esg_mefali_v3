@@ -44,6 +44,11 @@ class Settings(BaseSettings):
         if self.llm_model:
             self.openrouter_model = self.llm_model
 
+    # F04 — Currency / exchangerate-api.com
+    exchangerate_api_key: str = ""
+    exchangerate_api_base_url: str = "https://v6.exchangerate-api.com/v6"
+    currency_fetch_daily_quota: int = 50
+
     # Application
     app_version: str = "0.1.0"
     debug: bool = False

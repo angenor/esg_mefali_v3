@@ -13,9 +13,10 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base, TimestampMixin, UUIDMixin
 from app.models.source import PublicationStatus
+from app.models.versioning_mixin import VersioningMixin
 
 
-class RequiredDocument(UUIDMixin, TimestampMixin, Base):
+class RequiredDocument(UUIDMixin, TimestampMixin, VersioningMixin, Base):
     """Document obligatoire d'un fonds ou d'un intermediaire."""
 
     __tablename__ = "required_documents"
