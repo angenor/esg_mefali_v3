@@ -52,6 +52,7 @@ const colorClasses = computed(() => colorByStatus[props.status])
     <slot name="icon">
       <svg
         v-if="status === 'authentic'"
+        aria-hidden="true"
         class="w-3 h-3"
         fill="none"
         stroke="currentColor"
@@ -66,6 +67,7 @@ const colorClasses = computed(() => colorByStatus[props.status])
       </svg>
       <svg
         v-else-if="status === 'revoked' || status === 'invalid'"
+        aria-hidden="true"
         class="w-3 h-3"
         fill="none"
         stroke="currentColor"
@@ -80,6 +82,7 @@ const colorClasses = computed(() => colorByStatus[props.status])
       </svg>
       <svg
         v-else-if="status === 'expired'"
+        aria-hidden="true"
         class="w-3 h-3"
         fill="none"
         stroke="currentColor"
