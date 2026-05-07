@@ -43,6 +43,7 @@ const colorClasses = computed(() => colorByStatus[props.status])
   <span
     role="status"
     aria-live="polite"
+    :aria-label="label"
     :class="[
       'inline-flex items-center gap-1 rounded-full border uppercase',
       colorClasses,
