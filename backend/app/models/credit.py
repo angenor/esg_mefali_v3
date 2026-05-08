@@ -32,6 +32,10 @@ class CreditCategory(str, enum.Enum):
 
     solvability = "solvability"
     green_impact = "green_impact"
+    # F18 — Crédit alternatif (Module 5.1)
+    mobile_money_flux = "mobile_money_flux"
+    photos_ia = "photos_ia"
+    public_data = "public_data"
 
 
 class ConfidenceLabel(str, enum.Enum):

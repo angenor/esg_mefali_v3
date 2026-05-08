@@ -350,6 +350,23 @@ async def revoke_consent(
     active.revoked_at = now
     await db.flush()
 
+    # F18 / SC-008 : marquer les données crédit alternatif dépendantes
+    # comme ``unused=True`` + ``purge_after = now + 30j``. Best-effort :
+    # une erreur de hook ne doit pas faire échouer la révocation.
+    try:
+        from app.modules.credit.alternative.revocation_hook import (
+            mark_credit_data_unused_on_revoke,
+        )
+
+        await mark_credit_data_unused_on_revoke(
+            db, account_id=account_id, consent_type=consent_type,
+        )
+    except Exception:  # pragma: no cover - défense en profondeur
+        logger.exception(
+            "credit_alternative_revocation_hook_failed",
+            extra={"consent_type": consent_type, "account_id": str(account_id)},
+        )
+
     metadata = _request_metadata(request)
     metadata["consent_type"] = consent_type
     metadata["previously_granted_at"] = active.granted_at.isoformat()

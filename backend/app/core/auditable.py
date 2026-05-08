@@ -94,6 +94,11 @@ AUDITABLE_MODELS: frozenset[str] = frozenset(
         # F14 — Matching Projet ↔ Offre
         "OfferMatch",
         "MatchAlertSubscription",
+        # F18 — Crédit alternatif (Mobile Money + Photos IA + Données publiques)
+        "MobileMoneyImport",
+        "MobileMoneyTransaction",
+        "CreditPhoto",
+        "PublicDataSource",
     }
 )
 
@@ -183,6 +188,14 @@ EXEMPT_MODELS: frozenset[str] = frozenset(
         # ``admin`` (middleware AdminAuditContextMiddleware). Le mixin
         # générique n'est pas appliqué car la table n'a pas de account_id.
         "Skill",
+        # F18 — MobileMoneyAnalysis : artefact recalculé idempotent à partir
+        # des MobileMoneyTransaction (déjà Auditable). Les mutations détaillées
+        # sont déjà tracées sur les transactions. Le recalcul est journalisé
+        # via les logs structurés ``mm_analysis_computed``.
+        "MobileMoneyAnalysis",
+        # F18 — Catalogue méthodologie scoring crédit (admin only, pas
+        # d'account_id, lecture publique pour la page méthodologie).
+        "CreditMethodologyFactor",
     }
 )
 

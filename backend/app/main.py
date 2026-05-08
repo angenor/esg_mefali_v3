@@ -222,3 +222,20 @@ app.include_router(
     prefix="/api/credit",
     tags=["credit", "stub"],
 )
+
+# F18 — Crédit alternatif (Mobile Money + Photos IA + Données publiques)
+from app.modules.credit.alternative.router import (  # noqa: E402
+    public_router as credit_alternative_public_router,
+    router as credit_alternative_router,
+)
+
+app.include_router(
+    credit_alternative_router,
+    prefix="/api/credit",
+    tags=["credit", "alternative"],
+)
+app.include_router(
+    credit_alternative_public_router,
+    prefix="/api/credit",
+    tags=["credit", "methodology", "public"],
+)
