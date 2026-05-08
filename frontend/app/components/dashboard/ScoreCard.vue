@@ -2,6 +2,14 @@
 import SourceLink from '~/components/sources/SourceLink.vue'
 
 // Carte de score synthétique pour le dashboard
+interface ScoreSourceRef {
+  source_id: string
+  title?: string
+  publisher?: string | null
+  version?: string | null
+  url?: string | null
+}
+
 interface Props {
   label: string
   score: number | null
@@ -10,13 +18,22 @@ interface Props {
   trend?: string | null
   subtitle?: string | null
   sourceId?: string | null
+  // F21 (US4) — Sources multiples F01 cliquables.
+  sources?: ScoreSourceRef[] | null
 }
 
 const props = withDefaults(defineProps<Props>(), {
   trend: null,
   subtitle: null,
   sourceId: null,
+  sources: null,
 })
+
+// F21 — Détecter l'absence de sourçage : badge « Non sourcé ».
+const hasSources = computed(
+  () =>
+    !!(props.sourceId || (props.sources && props.sources.length > 0)),
+)
 
 const emit = defineEmits<{
   'open-source': [sourceId: string]
@@ -67,13 +84,30 @@ function scoreColor(score: number | null): string {
       <!-- Tendance -->
       <span v-if="trend === 'up'" class="text-green-500 text-lg mb-1" title="En hausse">↑</span>
       <span v-else-if="trend === 'down'" class="text-red-500 text-lg mb-1" title="En baisse">↓</span>
-      <!-- F01 picto source cliquable -->
+      <!-- F01 picto source cliquable (legacy single source) -->
       <SourceLink
         v-if="sourceId"
         :source-id="sourceId"
         :aria-label="`Voir la source du score ${label}`"
         @open="(id) => emit('open-source', id)"
       />
+      <!-- F21 (US4) — Sources multiples cliquables -->
+      <template v-if="!sourceId && sources && sources.length > 0">
+        <SourceLink
+          v-for="src in sources"
+          :key="src.source_id"
+          :source-id="src.source_id"
+          :aria-label="`Voir la source ${src.title || src.source_id} du score ${label}`"
+          @open="(id) => emit('open-source', id)"
+        />
+      </template>
+      <!-- F21 (US4) — Badge « Non sourcé » -->
+      <span
+        v-if="score !== null && !hasSources"
+        class="ml-1 text-[10px] font-medium px-1.5 py-0.5 rounded bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-800"
+        data-testid="score-unsourced-badge"
+        aria-label="Score non sourcé"
+      >Non sourcé</span>
     </div>
 
     <!-- État vide -->

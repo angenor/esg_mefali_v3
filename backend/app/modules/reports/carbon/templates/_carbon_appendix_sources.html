@@ -1,0 +1,26 @@
+{# F21 — Annexe « Sources et références » du rapport carbone. #}
+<section class="appendix appendix-sources">
+  <h2>9. Sources et références</h2>
+  {% if numbered_sources %}
+  <p class="appendix-intro">
+    Cette annexe recense l'ensemble des sources vérifiées (F01) mobilisées
+    pour produire les chiffres de ce rapport. Chaque référence numérotée
+    ``[n]`` du document principal renvoie à une entrée ci-dessous.
+  </p>
+  <ol class="sources-list">
+    {% for src in numbered_sources %}
+    <li id="source-{{ src.index }}">
+      <strong>{{ src.title }}</strong>
+      {% if src.publisher %} — {{ src.publisher }}{% endif %}
+      {% if src.version %} (version {{ src.version }}){% endif %}
+      {% if src.date_publi %}, publiée le {{ src.date_publi | format_date_fr }}{% endif %}
+      {% if src.section %}<br/><em>Section :</em> {{ src.section }}{% endif %}
+      {% if src.page %}<br/><em>Page :</em> {{ src.page }}{% endif %}
+      {% if src.url %}<br/><a href="{{ src.url }}" rel="noopener">{{ src.url }}</a>{% endif %}
+    </li>
+    {% endfor %}
+  </ol>
+  {% else %}
+  <p class="empty">Aucune source mobilisée pour ce rapport.</p>
+  {% endif %}
+</section>

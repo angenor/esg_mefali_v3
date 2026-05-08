@@ -15,6 +15,10 @@ class ReportTypeEnum(str, enum.Enum):
     """Type de rapport genere."""
 
     esg_compliance = "esg_compliance"
+    # F21 — Rapport carbone PDF. La valeur est ajoutée à l'enum Python ;
+    # une migration ALTER TYPE PostgreSQL devra être exécutée hors-spec F21
+    # pour le déploiement production (les tests SQLite ne sont pas concernés).
+    carbon = "carbon"
 
 
 class ReportStatusEnum(str, enum.Enum):

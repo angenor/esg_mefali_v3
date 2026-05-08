@@ -1,9 +1,10 @@
-"""Endpoints REST pour le module rapports ESG PDF."""
+"""Endpoints REST pour le module rapports ESG PDF + Carbone (F21)."""
 
+import logging
 import uuid
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from fastapi.responses import FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -16,7 +17,18 @@ from app.modules.reports.schemas import (
     ReportResponse,
     ReportStatusResponse,
 )
+from app.modules.reports.carbon.exceptions import (
+    AssessmentNotFinalizedError,
+    AssessmentNotFoundError,
+    ConcurrentGenerationError,
+)
+from app.modules.reports.carbon.schemas import (
+    CarbonReportRequest,
+    CarbonReportResponse,
+)
 from app.schemas.referential_score import GenerateReportRequest
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -125,23 +137,98 @@ async def list_reports_endpoint(
     page: int = Query(default=1, ge=1),
     limit: int = Query(default=20, ge=1, le=100),
     assessment_id: uuid.UUID | None = Query(default=None),
+    type: str | None = Query(
+        default=None,
+        description="Filtrer par type : ``esg`` (défaut historique) ou ``carbon`` (F21).",
+    ),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> ReportListResponse:
-    """Lister les rapports de l'utilisateur connecte."""
+    """Lister les rapports de l'utilisateur connecte (F21 supporte ``?type=carbon``)."""
+    from app.models.report import Report, ReportTypeEnum
     from app.modules.reports.service import list_reports
+    from sqlalchemy import select, func
 
-    reports, total = await list_reports(
-        db=db,
-        user_id=current_user.id,
-        assessment_id=assessment_id,
-        page=page,
-        limit=limit,
-    )
+    if type == "carbon":
+        from app.modules.reports.carbon.service import list_carbon_reports
+
+        reports, total = await list_carbon_reports(
+            db=db, user_id=current_user.id, page=page, limit=limit
+        )
+    else:
+        reports, total = await list_reports(
+            db=db,
+            user_id=current_user.id,
+            assessment_id=assessment_id,
+            page=page,
+            limit=limit,
+        )
 
     return ReportListResponse(
         items=[ReportResponse.model_validate(r) for r in reports],
         total=total,
         page=page,
         limit=limit,
+    )
+
+
+# ----------------------------------------------------------------------
+# F21 — Génération du rapport carbone PDF (US2)
+# ----------------------------------------------------------------------
+
+
+@router.post(
+    "/carbon/{assessment_id}/generate",
+    response_model=CarbonReportResponse,
+    status_code=202,
+)
+async def generate_carbon_report_endpoint(
+    assessment_id: uuid.UUID,
+    body: CarbonReportRequest | None = None,
+    background_tasks: BackgroundTasks = None,  # type: ignore[assignment]
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> CarbonReportResponse:
+    """F21 — Démarrer la génération asynchrone d'un rapport carbone PDF.
+
+    Erreurs:
+      - 404 Bilan introuvable.
+      - 409 Génération concurrente déjà en cours.
+      - 422 Bilan non finalisé.
+    """
+    from app.core.database import async_session_factory
+    from app.modules.reports.carbon.service import (
+        _render_pdf_async,
+        generate_carbon_report,
+    )
+
+    try:
+        report = await generate_carbon_report(
+            db, assessment_id, current_user.id, source="manual"
+        )
+    except AssessmentNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except ConcurrentGenerationError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+    except AssessmentNotFinalizedError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+
+    await db.commit()
+
+    if background_tasks is not None:
+        background_tasks.add_task(
+            _render_pdf_async,
+            async_session_factory,
+            report.id,
+            assessment_id,
+            current_user.id,
+            report.file_path,
+        )
+
+    return CarbonReportResponse(
+        id=report.id,
+        assessment_id=report.assessment_id,
+        report_type="carbon",
+        status="generating",  # mappé sur completed à la fin du job
+        created_at=report.created_at,
     )
