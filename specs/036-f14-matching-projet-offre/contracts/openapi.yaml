@@ -1,0 +1,263 @@
+openapi: 3.1.0
+info:
+  title: ESG Mefali — F14 Matching Projet ↔ Offre
+  version: 0.1.0
+  description: |
+    Endpoints REST F14 pour le matching projet ↔ offre, le comparateur
+    multi-intermédiaires et les alertes nouvelles offres.
+servers:
+  - url: /api
+paths:
+  /projects/{project_id}/matches:
+    get:
+      summary: Liste paginée des OfferMatches actifs pour un projet
+      operationId: listMatchesForProject
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: project_id
+          required: true
+          schema: { type: string, format: uuid }
+        - in: query
+          name: min_score
+          schema: { type: integer, minimum: 0, maximum: 100, default: 0 }
+        - in: query
+          name: bottleneck
+          schema: { type: string, enum: [fund, intermediary, balanced] }
+        - in: query
+          name: fund_id
+          schema: { type: string, format: uuid }
+        - in: query
+          name: page
+          schema: { type: integer, minimum: 1, default: 1 }
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 50, default: 20 }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OfferMatchListResponse' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /projects/{project_id}/recompute-matches:
+    post:
+      summary: Déclenche un recalcul async des matches (BackgroundTasks, cap 50 offres)
+      operationId: recomputeMatchesForProject
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: project_id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '202':
+          description: Accepted
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RecomputeMatchesResponse' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+  /projects/{project_id}/compare:
+    get:
+      summary: Comparateur multi-intermédiaires pour un même fund
+      operationId: compareOffersForFund
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: project_id
+          required: true
+          schema: { type: string, format: uuid }
+        - in: query
+          name: fund_id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ComparisonResult' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /projects/{project_id}/match-details/{offer_id}:
+    get:
+      summary: Détail d'un match (critères couverts/manquants + sources)
+      operationId: getMatchDetails
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: project_id
+          required: true
+          schema: { type: string, format: uuid }
+        - in: path
+          name: offer_id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OfferMatchDetail' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /projects/{project_id}/match-alerts:
+    patch:
+      summary: Active/désactive ou met à jour le seuil d'alertes pour un projet
+      operationId: updateMatchAlertSubscription
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: project_id
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/MatchAlertSubscriptionUpdate' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MatchAlertSubscriptionRead' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  responses:
+    NotFound:
+      description: Resource not found or access denied (RLS)
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              detail: { type: string }
+    ValidationError:
+      description: Validation error
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              detail: { type: array, items: { type: object } }
+  schemas:
+    OfferMatchRead:
+      type: object
+      required: [id, accountId, projectId, offerId, globalScore, fundScore, intermediaryScore, scoreBreakdown, bottleneck, status, computedAt, expiresAt]
+      properties:
+        id: { type: string, format: uuid }
+        accountId: { type: string, format: uuid }
+        projectId: { type: string, format: uuid }
+        offerId: { type: string, format: uuid }
+        globalScore: { type: integer, minimum: 0, maximum: 100 }
+        fundScore: { type: integer, minimum: 0, maximum: 100 }
+        intermediaryScore: { type: integer, minimum: 0, maximum: 100 }
+        scoreBreakdown: { $ref: '#/components/schemas/ScoreBreakdown' }
+        bottleneck: { type: string, enum: [fund, intermediary, balanced] }
+        recommendedActions: { type: array, items: { type: object } }
+        status: { type: string, enum: [suggested, viewed, dismissed, converted] }
+        computedAt: { type: string, format: date-time }
+        expiresAt: { type: string, format: date-time }
+        lastNotifiedAt: { type: string, format: date-time, nullable: true }
+    ScoreBreakdown:
+      type: object
+      required: [fund, intermediary, assessmentMissing]
+      properties:
+        fund: { $ref: '#/components/schemas/MatchSubBreakdown' }
+        intermediary: { $ref: '#/components/schemas/MatchSubBreakdown' }
+        assessmentMissing: { type: boolean }
+    MatchSubBreakdown:
+      type: object
+      required: [sectorMatch, esgMatch, sizeMatch, locationMatch, documentsMatch, instrumentMatch, missingCriteria]
+      properties:
+        sectorMatch: { type: integer, minimum: 0, maximum: 100 }
+        esgMatch: { type: integer, minimum: 0, maximum: 100 }
+        sizeMatch: { type: integer, minimum: 0, maximum: 100 }
+        locationMatch: { type: integer, minimum: 0, maximum: 100 }
+        documentsMatch: { type: integer, minimum: 0, maximum: 100 }
+        instrumentMatch: { type: integer, minimum: 0, maximum: 100 }
+        missingCriteria:
+          type: array
+          items: { $ref: '#/components/schemas/MissingCriterion' }
+    MissingCriterion:
+      type: object
+      required: [indicatorId, label, referentialId, sourceId]
+      properties:
+        indicatorId: { type: string, format: uuid }
+        label: { type: string }
+        referentialId: { type: string, format: uuid }
+        sourceId: { type: string, format: uuid }
+    OfferMatchListResponse:
+      type: object
+      required: [items, total, page, limit]
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/OfferMatchRead' } }
+        total: { type: integer }
+        page: { type: integer }
+        limit: { type: integer }
+    OfferMatchDetail:
+      allOf:
+        - $ref: '#/components/schemas/OfferMatchRead'
+        - type: object
+          properties:
+            offer: { type: object }
+            project: { type: object }
+    RecomputeMatchesResponse:
+      type: object
+      required: [recomputeRequestId, totalOffersToCompute]
+      properties:
+        recomputeRequestId: { type: string, format: uuid }
+        totalOffersToCompute: { type: integer }
+    ComparisonResult:
+      type: object
+      required: [fundId, projectId, subjects, rows]
+      properties:
+        fundId: { type: string, format: uuid }
+        projectId: { type: string, format: uuid }
+        subjects:
+          type: array
+          items:
+            type: object
+            required: [id, label]
+            properties:
+              id: { type: string }
+              label: { type: string }
+              metadata: { type: object }
+        rows:
+          type: array
+          items:
+            type: object
+            required: [key, label, values]
+            properties:
+              key: { type: string }
+              label: { type: string }
+              values:
+                type: array
+                items:
+                  type: object
+                  required: [subjectId, raw, display]
+                  properties:
+                    subjectId: { type: string }
+                    raw: {}
+                    display: { type: string }
+                    sourceId: { type: string, format: uuid }
+                    isWinner: { type: boolean }
+    MatchAlertSubscriptionRead:
+      type: object
+      required: [id, projectId, minGlobalScore, isActive]
+      properties:
+        id: { type: string, format: uuid }
+        projectId: { type: string, format: uuid }
+        minGlobalScore: { type: integer, minimum: 0, maximum: 100 }
+        isActive: { type: boolean }
+    MatchAlertSubscriptionUpdate:
+      type: object
+      properties:
+        minGlobalScore: { type: integer, minimum: 0, maximum: 100, nullable: true }
+        isActive: { type: boolean, nullable: true }
