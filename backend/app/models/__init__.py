@@ -84,3 +84,7 @@ from app.models.skill import Skill, SkillDomain, SkillStatus  # noqa: F401
 
 # F09 — Back-office Admin : reset password tokens
 from app.models.password_reset_token import PasswordResetToken  # noqa: F401
+
+# F14 — Matching Projet ↔ Offre
+from app.models.offer_match import OfferMatch  # noqa: F401
+from app.models.match_alert_subscription import MatchAlertSubscription  # noqa: F401

@@ -17,12 +17,13 @@ from __future__ import annotations
 
 import re
 
-# Borne dure : le LLM ne doit jamais voir plus de 14 tools par tour.
+# Borne dure : le LLM ne doit jamais voir plus de N tools par tour.
 # F01 ajoute cite_source/search_source/flag_unsourced en GLOBAL_WHITELIST (3 tools),
 # F12 ajoute recall_history (1 tool transverse), d'ou la borne portee a 14
 # (10 metiers + 4 globaux). F10 ajoute 7 widgets globaux (yes_no/select/number/
 # date/date_range/rating/file_upload) ce qui requiert une elevation a 22.
-MAX_TOOLS_PER_TURN: int = 22
+# F14 ajoute 4 tools matching (list/compare/recompute/details) sur 3 noeuds → 26.
+MAX_TOOLS_PER_TURN: int = 26
 
 # Whitelist transverse : tools toujours disponibles, ajoutes a chaque selection.
 # Source de verite : seuls les tools EFFECTIVEMENT exposes par le code peuvent
@@ -91,6 +92,10 @@ PAGE_TOOL_MAPPING: dict[str, frozenset[str]] = {
         "show_map",
         # F10 — formulaire pour création projet en un seul écran
         "show_form",
+        # F14 — Lecture matching depuis la page projets
+        "list_matches_for_project",
+        "compare_offers_for_fund_v2",
+        "get_match_details",
     }),
     # Evaluation ESG (pages /esg, /esg/results).
     "esg": frozenset({
@@ -129,6 +134,11 @@ PAGE_TOOL_MAPPING: dict[str, frozenset[str]] = {
         "show_map",
         # F10 — summary card pour valider extractions de fond
         "show_summary_card",
+        # F14 — Tools matching pleins
+        "list_matches_for_project",
+        "compare_offers_for_fund_v2",
+        "recompute_matches_for_project",
+        "get_match_details",
     }),
     # Dossiers de candidature (pages /applications, /applications/[id]).
     "candidatures": frozenset({
@@ -143,6 +153,10 @@ PAGE_TOOL_MAPPING: dict[str, frozenset[str]] = {
         "show_comparison_table",
         # F10 — formulaire pour création candidature
         "show_form",
+        # F14 — Tools matching (lecture + comparateur)
+        "list_matches_for_project",
+        "compare_offers_for_fund_v2",
+        "get_match_details",
     }),
     # Score credit alternatif.
     "credit": frozenset({
@@ -206,6 +220,8 @@ MODULE_TOOL_MAPPING: dict[str, frozenset[str]] = {
         "show_match_card",
         "show_comparison_table",
         "show_map",
+        # F14 — Lecture matching depuis le chat global
+        "list_matches_for_project",
     }),
     "esg_scoring": frozenset({
         "create_esg_assessment",
@@ -239,6 +255,11 @@ MODULE_TOOL_MAPPING: dict[str, frozenset[str]] = {
         "show_map",
         # F10 — summary card pour valider extractions de fond
         "show_summary_card",
+        # F14 — Tools matching pleins (4)
+        "list_matches_for_project",
+        "compare_offers_for_fund_v2",
+        "recompute_matches_for_project",
+        "get_match_details",
     }),
     "application": frozenset({
         "create_fund_application",
@@ -252,6 +273,11 @@ MODULE_TOOL_MAPPING: dict[str, frozenset[str]] = {
         "show_comparison_table",
         # F10 — formulaire pour création candidature
         "show_form",
+        # F14 — Tools matching pleins (4)
+        "list_matches_for_project",
+        "compare_offers_for_fund_v2",
+        "recompute_matches_for_project",
+        "get_match_details",
     }),
     "credit": frozenset({
         "generate_credit_score",
