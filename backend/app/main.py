@@ -136,6 +136,10 @@ from app.modules.projects.router import router as projects_router  # noqa: E402
 from app.modules.financing.matching_router import (  # noqa: E402
     router as matching_router,
 )
+# F16 — Simulateur multi-offres sourcé
+from app.modules.applications.simulate_router import (  # noqa: E402
+    router as simulate_multi_router,
+)
 # F08 — Attestations vérifiables Ed25519
 from app.modules.attestations.router import router as attestations_router  # noqa: E402
 from app.modules.attestations.admin_router import (  # noqa: E402
@@ -189,6 +193,10 @@ app.include_router(
 app.include_router(projects_router, prefix="/api/projects", tags=["projects"])
 # F14 — Matching Projet ↔ Offre (montés sous /api/projects pour cohérence FK)
 app.include_router(matching_router, prefix="/api/projects", tags=["matching"])
+# F16 — simulate-multi monté sous /api/projects pour cohérence FK
+app.include_router(
+    simulate_multi_router, prefix="/api/projects", tags=["simulate-multi"]
+)
 # F08 — Attestations vérifiables (PME + admin)
 app.include_router(
     attestations_router, prefix="/api/attestations", tags=["attestations"],

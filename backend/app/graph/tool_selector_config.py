@@ -144,6 +144,17 @@ PAGE_TOOL_MAPPING: dict[str, frozenset[str]] = {
         "compare_offers_for_fund_v2",
         "recompute_matches_for_project",
         "get_match_details",
+        # F16 — Comparateur multi-offres sourcé
+        "compare_simulations",
+    }),
+    # F16 — Page simulator dédiée
+    "simulator": frozenset({
+        "compare_simulations",
+        "search_compatible_funds",
+        "get_fund_details",
+        "list_projects",
+        "get_project",
+        "show_comparison_table",
     }),
     # Dossiers de candidature (pages /applications, /applications/[id]).
     "candidatures": frozenset({
@@ -162,6 +173,8 @@ PAGE_TOOL_MAPPING: dict[str, frozenset[str]] = {
         "list_matches_for_project",
         "compare_offers_for_fund_v2",
         "get_match_details",
+        # F16 — Comparateur multi-offres sourcé
+        "compare_simulations",
     }),
     # Score credit alternatif.
     "credit": frozenset({
@@ -265,6 +278,8 @@ MODULE_TOOL_MAPPING: dict[str, frozenset[str]] = {
         "compare_offers_for_fund_v2",
         "recompute_matches_for_project",
         "get_match_details",
+        # F16 — Comparateur multi-offres sourcé
+        "compare_simulations",
     }),
     "application": frozenset({
         "create_fund_application",
@@ -282,6 +297,8 @@ MODULE_TOOL_MAPPING: dict[str, frozenset[str]] = {
         "list_matches_for_project",
         "compare_offers_for_fund_v2",
         "recompute_matches_for_project",
+        # F16 — Comparateur multi-offres sourcé
+        "compare_simulations",
         "get_match_details",
     }),
     "credit": frozenset({
@@ -318,7 +335,10 @@ _PATH_TO_SLUG_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
     (re.compile(r"^/profile(?:/|$)"), "profile"),
     (re.compile(r"^/esg(?:/|$)"), "esg"),
     (re.compile(r"^/carbon(?:/|$)"), "carbon"),
+    # F16 — `/financing/simulator` AVANT `/financing` (l'ordre compte).
+    (re.compile(r"^/financing/simulator(?:/|$)"), "simulator"),
     (re.compile(r"^/financing(?:/|$)"), "financing"),
+    (re.compile(r"^/simulator(?:/|$)"), "simulator"),
     (re.compile(r"^/applications(?:/|$)"), "candidatures"),
     (re.compile(r"^/candidatures(?:/|$)"), "candidatures"),
     (re.compile(r"^/credit-score(?:/|$)"), "credit"),
