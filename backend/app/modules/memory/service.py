@@ -262,14 +262,25 @@ def _embeddings_model() -> Any:
 
     Isolé en helper pour faciliter le mocking dans les tests
     (``monkeypatch.setattr("app.modules.memory.service._embeddings_model", ...)``).
+
+    Raises:
+        RuntimeError: Si aucune clé d'embedding n'est configurée. L'appelant
+            (``embed_message``, ``search_history``) attrape cette exception
+            et applique le fallback best-effort (chunks insérés sans
+            ``embedding`` / recherche sémantique vide).
     """
     from langchain_openai import OpenAIEmbeddings
 
     from app.core.config import settings
 
+    api_key = settings.openai_api_key or settings.openrouter_api_key
+    if not api_key:
+        raise RuntimeError(
+            "Aucune clé d'embedding configurée. Définir OPENAI_API_KEY dans .env."
+        )
     return OpenAIEmbeddings(
         model="text-embedding-3-small",
-        api_key=settings.openai_api_key or settings.openrouter_api_key,
+        api_key=api_key,
         timeout=10.0,
     )
 
