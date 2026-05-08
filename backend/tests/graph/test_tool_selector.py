@@ -319,6 +319,10 @@ def test_global_whitelist_is_frozenset() -> None:
         "ask_date_range",
         "ask_rating",
         "ask_file_upload",
+        # F20 — Bibliothèque Ressources transverse.
+        "search_resources",
+        "get_resource_content",
+        "recommend_resources_for_user",
     })
 
 

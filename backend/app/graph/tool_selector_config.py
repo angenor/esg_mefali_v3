@@ -23,7 +23,8 @@ import re
 # (10 metiers + 4 globaux). F10 ajoute 7 widgets globaux (yes_no/select/number/
 # date/date_range/rating/file_upload) ce qui requiert une elevation a 22.
 # F14 ajoute 4 tools matching (list/compare/recompute/details) sur 3 noeuds → 26.
-MAX_TOOLS_PER_TURN: int = 26
+# F20 ajoute 3 tools resources globaux (search/get/recommend) → 29.
+MAX_TOOLS_PER_TURN: int = 29
 
 # Whitelist transverse : tools toujours disponibles, ajoutes a chaque selection.
 # Source de verite : seuls les tools EFFECTIVEMENT exposes par le code peuvent
@@ -48,6 +49,10 @@ GLOBAL_WHITELIST: frozenset[str] = frozenset({
     "ask_date_range",
     "ask_rating",
     "ask_file_upload",
+    # F20 — Bibliothèque Ressources : recherche transverse depuis tous les nœuds.
+    "search_resources",
+    "get_resource_content",
+    "recommend_resources_for_user",
 })
 
 
