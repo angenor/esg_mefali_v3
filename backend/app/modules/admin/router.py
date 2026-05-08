@@ -12,9 +12,20 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_admin, get_db
 from app.models.user import User
+from app.modules.admin.companies_router import router as companies_router
+from app.modules.admin.criteria_router import router as criteria_router
+from app.modules.admin.emission_factors_router import (
+    router as emission_factors_router,
+)
 from app.modules.admin.funds_router import router as funds_router
+from app.modules.admin.indicators_router import router as indicators_router
 from app.modules.admin.intermediaries_router import router as intermediaries_router
+from app.modules.admin.metrics_router import router as metrics_router
 from app.modules.admin.offers_router import router as offers_router
+from app.modules.admin.referentials_router import router as referentials_router
+from app.modules.admin.simulation_factors_router import (
+    router as simulation_factors_router,
+)
 from app.modules.admin.sources_router import router as sources_router
 from app.modules.admin.users_router import router as users_router
 from app.schemas.admin import AdminHealthResponse
@@ -32,6 +43,33 @@ router.include_router(
 router.include_router(offers_router, prefix="/offers", tags=["admin-offers"])
 router.include_router(sources_router, prefix="/sources", tags=["admin-sources"])
 router.include_router(users_router, prefix="/users", tags=["admin-users"])
+
+# F09 — sous-routers admin (PRIO 3)
+router.include_router(
+    referentials_router, prefix="/referentials", tags=["admin-referentials"],
+)
+router.include_router(
+    indicators_router, prefix="/indicators", tags=["admin-indicators"],
+)
+router.include_router(
+    criteria_router, prefix="/criteria", tags=["admin-criteria"],
+)
+router.include_router(
+    emission_factors_router,
+    prefix="/emission-factors",
+    tags=["admin-emission-factors"],
+)
+router.include_router(
+    simulation_factors_router,
+    prefix="/simulation-factors",
+    tags=["admin-simulation-factors"],
+)
+router.include_router(
+    companies_router, prefix="/companies", tags=["admin-companies"],
+)
+router.include_router(
+    metrics_router, prefix="/metrics", tags=["admin-metrics-overview"],
+)
 
 
 @router.get("/health", response_model=AdminHealthResponse)

@@ -13,6 +13,7 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base, TimestampMixin, UUIDMixin
+from app.models.source import PublicationStatus
 from app.models.versioning_mixin import VersioningMixin
 
 
@@ -40,6 +41,13 @@ class SimulationFactor(UUIDMixin, TimestampMixin, VersioningMixin, Base):
         nullable=False,
         default="pending",
         server_default="pending",
+    )
+    # F09 — workflow draft/published (migration 035 ajoute la colonne).
+    publication_status: Mapped[str] = mapped_column(
+        String(20),
+        nullable=False,
+        default=PublicationStatus.DRAFT.value,
+        server_default=PublicationStatus.DRAFT.value,
     )
     account_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
