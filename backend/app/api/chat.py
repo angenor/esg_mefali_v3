@@ -697,6 +697,7 @@ async def create_conversation(
 
     conversation = Conversation(
         user_id=current_user.id,
+        account_id=current_user.account_id,
         title=data.title,
     )
     db.add(conversation)
@@ -926,6 +927,7 @@ async def send_message(
     # Sauvegarder le message utilisateur
     user_message = Message(
         conversation_id=conversation.id,
+        account_id=current_user.account_id,
         role="user",
         content=message_content,
     )
@@ -1057,6 +1059,7 @@ async def send_message(
                     # Sauvegarder la réponse complète
                     assistant_message = Message(
                         conversation_id=conv_id,
+                        account_id=current_user.account_id,
                         role="assistant",
                         content=full_response,
                     )
