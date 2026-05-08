@@ -17,6 +17,10 @@ import { F18_PME_USER, setupF18Mocks } from './fixtures/F18-helpers'
  * 4. Page consents F05 accessible (regression du parcours révocation).
  * 5. Cap public_data ≤ 10 % vérifié sur la méthodologie publique
  *    (FR-015, SC-005).
+ *
+ * Note : page.request.get() bypass page.route() mocks — on utilise
+ * page.goto() + page.evaluate(fetch) pour passer par le contexte navigateur.
+ * Voir docs Playwright APIRequestContext et pattern F07.
  */
 
 test.describe('F18 - Mobile Money + données publiques + méthodologie', () => {
@@ -24,9 +28,17 @@ test.describe('F18 - Mobile Money + données publiques + méthodologie', () => {
     page,
   }) => {
     await setupF18Mocks(page)
-    const resp = await page.request.get('/api/credit/methodology')
-    expect(resp.status()).toBe(200)
-    const body = await resp.json()
+    // Charger une page quelconque pour activer les mocks page.route()
+    await page.goto('/')
+    const data = await page.evaluate(async () => {
+      const resp = await fetch('/api/credit/methodology')
+      return { status: resp.status, body: (await resp.json()) as unknown }
+    })
+    expect(data.status).toBe(200)
+    const body = data.body as {
+      version: string
+      factors: Array<{ source_id: string; category: string; weight: string }>
+    }
     expect(body.version).toBe('1.2')
     expect(Array.isArray(body.factors)).toBe(true)
     expect(body.factors.length).toBeGreaterThanOrEqual(2)
@@ -39,9 +51,14 @@ test.describe('F18 - Mobile Money + données publiques + méthodologie', () => {
     await loginAs(page, F18_PME_USER)
     await setupF18Mocks(page, { mmConsentGranted: false })
 
-    const resp = await page.request.get('/api/credit/mobile-money/analysis')
-    expect(resp.status()).toBe(403)
-    const body = await resp.json()
+    await page.goto('/')
+    const data = await page.evaluate(async () => {
+      const resp = await fetch('/api/credit/mobile-money/analysis')
+      const body = (await resp.json()) as unknown
+      return { status: resp.status, body }
+    })
+    expect(data.status).toBe(403)
+    const body = data.body as { detail: { consent_type: string } }
     expect(body.detail.consent_type).toBe('mobile_money_analysis')
   })
 
@@ -51,9 +68,18 @@ test.describe('F18 - Mobile Money + données publiques + méthodologie', () => {
     await loginAs(page, F18_PME_USER)
     await setupF18Mocks(page, { mmConsentGranted: true })
 
-    const resp = await page.request.get('/api/credit/mobile-money/analysis')
-    expect(resp.status()).toBe(200)
-    const body = await resp.json()
+    await page.goto('/')
+    const data = await page.evaluate(async () => {
+      const resp = await fetch('/api/credit/mobile-money/analysis')
+      const body = (await resp.json()) as unknown
+      return { status: resp.status, body }
+    })
+    expect(data.status).toBe(200)
+    const body = data.body as {
+      kpis: { transaction_count: number }
+      consent_active: boolean
+      methodology_version: string
+    }
     expect(body.kpis.transaction_count).toBeGreaterThan(0)
     expect(body.consent_active).toBe(true)
     expect(body.methodology_version).toBe('1.2')
@@ -75,14 +101,19 @@ test.describe('F18 - Mobile Money + données publiques + méthodologie', () => {
     page,
   }) => {
     await setupF18Mocks(page)
-    const resp = await page.request.get('/api/credit/methodology')
-    const body = await resp.json()
+    await page.goto('/')
+    const data = await page.evaluate(async () => {
+      const resp = await fetch('/api/credit/methodology')
+      const body = (await resp.json()) as unknown
+      return { status: resp.status, body }
+    })
+    expect(data.status).toBe(200)
+    const body = data.body as {
+      factors: Array<{ category: string; weight: string }>
+    }
     const totalPublic = body.factors
-      .filter((f: { category: string }) => f.category === 'public_data')
-      .reduce(
-        (acc: number, f: { weight: string }) => acc + parseFloat(f.weight),
-        0,
-      )
+      .filter((f) => f.category === 'public_data')
+      .reduce((acc: number, f) => acc + parseFloat(f.weight), 0)
     expect(totalPublic).toBeLessThanOrEqual(0.1)
   })
 })
