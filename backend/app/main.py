@@ -84,6 +84,8 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:3000"],
+    # F24 — autoriser les origines chrome-extension://<id> (extension MV3).
+    allow_origin_regex=r"^chrome-extension://.*$",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -93,6 +95,13 @@ app.add_middleware(
 from app.modules.admin.middleware import AdminAuditContextMiddleware  # noqa: E402
 
 app.add_middleware(AdminAuditContextMiddleware)
+
+# F24 — Middleware extension : SET source_of_change="extension" sur /api/extension/*
+from app.modules.extension.middleware import (  # noqa: E402
+    ExtensionAuditContextMiddleware,
+)
+
+app.add_middleware(ExtensionAuditContextMiddleware)
 
 # F08 — Rate limiting middleware sur /api/public/verify/* (10 req/IP/min).
 from app.middleware.rate_limit import RateLimitMiddleware  # noqa: E402
@@ -267,4 +276,13 @@ app.include_router(
     credit_alternative_public_router,
     prefix="/api/credit",
     tags=["credit", "methodology", "public"],
+)
+
+# F24 — Extension Chrome MV3 (sous-routeur public + auth bearer).
+from app.modules.extension.router import router as extension_router  # noqa: E402
+
+app.include_router(
+    extension_router,
+    prefix="/api/extension/v1",
+    tags=["extension"],
 )

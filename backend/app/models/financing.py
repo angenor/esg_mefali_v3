@@ -211,6 +211,11 @@ class Fund(UUIDMixin, TimestampMixin, VersioningMixin, Base):
     source: Mapped["Source | None"] = relationship(
         "Source", lazy="selectin", foreign_keys=[source_id],
     )
+    # F24 — Extension Chrome : matchers d'URL pour la détection d'offre.
+    url_patterns: Mapped[list[dict]] = mapped_column(
+        JSONType, nullable=False, server_default="[]", default=list,
+    )
+
     fund_intermediaries: Mapped[list["FundIntermediary"]] = relationship(
         "FundIntermediary",
         back_populates="fund",
@@ -331,6 +336,11 @@ class Intermediary(UUIDMixin, TimestampMixin, VersioningMixin, Base):
     source: Mapped["Source | None"] = relationship(
         "Source", lazy="selectin", foreign_keys=[source_id],
     )
+    # F24 — Extension Chrome : matchers d'URL pour la détection d'offre.
+    url_patterns: Mapped[list[dict]] = mapped_column(
+        JSONType, nullable=False, server_default="[]", default=list,
+    )
+
     fund_intermediaries: Mapped[list["FundIntermediary"]] = relationship(
         "FundIntermediary",
         back_populates="intermediary",
