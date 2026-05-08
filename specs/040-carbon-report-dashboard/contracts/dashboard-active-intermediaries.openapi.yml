@@ -1,0 +1,50 @@
+openapi: 3.1.0
+info:
+  title: F21 — GET /api/dashboard/active-intermediaries
+  version: "1.0.0"
+  description: |
+    Liste des intermédiaires actifs (au moins une candidature non clôturée
+    OU un projet ouvert) du compte courant, avec coordonnées géographiques
+    pour rendu sur MapBlock (F11). Fallback capitale UEMOA si lat/lon absents.
+paths:
+  /api/dashboard/active-intermediaries:
+    get:
+      summary: Intermédiaires actifs du compte courant
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Liste (potentiellement vide) d'ActiveIntermediary
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/ActiveIntermediary"
+        "401": { description: Non authentifié }
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    ActiveIntermediary:
+      type: object
+      required: [intermediary_id, name, type, country, lat, lon, accreditations, applications_count]
+      properties:
+        intermediary_id: { type: string, format: uuid }
+        name: { type: string }
+        type: { type: string }
+        country: { type: string }
+        lat: { type: number, format: float }
+        lon: { type: number, format: float }
+        is_fallback_capital: { type: boolean, default: false }
+        accreditations:
+          type: array
+          items: { type: string }
+        applications_count: { type: integer, minimum: 0 }

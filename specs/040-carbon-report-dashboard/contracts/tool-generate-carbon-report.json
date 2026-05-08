@@ -1,0 +1,52 @@
+{
+  "tool_name": "generate_carbon_report",
+  "description": "Déclenche la génération asynchrone d'un rapport carbone PDF (9 sections + annexe sources F01) pour le bilan carbone finalisé indiqué. Réservé au module 'carbon' et à la page /carbon/results. Renvoie l'identifiant du rapport et son statut courant.",
+  "args_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["assessment_id"],
+    "properties": {
+      "assessment_id": {
+        "type": "string",
+        "format": "uuid",
+        "description": "Identifiant du bilan carbone à exporter en PDF. Doit appartenir au compte courant et être finalisé."
+      }
+    }
+  },
+  "returns_schema": {
+    "type": "object",
+    "required": ["ok", "report_id", "status", "message"],
+    "properties": {
+      "ok": { "type": "boolean" },
+      "report_id": { "type": "string", "format": "uuid" },
+      "status": { "type": "string", "enum": ["pending", "generating", "ready", "failed"] },
+      "message": { "type": "string" },
+      "error": { "type": "string", "nullable": true }
+    }
+  },
+  "errors": [
+    { "code": "assessment_not_found", "http_status": 404, "message": "Bilan carbone introuvable." },
+    { "code": "assessment_not_finalized", "http_status": 422, "message": "Le bilan carbone doit être finalisé avant de générer un rapport." },
+    { "code": "concurrent_generation", "http_status": 409, "message": "Un rapport est déjà en cours de génération pour ce bilan." },
+    { "code": "forbidden", "http_status": 403, "message": "Ce bilan n'appartient pas au compte courant." }
+  ],
+  "exposure": {
+    "modules": ["carbon"],
+    "pages": ["/carbon/results"],
+    "global_whitelist": false
+  },
+  "audit": {
+    "source_of_change": "llm",
+    "logged_via": "automatic Auditable hook on Report insert/update"
+  },
+  "preconditions": [
+    "Le bilan carbone est finalisé (is_finalized=true).",
+    "Aucun Report(assessment_id, report_type='carbon', status IN ('pending','generating')) actif.",
+    "L'utilisateur courant possède account_id == carbon_assessment.account_id (RLS F02)."
+  ],
+  "postconditions": [
+    "Une ligne Report(status='pending') est créée.",
+    "Un BackgroundTask FastAPI est dispatché pour le rendu PDF.",
+    "Le polling sur GET /api/reports/{report_id} permet de récupérer le statut final."
+  ]
+}
