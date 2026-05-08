@@ -88,3 +88,13 @@ from app.models.password_reset_token import PasswordResetToken  # noqa: F401
 # F14 — Matching Projet ↔ Offre
 from app.models.offer_match import OfferMatch  # noqa: F401
 from app.models.match_alert_subscription import MatchAlertSubscription  # noqa: F401
+
+# F18 — Crédit alternatif (Mobile Money + Photos IA + Données publiques)
+from app.models.credit_alternative import (  # noqa: F401
+    CreditMethodologyFactor,
+    CreditPhoto,
+    MobileMoneyAnalysis,
+    MobileMoneyImport,
+    MobileMoneyTransaction,
+    PublicDataSource,
+)
