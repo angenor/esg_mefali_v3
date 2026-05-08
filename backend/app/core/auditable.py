@@ -91,6 +91,9 @@ AUDITABLE_MODELS: frozenset[str] = frozenset(
         "Project",
         # F08 — Attestation Vérifiable Ed25519
         "Attestation",
+        # F14 — Matching Projet ↔ Offre
+        "OfferMatch",
+        "MatchAlertSubscription",
     }
 )
 

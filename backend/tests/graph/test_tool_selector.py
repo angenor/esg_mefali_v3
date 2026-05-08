@@ -193,15 +193,15 @@ def test_select_tools_truncation_on_oversized_catalog(monkeypatch) -> None:
 
     from app.graph import tool_selector_config as cfg
 
-    # Catalogue synthetique de 25 tools fictifs (echo) — F10 a porte la borne
-    # MAX_TOOLS_PER_TURN a 22, il faut donc > 22 pour declencher la troncature.
+    # Catalogue synthetique de tools fictifs (echo). F14 a porte la borne
+    # MAX_TOOLS_PER_TURN a 26, il faut donc > 26 pour declencher la troncature.
     fake_tools = [
         StructuredTool.from_function(
             func=lambda x=i: x,  # noqa: ARG005
             name=f"fake_tool_{i:02d}",
             description=f"fake tool {i}",
         )
-        for i in range(25)
+        for i in range(30)
     ]
     fake_names = frozenset(t.name for t in fake_tools)
 

@@ -104,6 +104,10 @@ class ReminderType(str, enum.Enum):
     fund_deadline = "fund_deadline"
     intermediary_followup = "intermediary_followup"
     custom = "custom"
+    # F13 — Évolution de version d'un référentiel
+    referential_version_evolved = "referential_version_evolved"
+    # F14 — Nouvelle offre compatible détectée
+    new_offer_alert = "new_offer_alert"
 
 
 class BadgeType(str, enum.Enum):
