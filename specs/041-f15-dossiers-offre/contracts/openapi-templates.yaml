@@ -1,0 +1,210 @@
+openapi: 3.1.0
+info:
+  title: F15 — Templates Dossier Admin API
+  version: 1.0.0
+  description: |
+    Endpoints d'administration des Templates Dossier (catalogue) pour F15.
+    Tous les endpoints requièrent le rôle ADMIN (Depends(get_current_admin) F02 + audit F03 source_of_change='admin').
+
+servers:
+  - url: /api/admin/templates
+
+paths:
+  /:
+    get:
+      summary: Lister les templates (paginé, filtres)
+      parameters:
+        - name: offer_id
+          in: query
+          schema: { type: string, format: uuid }
+        - name: instrument_type
+          in: query
+          schema: { type: string, enum: [subvention, prêt_concessionnel, equity, blending, mixte] }
+        - name: language
+          in: query
+          schema: { type: string, enum: [fr, en] }
+        - name: status
+          in: query
+          schema: { type: string, enum: [draft, published] }
+        - name: q
+          in: query
+          schema: { type: string }
+          description: Recherche full-text sur name (ILIKE)
+        - name: page
+          in: query
+          schema: { type: integer, minimum: 1, default: 1 }
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+      responses:
+        '200':
+          description: Liste paginée
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items: { type: array, items: { $ref: '#/components/schemas/TemplateRead' } }
+                  total: { type: integer }
+                  page: { type: integer }
+                  limit: { type: integer }
+    post:
+      summary: Créer un template (statut draft)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TemplateCreate' }
+      responses:
+        '201':
+          description: Template créé
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TemplateRead' }
+        '422': { description: Validation Pydantic }
+  /{template_id}:
+    parameters:
+      - name: template_id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      summary: Détail template
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TemplateRead' }
+        '404': { description: Inconnu }
+    patch:
+      summary: Mettre à jour un template (in-place pour draft, nouvelle version 1.0.x si published)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TemplateUpdate' }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TemplateRead' }
+    delete:
+      summary: Soft delete (drafts uniquement) — sets valid_to=today
+      responses:
+        '204': { description: Soft deleted }
+        '422': { description: Tentative de suppression d'un published }
+  /{template_id}/publish:
+    post:
+      summary: Publier un template (4-yeux, verified_by != captured_by)
+      parameters:
+        - name: template_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TemplateRead' }
+        '422': { description: 4-yeux non respecté ou Skill/Source manquantes }
+  /{template_id}/unpublish:
+    post:
+      summary: Dépublier un template (revient à draft, conserve la version)
+      parameters:
+        - name: template_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TemplateRead' }
+  /{template_id}/preview:
+    get:
+      summary: Prévisualiser le rendu d'une section avec un profil de démo
+      parameters:
+        - name: template_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: section_key
+          in: query
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  rendered_html: { type: string }
+                  prompt_used: { type: string }
+                  language: { type: string }
+
+components:
+  schemas:
+    TemplateCreate:
+      type: object
+      required: [name, instrument_type, language, sections, required_documents, tone, skill_id, source_id]
+      properties:
+        name: { type: string, minLength: 5, maxLength: 200 }
+        offer_id: { type: string, format: uuid, nullable: true }
+        instrument_type: { type: string, enum: [subvention, prêt_concessionnel, equity, blending, mixte] }
+        language: { type: string, enum: [fr, en] }
+        sections:
+          type: array
+          minItems: 1
+          maxItems: 30
+          items: { $ref: '#/components/schemas/SectionDef' }
+        required_documents:
+          type: array
+          items: { $ref: '#/components/schemas/RequiredDocument' }
+        tone: { type: string, maxLength: 100 }
+        vocabulary_hints: { type: object, additionalProperties: true }
+        anti_patterns:
+          type: array
+          items: { type: string, maxLength: 500 }
+        skill_id: { type: string, format: uuid }
+        source_id: { type: string, format: uuid }
+    TemplateUpdate:
+      allOf:
+        - $ref: '#/components/schemas/TemplateCreate'
+      type: object
+      properties:
+        # tous les champs deviennent optionnels
+        name: { type: string, minLength: 5, maxLength: 200 }
+    TemplateRead:
+      allOf:
+        - $ref: '#/components/schemas/TemplateCreate'
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        version: { type: string, pattern: '^\d+\.\d+$' }
+        valid_from: { type: string, format: date }
+        valid_to: { type: string, format: date, nullable: true }
+        superseded_by: { type: string, format: uuid, nullable: true }
+        status: { type: string, enum: [draft, published] }
+        captured_by: { type: string, format: uuid }
+        verified_by: { type: string, format: uuid, nullable: true }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    SectionDef:
+      type: object
+      required: [key, title, instructions, target_length]
+      properties:
+        key: { type: string, pattern: '^[a-z][a-z0-9_]{1,50}$' }
+        title: { type: string, minLength: 3, maxLength: 200 }
+        instructions: { type: string, minLength: 10, maxLength: 2000 }
+        target_length: { type: integer, minimum: 100, maximum: 5000 }
+        tone: { type: string, nullable: true }
+        required: { type: boolean, default: true }
+    RequiredDocument:
+      type: object
+      required: [title, mandatory, source_id, origin]
+      properties:
+        title: { type: string, minLength: 1, maxLength: 200 }
+        mandatory: { type: boolean }
+        source_id: { type: string, format: uuid }
+        origin: { type: string, enum: [fund, intermediary, both, template] }

@@ -1,0 +1,174 @@
+openapi: 3.1.0
+info:
+  title: F15 — Applications API extensions
+  version: 1.0.0
+  description: |
+    Endpoints PATCH du module candidatures (`/api/applications/*`) introduits ou modifiés par F15.
+    Auth : Depends(get_current_user). RLS F02 par account_id automatique.
+
+servers:
+  - url: /api
+
+paths:
+  /applications/batch:
+    post:
+      summary: Créer plusieurs candidatures en lot pour un même projet (FR-024)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [project_id, offer_ids]
+              properties:
+                project_id: { type: string, format: uuid }
+                offer_ids:
+                  type: array
+                  minItems: 1
+                  maxItems: 10
+                  items: { type: string, format: uuid }
+                language:
+                  type: string
+                  enum: [fr, en]
+                  description: Optionnel, hérite de l'offre si non fourni
+      responses:
+        '201':
+          description: Lot créé (mélange créations + replays idempotents)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  created:
+                    type: array
+                    items: { $ref: '#/components/schemas/ApplicationRead' }
+                  replayed:
+                    type: array
+                    items: { $ref: '#/components/schemas/ApplicationRead' }
+        '422': { description: Validation }
+
+  /applications/{application_id}/section/generate:
+    post:
+      summary: Générer ou régénérer une section via le LLM (FR-007 → FR-009)
+      parameters:
+        - name: application_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [section_key]
+              properties:
+                section_key: { type: string }
+                user_inputs: { type: object, additionalProperties: true, nullable: true }
+                regenerate: { type: boolean, default: false }
+      responses:
+        '202':
+          description: Génération démarrée (streaming via SSE sur /chat)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  generation_id: { type: string, format: uuid }
+                  estimated_duration_s: { type: integer }
+        '422': { description: Profil incomplet ou template indisponible }
+
+  /applications/{application_id}/attestation:
+    parameters:
+      - name: application_id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    put:
+      summary: Attacher une attestation (FR-020)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [attestation_id]
+              properties:
+                attestation_id: { type: string, format: uuid }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApplicationRead' }
+        '422': { description: Attestation expirée/révoquée ou non détenue par la PME }
+    delete:
+      summary: Détacher l'attestation
+      responses:
+        '204': { description: Détachée }
+
+  /applications/{application_id}/export:
+    post:
+      summary: Exporter le dossier en PDF (avec ou sans attestation jointe) (FR-029)
+      parameters:
+        - name: application_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                with_attestation: { type: boolean, default: true }
+                include_appendix_sources: { type: boolean, default: true }
+      responses:
+        '200':
+          description: PDF binaire
+          content:
+            application/pdf:
+              schema: { type: string, format: binary }
+        '422': { description: Profil incomplet, sections obligatoires non remplies }
+
+  /applications/{application_id}/recompute-against-snapshot:
+    post:
+      summary: Rejouer le scoring contre le snapshot immuable (FR-028)
+      parameters:
+        - name: application_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  score: { type: number }
+                  comparison_with_origin:
+                    type: object
+                    properties:
+                      match: { type: boolean }
+                      delta: { type: number }
+                  template_version_used: { type: string }
+        '409': { description: Application non encore soumise (pas de snapshot) }
+
+components:
+  schemas:
+    ApplicationRead:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        project_id: { type: string, format: uuid }
+        offer_id: { type: string, format: uuid }
+        template_id: { type: string, format: uuid }
+        language: { type: string, enum: [fr, en] }
+        attestation_id: { type: string, format: uuid, nullable: true }
+        status: { type: string }
+        sections: { type: object, additionalProperties: true }
+        snapshot_at: { type: string, format: date-time, nullable: true }
+        export_path: { type: string, nullable: true }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
