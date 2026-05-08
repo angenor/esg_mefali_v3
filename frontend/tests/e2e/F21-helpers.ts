@@ -1,13 +1,35 @@
 /**
  * F21 — Helpers Playwright pour le dashboard par offre + rapport carbone PDF.
  *
- * Mocks backend : /api/dashboard/summary, /api/dashboard/active-intermediaries,
- * /api/reports/carbon/{id}/generate, /api/reports/?type=carbon, polling status.
+ * Mocks backend : /api/auth/me, /api/dashboard/summary,
+ * /api/dashboard/active-intermediaries, /api/reports/carbon/{id}/generate,
+ * /api/reports/?type=carbon, polling status.
  */
 
 import type { Page, Route } from '@playwright/test'
 
 const API = (path: string) => `**/api${path}`
+
+/** Utilisateur PME minimal pour satisfaire le store auth. */
+const F21_PME_USER = {
+  id: 'user-f21',
+  email: 'pme@test.f21',
+  full_name: 'PME Test F21',
+  role: 'PME',
+  account_id: 'acct-f21',
+  is_active: true,
+}
+
+/** Mock /api/auth/me pour eviter que le store auth echoue. */
+export async function mockAuthMe(page: Page) {
+  await page.route(/.*\/api\/auth\/me$/, async (route: Route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(F21_PME_USER),
+    })
+  })
+}
 
 export interface MockApplicationCard {
   application_id: string
@@ -202,7 +224,9 @@ export async function mockCarbonReportGenerate(page: Page) {
 }
 
 export async function mockCarbonReportsList(page: Page) {
-  await page.route(API('/reports/?*'), async (route: Route) => {
+  // Regex pour capturer /api/reports/ avec query string optionnelle.
+  // On discrimine ESG vs Carbone via le parametre type=carbon.
+  await page.route(/.*\/api\/reports\/(\?.*)?$/, async (route: Route) => {
     const url = new URL(route.request().url())
     const isCarbon = url.searchParams.get('type') === 'carbon'
     await route.fulfill({

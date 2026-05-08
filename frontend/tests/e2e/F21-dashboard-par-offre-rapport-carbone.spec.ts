@@ -13,6 +13,7 @@ import { test, expect } from '@playwright/test'
 import {
   SAMPLE_APPLICATIONS,
   mockActiveIntermediaries,
+  mockAuthMe,
   mockCarbonReportGenerate,
   mockCarbonReportsList,
   mockDashboardSummary,
@@ -20,14 +21,14 @@ import {
 
 test.describe('F21 — Dashboard par Offre + Rapport Carbone PDF', () => {
   test.beforeEach(async ({ page }) => {
-    // Auth bypass minimal — auth.global.ts gère la redirection ; pour les
-    // mocks E2E on stub directement l'auth state via localStorage.
+    // Auth bypass : injecter le token JWT factice dans localStorage AVANT
+    // le premier rendu Nuxt (addInitScript), puis mocker /api/auth/me pour
+    // que le store auth ne tombe pas en erreur 401.
+    // Cle reelle : 'access_token' (voir stores/auth.ts loadFromStorage).
     await page.addInitScript(() => {
-      window.localStorage.setItem(
-        'mefali.auth.access_token',
-        'mock-token-f21',
-      )
+      window.localStorage.setItem('access_token', 'mock-token-f21')
     })
+    await mockAuthMe(page)
     await mockDashboardSummary(page)
     await mockActiveIntermediaries(page)
     await mockCarbonReportGenerate(page)
@@ -61,15 +62,17 @@ test.describe('F21 — Dashboard par Offre + Rapport Carbone PDF', () => {
     await expect(container).toBeVisible({ timeout: 10_000 })
   })
 
-  test('US4 — ScoreCard ESG expose un picto source cliquable F01', async ({ page }) => {
+  test('US4 — ScoreCard ESG expose un picto source ou badge non sourcé F01', async ({ page }) => {
     await page.goto('/dashboard')
-    // SourceLink F01 est rendu quand sources non vide.
-    const scoreCardEsg = page.locator('text=ESG Global').first().locator('..')
+    // Attendre que la ScoreCard "Score ESG" soit visible.
+    // Le label affiché dans dashboard.vue est "Score ESG" (prop label=).
+    const scoreCardEsg = page.locator('text=Score ESG').first()
     await expect(scoreCardEsg).toBeVisible({ timeout: 10_000 })
-    // Au moins une icône source ou badge non-sourcé doit être présent (transparence).
-    const hasSourceLink = await page.locator('[data-testid="source-link"]').first().count()
-    const hasUnsourcedBadge = await page.locator('[data-testid="score-unsourced-badge"]').first().count()
-    expect(hasSourceLink + hasUnsourcedBadge).toBeGreaterThan(0)
+    // Transparence F01 : soit un SourceLink cliquable (aria-label contenant "source"),
+    // soit le badge "Non sourcé" (data-testid="score-unsourced-badge") doit être présent.
+    const hasUnsourcedBadge = await page.locator('[data-testid="score-unsourced-badge"]').count()
+    const hasSourceLink = await page.locator('button[aria-label*="source"]').count()
+    expect(hasUnsourcedBadge + hasSourceLink).toBeGreaterThan(0)
   })
 
   test('US5 — Onglet « Carbone » sur /reports liste 1 rapport téléchargeable', async ({ page }) => {
