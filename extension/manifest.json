@@ -1,0 +1,29 @@
+{
+  "manifest_version": 3,
+  "name": "__MSG_app_name__",
+  "version": "0.1.0",
+  "description": "Détection d'offres de financement vert et suivi de candidatures ESG Mefali.",
+  "default_locale": "fr",
+  "permissions": ["storage", "activeTab", "scripting"],
+  "host_permissions": ["<all_urls>"],
+  "background": {
+    "service_worker": "src/background/service_worker.ts",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["src/content/detector.ts"],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_popup": "src/popup/index.html",
+    "default_title": "ESG Mefali"
+  },
+  "icons": {
+    "16": "public/icons/icon-16.png",
+    "48": "public/icons/icon-48.png",
+    "128": "public/icons/icon-128.png"
+  }
+}

@@ -1,0 +1,57 @@
+{
+  "app_name": {
+    "message": "ESG Mefali",
+    "description": "Nom de l'extension"
+  },
+  "popup_login_title": {
+    "message": "Connexion à votre espace ESG Mefali"
+  },
+  "popup_login_email": {
+    "message": "Adresse email"
+  },
+  "popup_login_password": {
+    "message": "Mot de passe"
+  },
+  "popup_login_submit": {
+    "message": "Se connecter"
+  },
+  "popup_login_error_invalid": {
+    "message": "Identifiants invalides. Vérifiez votre email et votre mot de passe."
+  },
+  "popup_login_error_network": {
+    "message": "Connexion impossible. Vérifiez votre connexion internet."
+  },
+  "popup_logout": {
+    "message": "Se déconnecter"
+  },
+  "popup_logged_out_title": {
+    "message": "Connectez-vous d'abord"
+  },
+  "popup_register_link": {
+    "message": "Pas encore de compte ? Créer un compte"
+  },
+  "dashboard_title": {
+    "message": "Mes candidatures actives"
+  },
+  "dashboard_empty_state": {
+    "message": "Aucune candidature active pour le moment."
+  },
+  "dashboard_open_app": {
+    "message": "Ouvrir le dossier"
+  },
+  "overlay_offer_detected": {
+    "message": "Offre détectée"
+  },
+  "overlay_view_button": {
+    "message": "Voir cette offre"
+  },
+  "overlay_close_button": {
+    "message": "Fermer"
+  },
+  "overlay_source_link": {
+    "message": "Voir la source"
+  },
+  "loading": {
+    "message": "Chargement…"
+  }
+}

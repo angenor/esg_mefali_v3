@@ -26,11 +26,14 @@ from contextvars import ContextVar, Token
 from typing import Iterator, Literal
 
 # Valeurs autorisées pour `source_of_change` (alignées sur l'ENUM PG `audit_source`).
-SourceOfChange = Literal["manual", "llm", "import", "admin"]
+SourceOfChange = Literal["manual", "llm", "import", "admin", "extension"]
 
 # Valeurs valides utilisées pour la validation (le ENUM PG les rejette
 # également, mais une garde Python évite des erreurs PG silencieuses).
-VALID_SOURCES: frozenset[str] = frozenset({"manual", "llm", "import", "admin"})
+# F24 — ajout de 'extension' pour les requêtes issues de l'extension Chrome.
+VALID_SOURCES: frozenset[str] = frozenset(
+    {"manual", "llm", "import", "admin", "extension"}
+)
 
 
 # ContextVar par défaut « manual » : toute mutation hors LangGraph / hors

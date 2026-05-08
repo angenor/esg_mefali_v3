@@ -56,6 +56,7 @@ class AuditSourceOfChange(str, enum.Enum):
     llm = "llm"
     import_ = "import"
     admin = "admin"
+    extension = "extension"
 
 
 # Taille maximale (en bytes) tolérée pour les valeurs JSON stockées dans

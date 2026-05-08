@@ -38,6 +38,10 @@ class RefreshToken(UUIDMixin, Base):
         DateTime(timezone=True), nullable=True
     )
     replaced_by_jti: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    # F24 — Extension Chrome : scope du token (web|extension). Défaut 'web'.
+    scope: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="web", server_default="web"
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
