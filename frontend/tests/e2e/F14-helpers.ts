@@ -21,13 +21,13 @@ export const F14_FIXTURES = {
 
 const SAMPLE_MATCH_A = {
   id: 'match-aaaa-1111',
-  account_id: 'acc-test',
-  project_id: PROJECT_ID,
-  offer_id: OFFER_ID_A,
-  global_score: 82,
-  fund_score: 78,
-  intermediary_score: 85,
-  score_breakdown: {
+  accountId: 'acc-test',
+  projectId: PROJECT_ID,
+  offerId: OFFER_ID_A,
+  globalScore: 82,
+  fundScore: 78,
+  intermediaryScore: 85,
+  scoreBreakdown: {
     fund: {
       sectorMatch: 100,
       esgMatch: 70,
@@ -57,22 +57,22 @@ const SAMPLE_MATCH_A = {
     assessmentMissing: false,
   },
   bottleneck: 'fund',
-  recommended_actions: [
+  recommendedActions: [
     { label: 'Compléter le bilan carbone', sourceId: 'src-gcf-1' },
   ],
   status: 'suggested',
-  computed_at: '2026-05-08T08:00:00Z',
-  expires_at: '2026-06-08T08:00:00Z',
-  last_notified_at: null,
+  computedAt: '2026-05-08T08:00:00Z',
+  expiresAt: '2026-06-08T08:00:00Z',
+  lastNotifiedAt: null,
 }
 
 const SAMPLE_MATCH_B = {
   ...SAMPLE_MATCH_A,
   id: 'match-bbbb-2222',
-  offer_id: OFFER_ID_B,
-  global_score: 65,
-  fund_score: 60,
-  intermediary_score: 70,
+  offerId: OFFER_ID_B,
+  globalScore: 65,
+  fundScore: 60,
+  intermediaryScore: 70,
   bottleneck: 'fund',
 }
 
