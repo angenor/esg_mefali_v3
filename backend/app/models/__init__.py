@@ -82,6 +82,14 @@ from app.models.referential_score import ComputedByEnum, ReferentialScore  # noq
 # F23 — Skills (Playbooks Métier)
 from app.models.skill import Skill, SkillDomain, SkillStatus  # noqa: F401
 
+# F20 — Bibliothèque Ressources + Fiches par Intermédiaire
+from app.models.resource import (  # noqa: F401
+    Resource,
+    ResourceLanguage,
+    ResourcePublicationStatus,
+    ResourceType,
+)
+
 # F09 — Back-office Admin : reset password tokens
 from app.models.password_reset_token import PasswordResetToken  # noqa: F401
 

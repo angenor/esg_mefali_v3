@@ -214,6 +214,27 @@ app.include_router(
     tags=["admin", "skills"],
 )
 
+# F20 — Bibliothèque Ressources : public (lecture) + admin (CRUD).
+from app.modules.resources.router import (  # noqa: E402
+    intermediaries_router as resources_intermediaries_router,
+    router as resources_public_router,
+)
+from app.modules.admin.resources_router import router as admin_resources_router  # noqa: E402
+
+app.include_router(
+    resources_public_router, prefix="/api/resources", tags=["resources"]
+)
+app.include_router(
+    resources_intermediaries_router,
+    prefix="/api/intermediaries",
+    tags=["resources", "intermediaries"],
+)
+app.include_router(
+    admin_resources_router,
+    prefix="/api/admin",
+    tags=["admin", "resources"],
+)
+
 # F05 — Test stub pour démontrer le gating require_consent (consent_dependency).
 from app.api.credit_stub import router as credit_stub_router  # noqa: E402
 

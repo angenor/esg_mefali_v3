@@ -196,6 +196,10 @@ EXEMPT_MODELS: frozenset[str] = frozenset(
         # F18 — Catalogue méthodologie scoring crédit (admin only, pas
         # d'account_id, lecture publique pour la page méthodologie).
         "CreditMethodologyFactor",
+        # F20 — Bibliothèque Ressources : catalogue admin-only sans
+        # account_id. Les mutations CRUD sont tracées via le middleware
+        # ``AdminAuditContextMiddleware`` (source_of_change=admin).
+        "Resource",
     }
 )
 

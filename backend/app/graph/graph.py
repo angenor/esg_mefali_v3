@@ -145,19 +145,21 @@ def build_graph() -> StateGraph:
 
     # F12 — recall_history (mémoire sémantique) injecté en transverse dans tous les noeuds.
     MEMORY_TOOLS = _import_memory_tools()
+    # F20 — RESOURCE_TOOLS (search/get/recommend) injectés en transverse.
+    from app.graph.tools.resource_tools import RESOURCE_TOOLS  # noqa: E402
 
     # Noeuds avec boucle tool calling — INTERACTIVE_TOOLS injecte partout (feature 018),
     # GUIDED_TOUR_TOOLS injecte dans les 6 noeuds eligibles au guidage (feature 019),
     # MEMORY_TOOLS (recall_history) injecte partout (F12).
     # Le tool doit figurer AUSSI dans le ToolNode (et pas seulement bind_tools cote LLM),
     # sinon l'executeur rejette le tool_call et le LLM hallucine "tool indisponible".
-    create_tool_loop(graph, "chat", chat_node, tools=PROFILING_TOOLS + CHAT_TOOLS + DOCUMENT_TOOLS + INTERACTIVE_TOOLS + GUIDED_TOUR_TOOLS + MEMORY_TOOLS + PROJECT_TOOLS)
-    create_tool_loop(graph, "esg_scoring", esg_scoring_node, tools=ESG_TOOLS + INTERACTIVE_TOOLS + GUIDED_TOUR_TOOLS + MEMORY_TOOLS)
-    create_tool_loop(graph, "carbon", carbon_node, tools=CARBON_TOOLS + INTERACTIVE_TOOLS + GUIDED_TOUR_TOOLS + MEMORY_TOOLS)
-    create_tool_loop(graph, "financing", financing_node, tools=FINANCING_TOOLS + INTERACTIVE_TOOLS + GUIDED_TOUR_TOOLS + MEMORY_TOOLS)
-    create_tool_loop(graph, "application", application_node, tools=APPLICATION_TOOLS + INTERACTIVE_TOOLS + MEMORY_TOOLS)
-    create_tool_loop(graph, "credit", credit_node, tools=CREDIT_TOOLS + INTERACTIVE_TOOLS + GUIDED_TOUR_TOOLS + MEMORY_TOOLS)
-    create_tool_loop(graph, "action_plan", action_plan_node, tools=ACTION_PLAN_TOOLS + INTERACTIVE_TOOLS + GUIDED_TOUR_TOOLS + MEMORY_TOOLS)
+    create_tool_loop(graph, "chat", chat_node, tools=PROFILING_TOOLS + CHAT_TOOLS + DOCUMENT_TOOLS + INTERACTIVE_TOOLS + GUIDED_TOUR_TOOLS + MEMORY_TOOLS + PROJECT_TOOLS + RESOURCE_TOOLS)
+    create_tool_loop(graph, "esg_scoring", esg_scoring_node, tools=ESG_TOOLS + INTERACTIVE_TOOLS + GUIDED_TOUR_TOOLS + MEMORY_TOOLS + RESOURCE_TOOLS)
+    create_tool_loop(graph, "carbon", carbon_node, tools=CARBON_TOOLS + INTERACTIVE_TOOLS + GUIDED_TOUR_TOOLS + MEMORY_TOOLS + RESOURCE_TOOLS)
+    create_tool_loop(graph, "financing", financing_node, tools=FINANCING_TOOLS + INTERACTIVE_TOOLS + GUIDED_TOUR_TOOLS + MEMORY_TOOLS + RESOURCE_TOOLS)
+    create_tool_loop(graph, "application", application_node, tools=APPLICATION_TOOLS + INTERACTIVE_TOOLS + MEMORY_TOOLS + RESOURCE_TOOLS)
+    create_tool_loop(graph, "credit", credit_node, tools=CREDIT_TOOLS + INTERACTIVE_TOOLS + GUIDED_TOUR_TOOLS + MEMORY_TOOLS + RESOURCE_TOOLS)
+    create_tool_loop(graph, "action_plan", action_plan_node, tools=ACTION_PLAN_TOOLS + INTERACTIVE_TOOLS + GUIDED_TOUR_TOOLS + MEMORY_TOOLS + RESOURCE_TOOLS)
 
     graph.set_entry_point("router")
     graph.add_conditional_edges(
