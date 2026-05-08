@@ -276,13 +276,66 @@ Ecris directement le contenu HTML de la section :"""
     return prompt
 
 
+def build_company_context(profile) -> str:
+    """F15 BUG-001 — Construit un contexte entreprise non-vide depuis le profil.
+
+    Utilisé par :func:`generate_section` pour remplacer le hardcoded
+    ``"Aucun profil d'entreprise disponible."`` par les vraies données
+    PME. Si le profil est absent ou vide, lève ``ValueError``.
+    """
+    if profile is None:
+        raise ValueError(
+            "Profil entreprise introuvable : la PME doit compléter son "
+            "profil avant de générer un dossier."
+        )
+
+    parts: list[str] = []
+    if profile.company_name:
+        parts.append(f"Nom : {profile.company_name}")
+    sector = (
+        profile.sector.value if hasattr(profile.sector, "value") else profile.sector
+    )
+    if sector:
+        parts.append(f"Secteur : {sector}")
+    if profile.country:
+        parts.append(f"Pays : {profile.country}")
+    if profile.city:
+        parts.append(f"Ville : {profile.city}")
+    if profile.employee_count:
+        parts.append(f"Effectif : {profile.employee_count} employés")
+    if getattr(profile, "annual_revenue_money", None) is not None:
+        money = profile.annual_revenue_money
+        parts.append(
+            f"Chiffre d'affaires annuel : {money.amount} {money.currency}"
+        )
+    elif profile.annual_revenue_xof:
+        parts.append(
+            f"Chiffre d'affaires annuel : {profile.annual_revenue_xof:,} XOF"
+        )
+    if profile.year_founded:
+        parts.append(f"Année de création : {profile.year_founded}")
+
+    if not parts:
+        raise ValueError(
+            "Profil entreprise incomplet : champs critiques manquants "
+            "(secteur, pays, taille). Veuillez compléter le profil."
+        )
+
+    return "\n".join(parts)
+
+
 async def generate_section(
     db: AsyncSession,
     application: FundApplication,
     section_key: str,
 ) -> dict:
-    """Generer le contenu d'une section via LLM + RAG."""
+    """Generer le contenu d'une section via LLM + RAG.
+
+    F15 BUG-001 : injection du profil entreprise réel via
+    :func:`build_company_context` (remplace le hardcoded).
+    """
     from app.modules.applications.templates import get_template_for_target
+    from app.modules.company.service import get_or_create_profile
 
     sections = application.sections
     if section_key not in sections:
@@ -297,8 +350,9 @@ async def generate_section(
     if section_config is None:
         raise ValueError(f"Configuration de section '{section_key}' non trouvee")
 
-    # Construire le contexte entreprise
-    company_context = "Aucun profil d'entreprise disponible."
+    # F15 BUG-001 — Construire le contexte entreprise réel
+    profile = await get_or_create_profile(db, application.user_id)
+    company_context = build_company_context(profile)
 
     # Construire le contexte fonds
     fund = application.fund

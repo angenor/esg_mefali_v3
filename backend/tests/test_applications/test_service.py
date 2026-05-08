@@ -393,12 +393,26 @@ async def test_generate_section_fund_direct():
     mock_response = MagicMock()
     mock_response.content = "<p>Contenu genere par le LLM</p>"
 
+    # F15 BUG-001 : on patche get_or_create_profile pour fournir un profil
+    # mock à la nouvelle injection company_context.
+    mock_profile = MagicMock(
+        company_name="Test Co", country="Sénégal", city=None,
+        employee_count=10, year_founded=2020, annual_revenue_xof=50_000_000,
+        annual_revenue_money=None,
+    )
+    mock_profile.sector = MagicMock(value="agriculture")
+
     with (
         patch("app.graph.nodes.get_llm") as mock_get_llm,
         patch(
             "app.graph.nodes._fetch_rag_context_for_financing",
             new_callable=AsyncMock,
             return_value="",
+        ),
+        patch(
+            "app.modules.company.service.get_or_create_profile",
+            new_callable=AsyncMock,
+            return_value=mock_profile,
         ),
     ):
         mock_llm = AsyncMock()
@@ -469,12 +483,24 @@ async def test_generate_section_intermediary_bank():
     mock_response = MagicMock()
     mock_response.content = "<p>Historique bancaire genere</p>"
 
+    mock_profile = MagicMock(
+        company_name="Test Co", country="Sénégal", city=None,
+        employee_count=10, year_founded=2020, annual_revenue_xof=50_000_000,
+        annual_revenue_money=None,
+    )
+    mock_profile.sector = MagicMock(value="agriculture")
+
     with (
         patch("app.graph.nodes.get_llm") as mock_get_llm,
         patch(
             "app.graph.nodes._fetch_rag_context_for_financing",
             new_callable=AsyncMock,
             return_value="",
+        ),
+        patch(
+            "app.modules.company.service.get_or_create_profile",
+            new_callable=AsyncMock,
+            return_value=mock_profile,
         ),
     ):
         mock_llm = AsyncMock()

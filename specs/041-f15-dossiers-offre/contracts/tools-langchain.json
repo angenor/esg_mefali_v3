@@ -1,0 +1,128 @@
+{
+  "feature": "F15",
+  "description": "Signatures Pydantic v2 strict des tools LangChain F15. Tous sont injectés dans le node `application` (et selon usage dans `chat`/`financing`). Whitelist via `MODULE_TOOL_MAPPING` + `PAGE_TOOL_MAPPING`.",
+  "tools": [
+    {
+      "name": "list_templates",
+      "purpose": "Lister les templates publiés disponibles pour une offre ou un instrument donné",
+      "args_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "offer_id": { "type": "string", "format": "uuid", "nullable": true },
+          "instrument_type": { "type": "string", "enum": ["subvention", "prêt_concessionnel", "equity", "blending", "mixte"], "nullable": true },
+          "language": { "type": "string", "enum": ["fr", "en"], "nullable": true }
+        }
+      },
+      "returns": "list of {id, name, instrument_type, language, version, sections_count}"
+    },
+    {
+      "name": "create_fund_application",
+      "purpose": "Créer une candidature pour un projet et une offre (idempotent sur (project_id, offer_id)). FUSIONNÉ — supprime le doublon de financing_tools.",
+      "args_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["project_id", "offer_id"],
+        "properties": {
+          "project_id": { "type": "string", "format": "uuid" },
+          "offer_id": { "type": "string", "format": "uuid" },
+          "language": { "type": "string", "enum": ["fr", "en"], "nullable": true, "description": "Hérite de l'offre si non fourni ; obligatoire si offre multilingue" },
+          "template_id": { "type": "string", "format": "uuid", "nullable": true, "description": "Template explicite. Si null, sélection automatique par instrument" }
+        }
+      },
+      "returns": "{application_id, replayed: bool, language, template_id}"
+    },
+    {
+      "name": "generate_application_section",
+      "purpose": "Génère ou régénère une section du dossier en utilisant le profil PME, le projet F06, l'offre F07, le template F15 et la Skill F23. Streamé via SSE.",
+      "args_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["application_id", "section_key"],
+        "properties": {
+          "application_id": { "type": "string", "format": "uuid" },
+          "section_key": { "type": "string", "pattern": "^[a-z][a-z0-9_]{1,50}$" },
+          "user_inputs": { "type": "object", "additionalProperties": true, "nullable": true },
+          "regenerate": { "type": "boolean", "default": false }
+        }
+      },
+      "returns": "{generation_id, status, section_key}"
+    },
+    {
+      "name": "attach_attestation_to_application",
+      "purpose": "Attache une attestation F08 active à une candidature (FR-020). Détachable en passant attestation_id=null.",
+      "args_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["application_id"],
+        "properties": {
+          "application_id": { "type": "string", "format": "uuid" },
+          "attestation_id": { "type": "string", "format": "uuid", "nullable": true }
+        }
+      },
+      "returns": "{application_id, attestation_id, attestation_status}"
+    },
+    {
+      "name": "export_application",
+      "purpose": "Génère l'export PDF du dossier (FR-029). DOCX legacy non étendu.",
+      "args_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["application_id"],
+        "properties": {
+          "application_id": { "type": "string", "format": "uuid" },
+          "with_attestation": { "type": "boolean", "default": true },
+          "include_appendix_sources": { "type": "boolean", "default": true }
+        }
+      },
+      "returns": "{export_path, file_size_bytes, pages_count, language}"
+    },
+    {
+      "name": "compute_application_checklist",
+      "purpose": "Calcule la checklist union des documents fonds + intermédiaire dédupliqués (FR-015 → FR-019).",
+      "args_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["application_id"],
+        "properties": {
+          "application_id": { "type": "string", "format": "uuid" }
+        }
+      },
+      "returns": "list of {title, mandatory, source_ids: [...], origin: 'fund'|'intermediary'|'both', uploaded: bool, attached_document_id: uuid|null}"
+    }
+  ],
+  "tools_modified": [
+    {
+      "name": "simulate_financing",
+      "fix": "BUG-002 : utilise fund.max_amount_money / fund.min_amount_money (Money typed F04) avec fallback fund.max_amount_xof / min_amount_xof. Plus d'AttributeError sur fund.max_amount."
+    },
+    {
+      "name": "create_fund_application",
+      "fix": "BUG-003 : conserver uniquement la version de application_tools.py. Retirer du __all__ de financing_tools.py. Test garde-fou test_no_duplicate_create_fund_application.py vérifie names.count('create_fund_application') == 1."
+    }
+  ],
+  "global_whitelist_changes": [
+    "Aucun ajout au GLOBAL_WHITELIST F23. Les tools F15 restent module-scoped.",
+    "MAX_TOOLS_PER_TURN inchangé (14)."
+  ],
+  "graph_injection": {
+    "application_node": [
+      "list_templates",
+      "create_fund_application",
+      "generate_application_section",
+      "attach_attestation_to_application",
+      "export_application",
+      "compute_application_checklist"
+    ],
+    "chat_node": [
+      "list_templates",
+      "create_fund_application",
+      "compute_application_checklist"
+    ],
+    "financing_node": [
+      "list_templates",
+      "create_fund_application",
+      "compute_application_checklist"
+    ]
+  }
+}

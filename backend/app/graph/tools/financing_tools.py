@@ -1,10 +1,15 @@
 """Tools LangChain pour le noeud de financement vert.
 
-Quatre tools exposes au LLM :
+Tools exposes au LLM :
 - search_compatible_funds : rechercher les fonds compatibles
 - save_fund_interest : marquer un interet pour un fonds
 - get_fund_details : consulter les details d'un fonds
-- create_fund_application : creer une candidature
+- list_offers, get_offer, compare_offers_for_fund : F07 offres
+
+NOTE F15 (BUG-003) : ``create_fund_application`` est exporté UNIQUEMENT
+par ``app.graph.tools.application_tools`` afin d'éviter le doublon de
+tools (l'orchestration LangGraph requiert un tool unique par nom). Voir
+``tests/graph/tools/test_no_duplicate_create_fund_application.py``.
 """
 
 import logging
@@ -204,58 +209,9 @@ async def get_fund_details(fund_id: str, config: RunnableConfig) -> str:
         return f"Erreur lors de la consultation du fonds : {e}"
 
 
-@tool
-async def create_fund_application(
-    fund_id: str,
-    config: RunnableConfig,
-    intermediary_id: str | None = None,
-) -> str:
-    """Cree un dossier de candidature (statut draft) pour un fonds vert (mode legacy financing).
-
-    Use when:
-    - "je veux candidater au GCF", "demarrer un dossier".
-    - apres `save_fund_interest`, l'utilisateur passe a l'action.
-    Don't use when:
-    - simple consultation (utiliser `get_fund_details`).
-    - simulation financiere (utiliser `simulate_financing`).
-    Exemple: "Cree un dossier pour le GCF" -> create_fund_application(fund_id=...).
-    Anti: "Detail du fonds" -> NE PAS appeler (utiliser `get_fund_details`).
-
-    Note: ce tool est aussi exporte par ``application_tools.create_fund_application``
-    (variante avec ``offer_id``/`project_id``). En cas d'offer_id, preferer la
-    version application.
-
-    Args:
-        fund_id: Identifiant UUID du fonds cible.
-        intermediary_id: Identifiant UUID de l'intermediaire (optionnel).
-    """
-    from app.modules.applications.service import create_application
-
-    try:
-        db, user_id = get_db_and_user(config)
-
-        interm_uuid = uuid.UUID(intermediary_id) if intermediary_id else None
-
-        application = await create_application(
-            db=db,
-            user_id=user_id,
-            fund_id=uuid.UUID(fund_id),
-            intermediary_id=interm_uuid,
-        )
-
-        return (
-            f"Dossier de candidature cree avec succes !\n"
-            f"- ID : {application.id}\n"
-            f"- Statut : {application.status}\n"
-            f"Vous pouvez maintenant generer les sections du dossier."
-        )
-
-    except Exception as e:
-        logger.exception("Erreur lors de la creation du dossier de candidature")
-        return f"Erreur lors de la creation du dossier : {e}"
-
-
 # --- F07 — Tools Offres (Couple Fonds × Intermédiaire) ---
+# NOTE F15 (BUG-003) : ``create_fund_application`` retiré ici. Le tool unique
+# est défini dans ``app.graph.tools.application_tools`` (avec offer_id+project_id).
 
 
 @tool
@@ -417,7 +373,6 @@ FINANCING_TOOLS = [
     search_compatible_funds,
     save_fund_interest,
     get_fund_details,
-    create_fund_application,
     list_offers,
     get_offer,
     compare_offers_for_fund,

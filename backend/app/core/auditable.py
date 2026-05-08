@@ -206,6 +206,14 @@ EXEMPT_MODELS: frozenset[str] = frozenset(
         # account_id. Les mutations CRUD sont tracées via le middleware
         # ``AdminAuditContextMiddleware`` (source_of_change=admin).
         "Resource",
+        # F15 — Templates Dossier : catalogue admin-only sans account_id.
+        # Les mutations CRUD passent par le router admin et sont tracées
+        # via ``AdminAuditContextMiddleware`` (source_of_change=admin).
+        "TemplateDossier",
+        # F09 — Reset password tokens : entité technique (auth flow), pas
+        # une donnée métier. Les événements (création, consommation) sont
+        # journalisés via les logs structurés de ``app/auth``.
+        "PasswordResetToken",
     }
 )
 
