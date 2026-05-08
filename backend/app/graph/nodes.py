@@ -1258,6 +1258,7 @@ async def financing_node(
     from app.graph.tools.financing_tools import FINANCING_TOOLS
     from app.graph.tools.guided_tour_tools import GUIDED_TOUR_TOOLS
     from app.graph.tools.interactive_tools import INTERACTIVE_TOOLS
+    from app.graph.tools.simulation_tools import SIMULATION_TOOLS
     from app.graph.tools.sourcing_tools import SOURCING_TOOLS
     from app.graph.tools.visualization_tools import VISUALIZATION_TOOLS
     from app.prompts.financing import build_financing_prompt
@@ -1266,12 +1267,14 @@ async def financing_node(
 
     # Lier les tools financement + interactif + guidage au LLM (filtres par contexte)
     # F11 — VISUALIZATION_TOOLS ajoutés (Match/Comparison/Map exposés sur financing).
+    # F16 — SIMULATION_TOOLS (compare_simulations) injecté.
     full_catalog = (
         (FINANCING_TOOLS or [])
         + INTERACTIVE_TOOLS
         + GUIDED_TOUR_TOOLS
         + SOURCING_TOOLS
         + VISUALIZATION_TOOLS
+        + SIMULATION_TOOLS
     )
     filtered_tools, debug_info = select_tools_for_node(
         node_name="financing",
@@ -1769,6 +1772,7 @@ async def application_node(
     """
     from app.graph.tools.application_tools import APPLICATION_TOOLS
     from app.graph.tools.interactive_tools import INTERACTIVE_TOOLS
+    from app.graph.tools.simulation_tools import SIMULATION_TOOLS
     from app.graph.tools.sourcing_tools import SOURCING_TOOLS
     from app.graph.tools.visualization_tools import VISUALIZATION_TOOLS
     from app.prompts.application import build_application_prompt
@@ -1777,11 +1781,13 @@ async def application_node(
 
     # Lier les tools application + interactif au LLM (filtres par contexte).
     # F11 — show_match_card / show_comparison_table exposés sur application.
+    # F16 — compare_simulations injecté.
     full_catalog = (
         (APPLICATION_TOOLS or [])
         + INTERACTIVE_TOOLS
         + SOURCING_TOOLS
         + VISUALIZATION_TOOLS
+        + SIMULATION_TOOLS
     )
     filtered_tools, debug_info = select_tools_for_node(
         node_name="application",
