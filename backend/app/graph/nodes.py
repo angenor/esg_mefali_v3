@@ -1255,6 +1255,9 @@ async def financing_node(
     et create_fund_application pour interagir avec la base financement.
     Conserve le RAG pour le contexte enrichi.
     """
+    from app.graph.tools.application_tools import (
+        create_fund_application as _create_fund_app_tool,
+    )
     from app.graph.tools.financing_tools import FINANCING_TOOLS
     from app.graph.tools.guided_tour_tools import GUIDED_TOUR_TOOLS
     from app.graph.tools.interactive_tools import INTERACTIVE_TOOLS
@@ -1268,8 +1271,12 @@ async def financing_node(
     # Lier les tools financement + interactif + guidage au LLM (filtres par contexte)
     # F11 — VISUALIZATION_TOOLS ajoutés (Match/Comparison/Map exposés sur financing).
     # F16 — SIMULATION_TOOLS (compare_simulations) injecté.
+    # F15 BUG-003 — create_fund_application (unique source : application_tools)
+    # est ré-injecté ici car l'utilisateur peut candidater depuis le module
+    # financement.
     full_catalog = (
         (FINANCING_TOOLS or [])
+        + [_create_fund_app_tool]
         + INTERACTIVE_TOOLS
         + GUIDED_TOUR_TOOLS
         + SOURCING_TOOLS

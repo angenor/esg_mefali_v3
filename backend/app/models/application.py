@@ -170,8 +170,30 @@ class FundApplication(Auditable, UUIDMixin, TimestampMixin, Base):
         JSONType, nullable=True,
     )
 
+    # F15 — Template officiel + langue + attestation jointe + chemin export.
+    # ``template_id`` est NULLABLE en phase 1 (post-backfill = NOT NULL via
+    # migration séparée). ``language`` enum check 'fr' | 'en'.
+    template_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("templates_dossier.id", ondelete="RESTRICT"),
+        nullable=True,
+        index=True,
+    )
+    language: Mapped[str] = mapped_column(
+        String(2), nullable=False, default="fr", server_default="fr",
+    )
+    attestation_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("attestations.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    export_path: Mapped[str | None] = mapped_column(String(500), nullable=True)
+
     # Relations
     fund: Mapped["Fund"] = relationship("Fund", lazy="selectin")
+    template: Mapped["TemplateDossier | None"] = relationship(
+        "TemplateDossier", lazy="selectin",
+    )
     intermediary: Mapped["Intermediary | None"] = relationship(
         "Intermediary", lazy="selectin"
     )

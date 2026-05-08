@@ -5,9 +5,9 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from app.graph.tools.application_tools import create_fund_application
 from app.graph.tools.financing_tools import (
     FINANCING_TOOLS,
-    create_fund_application,
     get_fund_details,
     save_fund_interest,
     search_compatible_funds,
@@ -233,17 +233,17 @@ class TestFinancingToolsExport:
     """Tests pour l'export du module."""
 
     def test_tools_list_count(self):
-        """FINANCING_TOOLS contient 7 tools (F07 ajoute list_offers, get_offer, compare_offers_for_fund)."""
-        assert len(FINANCING_TOOLS) == 7
+        """FINANCING_TOOLS contient 6 tools (F15 BUG-003 : create_fund_application
+        retiré du module financing au profit de application_tools)."""
+        assert len(FINANCING_TOOLS) == 6
 
     def test_tool_names(self):
-        """Les tools ont les bons noms."""
+        """Les tools ont les bons noms (sans create_fund_application — F15 BUG-003)."""
         names = {t.name for t in FINANCING_TOOLS}
         assert names == {
             "search_compatible_funds",
             "save_fund_interest",
             "get_fund_details",
-            "create_fund_application",
             # F07
             "list_offers",
             "get_offer",
