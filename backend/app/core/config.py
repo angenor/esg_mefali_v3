@@ -35,6 +35,11 @@ class Settings(BaseSettings):
     llm_base_url: str = ""
     llm_model: str = ""
 
+    # Embeddings (OpenAI text-embedding-3-small) — F12
+    # Si vide, fallback sur openrouter_api_key (modele OpenAI accessible via OpenRouter
+    # n'expose pas /v1/embeddings ; cle OpenAI native recommandee).
+    openai_api_key: str = ""
+
     def model_post_init(self, __context: object) -> None:
         """Mapper les variables LLM_* vers openrouter_* si non definies."""
         if not self.openrouter_api_key and self.llm_api_key:
