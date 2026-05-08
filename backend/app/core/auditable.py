@@ -99,6 +99,10 @@ AUDITABLE_MODELS: frozenset[str] = frozenset(
         "MobileMoneyTransaction",
         "CreditPhoto",
         "PublicDataSource",
+        # NB F21 : Report reste EXEMPT (pas de mixin Auditable). La
+        # traçabilité des générations/téléchargements se fait via le
+        # contexte ``source_of_change`` propagé par le middleware admin
+        # ou ``source_of_change_scope('llm')`` dans les tools (FR-027).
     }
 )
 
@@ -152,6 +156,8 @@ EXEMPT_MODELS: frozenset[str] = frozenset(
         "Message",
         "InteractiveQuestion",
         "ToolCallLog",
+        # Report reste EXEMPT (pas de mixin Auditable). F21 trace les
+        # générations/téléchargements via logs structurés dédiés.
         "Report",
         # Audit log lui-même : anti-récursion forte.
         "AuditLog",

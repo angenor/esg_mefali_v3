@@ -174,6 +174,19 @@ const creditSubtitle = computed(() => {
         <FinancingCard data-guide-target="dashboard-financing-card" :financing="store.summary?.financing ?? null" />
       </div>
 
+      <!-- F21 (US1) — Cards par offre -->
+      <section class="mt-6">
+        <ApplicationStatusCardList
+          :cards="store.summary?.financing?.applications_by_offer ?? []"
+          :total-active="store.summary?.financing?.active_applications_count ?? 0"
+        />
+      </section>
+
+      <!-- F21 (US3) — Carte UEMOA des intermédiaires actifs -->
+      <section class="mt-6">
+        <IntermediariesMap :intermediaries="store.summary?.financing?.active_intermediaries ?? []" />
+      </section>
+
       <!-- Section prochaines actions + activité récente (2 colonnes desktop) -->
       <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <!-- Prochaines actions -->

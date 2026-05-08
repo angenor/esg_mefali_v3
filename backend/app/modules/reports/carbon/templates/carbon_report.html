@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <title>Rapport carbone — {{ company_name }}</title>
+  <style>
+    body { font-family: 'Helvetica', sans-serif; color: #1e293b; line-height: 1.5; }
+    h1 { font-size: 28px; color: #064e3b; margin-bottom: 8px; }
+    h2 { font-size: 18px; color: #047857; border-bottom: 2px solid #d1fae5; padding-bottom: 4px; margin-top: 32px; }
+    .cover { text-align: center; padding: 80px 0; border-bottom: 4px solid #10b981; }
+    .cover .logo { font-size: 14px; color: #6b7280; letter-spacing: 2px; }
+    .cover .subtitle { font-size: 16px; color: #374151; margin-top: 12px; }
+    .cover .meta { margin-top: 40px; font-size: 13px; color: #6b7280; }
+    .kpi-row { display: flex; justify-content: space-around; margin: 24px 0; }
+    .kpi { text-align: center; padding: 16px; background: #f0fdf4; border-radius: 8px; min-width: 120px; }
+    .kpi .value { font-size: 26px; font-weight: bold; color: #064e3b; }
+    .kpi .label { font-size: 12px; color: #6b7280; margin-top: 4px; }
+    .ref { color: #047857; font-weight: bold; font-size: 11px; vertical-align: super; }
+    table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+    th, td { text-align: left; padding: 8px 12px; border-bottom: 1px solid #e5e7eb; font-size: 13px; }
+    th { background: #f0fdf4; color: #064e3b; }
+    .chart { margin: 16px 0; text-align: center; }
+    .chart svg { max-width: 100%; height: auto; }
+    .equivalence { background: #f0f9ff; padding: 12px 16px; border-left: 4px solid #0ea5e9; margin: 8px 0; border-radius: 4px; }
+    .unsourced { color: #92400e; font-style: italic; font-size: 11px; }
+    .appendix-sources { page-break-before: always; }
+    .sources-list { padding-left: 20px; }
+    .sources-list li { margin-bottom: 14px; font-size: 12px; }
+    .empty { color: #6b7280; font-style: italic; }
+    .reduction-action { background: #fffbeb; border-left: 4px solid #f59e0b; padding: 10px 14px; margin: 8px 0; border-radius: 4px; }
+    .reduction-action .title { font-weight: bold; color: #78350f; }
+  </style>
+</head>
+<body>
+
+<!-- 1. Couverture -->
+<section class="cover">
+  <div class="logo">ESG MEFALI</div>
+  <h1>Rapport Empreinte Carbone</h1>
+  <div class="subtitle">{{ company_name }}</div>
+  <div class="meta">
+    Période d'évaluation : {{ assessment_year }}<br/>
+    Date de génération : {{ generation_date }}
+  </div>
+</section>
+
+<!-- 2. Synthèse -->
+<section>
+  <h2>1. Synthèse</h2>
+  <div class="kpi-row">
+    <div class="kpi">
+      <div class="value">{{ total_tco2e | round(1) }}<span class="ref">[1]</span></div>
+      <div class="label">tCO2e total</div>
+    </div>
+    <div class="kpi">
+      <div class="value">{{ intensity | round(2) }}<span class="ref">[1]</span></div>
+      <div class="label">Intensité (tCO2e / M FCFA CA)</div>
+    </div>
+    <div class="kpi">
+      <div class="value">{{ scope1 | round(1) }}<span class="ref">[1]</span></div>
+      <div class="label">Scope 1 (tCO2e)</div>
+    </div>
+    <div class="kpi">
+      <div class="value">{{ scope2 | round(1) }}<span class="ref">[1]</span></div>
+      <div class="label">Scope 2 (tCO2e)</div>
+    </div>
+    <div class="kpi">
+      <div class="value">{{ scope3 | round(1) }}<span class="ref">[1]</span></div>
+      <div class="label">Scope 3 (tCO2e)</div>
+    </div>
+  </div>
+</section>
+
+<!-- 3. Breakdown par catégorie -->
+<section>
+  <h2>2. Ventilation par catégorie</h2>
+  {% if breakdown_pie_svg %}
+  <div class="chart">{{ breakdown_pie_svg | safe }}</div>
+  {% endif %}
+  <table>
+    <thead>
+      <tr><th>Catégorie</th><th>tCO2e</th><th>Part</th></tr>
+    </thead>
+    <tbody>
+      {% for row in categories_table %}
+      <tr>
+        <td>{{ row.label }}</td>
+        <td>{{ row.value | round(2) }}</td>
+        <td>{{ row.share | round(1) }} %</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+<!-- 4. Comparaison sectorielle -->
+<section>
+  <h2>3. Comparaison sectorielle</h2>
+  {% if sector_comparison_svg %}
+  <div class="chart">{{ sector_comparison_svg | safe }}</div>
+  {% else %}
+  <p class="empty">Comparaison sectorielle indisponible pour ce secteur.</p>
+  {% endif %}
+</section>
+
+<!-- 5. Évolution multi-années -->
+<section>
+  <h2>4. Évolution multi-années</h2>
+  {% if yearly_line_svg %}
+  <div class="chart">{{ yearly_line_svg | safe }}</div>
+  {% else %}
+  <p class="empty">Premier bilan : pas encore d'historique.</p>
+  {% endif %}
+</section>
+
+<!-- 6. Plan de réduction -->
+<section>
+  <h2>5. Plan de réduction</h2>
+  {% if reduction_actions %}
+    {% for action in reduction_actions %}
+    <div class="reduction-action">
+      <div class="title">{{ action.title }}</div>
+      <p>{{ action.description }}</p>
+      {% if action.is_sourced %}
+      <small>Source <a href="#source-{{ action.source_index }}">[{{ action.source_index }}]</a></small>
+      {% else %}
+      <small class="unsourced">Recommandation générale (non sourcée)</small>
+      {% endif %}
+    </div>
+    {% endfor %}
+  {% else %}
+    <p class="empty">Aucune action de réduction définie pour ce bilan.</p>
+  {% endif %}
+</section>
+
+<!-- 7. Équivalences pédagogiques -->
+<section>
+  <h2>6. Équivalences pédagogiques</h2>
+  {% for eq in equivalences %}
+  <div class="equivalence">
+    <strong>{{ eq.value }} {{ eq.unit }}</strong> — {{ eq.label }}
+    {% if eq.is_sourced %}
+      <span class="ref">[{{ eq.source_index }}]</span>
+    {% else %}
+      <br/><small class="unsourced">{{ eq.fallback_label }}</small>
+    {% endif %}
+  </div>
+  {% endfor %}
+</section>
+
+<!-- 8. Méthodologie -->
+<section>
+  <h2>7. Méthodologie</h2>
+  <p>
+    Ce rapport est élaboré selon les facteurs d'émission sourcés F17 :
+    <strong>ADEME Base Carbone v23</strong> (combustibles, transport, achats),
+    <strong>IPCC AR6 Working Group 3</strong> (méthodologie scopes 1/2/3),
+    <strong>IEA Africa Energy Outlook 2024</strong> (mix électrique UEMOA).
+    Les facteurs spécifiques utilisés pour {{ company_country }} sont
+    repris dans l'annexe Sources.
+  </p>
+  {% if methodology_factors %}
+  <table>
+    <thead>
+      <tr><th>Facteur</th><th>Valeur</th><th>Source</th></tr>
+    </thead>
+    <tbody>
+      {% for f in methodology_factors %}
+      <tr>
+        <td>{{ f.label }}</td>
+        <td>{{ f.value }} {{ f.unit }}</td>
+        <td>{% if f.source_index %}<a href="#source-{{ f.source_index }}">[{{ f.source_index }}]</a>{% else %}<span class="unsourced">non sourcé</span>{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+</section>
+
+<!-- 9. Annexe Sources -->
+{% include '_carbon_appendix_sources.html' %}
+
+</body>
+</html>

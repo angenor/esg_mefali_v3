@@ -374,9 +374,98 @@ async def get_carbon_summary(
         }, ensure_ascii=False)
 
 
+@tool
+async def generate_carbon_report(
+    config: RunnableConfig,
+    assessment_id: str | None = None,
+) -> str:
+    """F21 — Demarre la generation asynchrone d'un rapport carbone PDF complet.
+
+    Use when:
+    - l'utilisateur demande explicitement « generer mon rapport carbone PDF ».
+    - l'utilisateur demande de « telecharger mon bilan carbone en PDF ».
+    - un bilan carbone est finalise (status='completed') et la PME veut le partager.
+    Don't use when:
+    - le bilan n'est pas encore finalise (utiliser `finalize_carbon_assessment`).
+    - simple consultation des chiffres (utiliser `get_carbon_summary`).
+    - saisie de nouvelles donnees (utiliser `save_emission_entry`).
+    Exemple: "Genere mon rapport carbone PDF" -> generate_carbon_report().
+    Anti: "Donne-moi mon empreinte" -> NE PAS appeler (utiliser `get_carbon_summary`).
+
+    Retourne un JSON structure : `{ok, report_id, status, message}`.
+
+    Args:
+        assessment_id: UUID du bilan carbone (optionnel, dernier completed sinon).
+    """
+    from app.core.audit_context import source_of_change_scope
+    from app.modules.carbon.service import get_latest_assessment
+    from app.modules.reports.carbon.exceptions import (
+        AssessmentNotFinalizedError,
+        AssessmentNotFoundError,
+        ConcurrentGenerationError,
+    )
+    from app.modules.reports.carbon.service import generate_carbon_report as _gen
+
+    try:
+        db, user_id = get_db_and_user(config)
+
+        if assessment_id:
+            try:
+                assessment_uuid = uuid.UUID(assessment_id)
+            except (ValueError, TypeError):
+                return json.dumps(
+                    {"ok": False, "error": "assessment_id invalide."},
+                    ensure_ascii=False,
+                )
+        else:
+            latest = await get_latest_assessment(db, user_id)
+            if latest is None:
+                return json.dumps(
+                    {"ok": False, "error": "Aucun bilan carbone trouve."},
+                    ensure_ascii=False,
+                )
+            assessment_uuid = latest.id
+
+        with source_of_change_scope("llm"):
+            try:
+                report = await _gen(db, assessment_uuid, user_id, source="llm")
+            except AssessmentNotFinalizedError as exc:
+                return json.dumps(
+                    {"ok": False, "error": str(exc), "code": "not_finalized"},
+                    ensure_ascii=False,
+                )
+            except ConcurrentGenerationError as exc:
+                return json.dumps(
+                    {"ok": False, "error": str(exc), "code": "concurrent"},
+                    ensure_ascii=False,
+                )
+            except AssessmentNotFoundError as exc:
+                return json.dumps(
+                    {"ok": False, "error": str(exc), "code": "not_found"},
+                    ensure_ascii=False,
+                )
+
+        return json.dumps(
+            {
+                "ok": True,
+                "report_id": str(report.id),
+                "status": "generating",
+                "message": "Generation du rapport carbone PDF demarree.",
+            },
+            ensure_ascii=False,
+        )
+    except Exception as exc:  # pragma: no cover (filet)
+        logger.exception("Erreur lors de la generation du rapport carbone via tool")
+        return json.dumps(
+            {"ok": False, "error": str(exc)},
+            ensure_ascii=False,
+        )
+
+
 CARBON_TOOLS = [
     create_carbon_assessment,
     save_emission_entry,
     finalize_carbon_assessment,
     get_carbon_summary,
+    generate_carbon_report,
 ]

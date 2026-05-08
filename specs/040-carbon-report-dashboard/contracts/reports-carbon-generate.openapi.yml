@@ -1,0 +1,121 @@
+openapi: 3.1.0
+info:
+  title: F21 — POST /api/reports/carbon/{assessment_id}/generate
+  version: "1.0.0"
+  description: |
+    Démarre la génération asynchrone d'un rapport carbone PDF pour le bilan
+    indiqué. Crée une ligne `Report(report_type='carbon', status='pending')`
+    et déclenche un BackgroundTask qui fait transitionner le statut vers
+    `generating` puis `ready` ou `failed`.
+paths:
+  /api/reports/carbon/{assessment_id}/generate:
+    post:
+      summary: Générer un rapport carbone PDF
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: assessment_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CarbonReportRequest"
+      responses:
+        "202":
+          description: Génération acceptée — statut initial `pending`
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CarbonReportResponse"
+        "401": { description: Non authentifié }
+        "403": { description: Bilan appartient à un autre account_id }
+        "404": { description: Bilan introuvable }
+        "409":
+          description: Génération déjà en cours pour ce bilan
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  detail: { type: string }
+                  active_report_id: { type: string, format: uuid }
+        "422":
+          description: Bilan non finalisé
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  detail: { type: string, example: "Le bilan carbone doit être finalisé avant de générer un rapport." }
+  /api/reports/{report_id}:
+    get:
+      summary: Statut courant d'un rapport (existant — réutilisé pour polling)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: report_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Métadonnées du rapport
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CarbonReportListItem"
+        "404": { description: Introuvable }
+  /api/reports/{report_id}/download:
+    get:
+      summary: Téléchargement du PDF (existant — F06 réutilisé)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: report_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Fichier PDF
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+        "404": { description: Fichier expiré ou introuvable }
+        "409": { description: Rapport non encore prêt }
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    CarbonReportRequest:
+      type: object
+      properties:
+        include_methodology_appendix: { type: boolean, default: true }
+        language: { type: string, enum: [fr], default: fr }
+    CarbonReportResponse:
+      type: object
+      required: [report_id, status, message]
+      properties:
+        report_id: { type: string, format: uuid }
+        status: { type: string, enum: [pending, generating, ready, failed] }
+        message: { type: string }
+    CarbonReportListItem:
+      type: object
+      required: [report_id, assessment_id, status, created_at]
+      properties:
+        report_id: { type: string, format: uuid }
+        assessment_id: { type: string, format: uuid }
+        assessment_year: { type: integer }
+        status: { type: string, enum: [pending, generating, ready, failed] }
+        created_at: { type: string, format: date-time }
+        download_url: { type: string, format: uri, nullable: true }
+        error_message: { type: string, nullable: true }

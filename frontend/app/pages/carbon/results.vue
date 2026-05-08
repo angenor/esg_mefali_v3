@@ -197,6 +197,12 @@ function positionColor(position: string): string {
           Resultats Empreinte Carbone
         </h1>
       </div>
+      <!-- F21 (US2) — Bouton génération rapport carbone PDF -->
+      <CarbonReportButton
+        v-if="summary?.assessment_id"
+        :assessment-id="summary.assessment_id"
+        :is-finalized="summary?.status === 'completed'"
+      />
     </div>
 
     <div class="flex-1 overflow-y-auto p-6">

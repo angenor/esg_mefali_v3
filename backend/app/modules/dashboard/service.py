@@ -6,7 +6,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any
 
-from sqlalchemy import select, func, and_, or_
+from sqlalchemy import select, func, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 
@@ -178,6 +178,238 @@ async def _get_credit_summary(db: AsyncSession, user_id: uuid.UUID) -> dict | No
     }
 
 
+# --- F21 — Mapping statut FundApplication → libellé d'étape humain FR ---
+
+
+_STATUS_STEP_FR: dict[str, str] = {
+    "draft": "Brouillon",
+    "preparing_documents": "Préparation des documents",
+    "in_progress": "Rédaction en cours",
+    "review": "Relecture interne",
+    "ready_for_intermediary": "Prêt à soumettre à l'intermédiaire",
+    "ready_for_fund": "Prêt à soumettre au fonds",
+    "submitted_to_intermediary": "Instruction par l'intermédiaire",
+    "submitted_to_fund": "Dossier déposé auprès du fonds",
+    "under_review": "En cours d'évaluation",
+    "accepted": "Accepté",
+    "rejected": "Rejeté",
+}
+
+
+def _status_to_step_fr(status: str, intermediary_name: str | None = None) -> str:
+    """Mapper un statut technique vers un libellé d'étape français.
+
+    Si l'intermédiaire est connu, le libellé est enrichi pour les statuts
+    `submitted_to_intermediary` (« Instruction par {nom} »).
+    """
+    base = _STATUS_STEP_FR.get(status, status)
+    if status == "submitted_to_intermediary" and intermediary_name:
+        return f"Instruction par {intermediary_name}"
+    return base
+
+
+async def _get_applications_by_offer(
+    db: AsyncSession, user_id: uuid.UUID, limit: int = 5
+) -> list[dict]:
+    """F21 (US1) — Lister jusqu'à `limit` cards de candidatures actives par Offre.
+
+    Joint FundApplication + Offer + Fund + Intermediary. Tri par
+    `last_activity_at` desc (= updated_at en l'absence d'événement plus précis).
+    """
+    from app.models.application import FundApplication, ApplicationStatus
+    from sqlalchemy.orm import selectinload
+
+    inactive = {
+        ApplicationStatus.rejected,
+        ApplicationStatus.accepted,
+    }
+
+    stmt = (
+        select(FundApplication)
+        .options(
+            selectinload(FundApplication.fund),
+            selectinload(FundApplication.intermediary),
+            selectinload(FundApplication.offer),
+        )
+        .where(FundApplication.user_id == user_id)
+        .order_by(FundApplication.updated_at.desc())
+    )
+    result = await db.execute(stmt)
+    apps = result.scalars().all()
+
+    cards: list[dict] = []
+    for app in apps:
+        if app.status in inactive:
+            continue
+
+        fund = getattr(app, "fund", None)
+        intermediary = getattr(app, "intermediary", None)
+
+        fund_name = (fund.name if fund else None) or "Fonds inconnu"
+        intermediary_name = (
+            intermediary.name if intermediary else "Accès direct"
+        )
+
+        status_val = app.status.value if hasattr(app.status, "value") else str(app.status)
+
+        cards.append(
+            {
+                "application_id": app.id,
+                "offer_id": getattr(app, "offer_id", None),
+                "fund_name": fund_name,
+                "intermediary_name": intermediary_name,
+                "fund_logo_url": getattr(fund, "logo_url", None) if fund else None,
+                "intermediary_logo_url": getattr(intermediary, "logo_url", None) if intermediary else None,
+                "status": status_val,
+                "current_step": _status_to_step_fr(
+                    status_val,
+                    intermediary.name if intermediary else None,
+                ),
+                "next_deadline": getattr(app, "next_deadline", None),
+                "next_reminder": None,  # alimenté par F11 reminders à terme
+                "last_activity_at": app.updated_at or app.created_at,
+            }
+        )
+        if len(cards) >= limit:
+            break
+
+    return cards
+
+
+async def _get_active_intermediaries(
+    db: AsyncSession, user_id: uuid.UUID, account_id: uuid.UUID | None = None
+) -> list[dict]:
+    """F21 (US3) — Intermédiaires liés à au moins une candidature non clôturée.
+
+    Le fallback capitale est appliqué quand l'intermédiaire n'a pas de
+    coordonnées (cas le plus fréquent dans l'état actuel du modèle).
+    """
+    from app.models.application import FundApplication, ApplicationStatus
+    from sqlalchemy.orm import selectinload
+    from app.core.uemoa_capitals import get_capital_coordinates
+
+    inactive = {ApplicationStatus.rejected, ApplicationStatus.accepted}
+
+    stmt = (
+        select(FundApplication)
+        .options(
+            selectinload(FundApplication.intermediary),
+            selectinload(FundApplication.fund),
+        )
+        .where(FundApplication.user_id == user_id)
+    )
+    result = await db.execute(stmt)
+    apps = result.scalars().all()
+
+    grouped: dict[uuid.UUID, dict] = {}
+    for app in apps:
+        if app.status in inactive:
+            continue
+        intermediary = getattr(app, "intermediary", None)
+        if intermediary is None:
+            continue
+
+        existing = grouped.get(intermediary.id)
+        fund = getattr(app, "fund", None)
+        fund_name = fund.name if fund else None
+
+        if existing is None:
+            # Coordonnées : pas de lat/lon natifs sur Intermediary —
+            # fallback systématique sur la capitale du country.
+            capital = get_capital_coordinates(getattr(intermediary, "country", None))
+            if capital is None:
+                # Skipper intermédiaires sans country reconnu (avertissement loggé).
+                continue
+            lat, lon = capital
+            grouped[intermediary.id] = {
+                "intermediary_id": intermediary.id,
+                "name": intermediary.name,
+                "type": (
+                    intermediary.intermediary_type.value
+                    if hasattr(intermediary.intermediary_type, "value")
+                    else str(intermediary.intermediary_type)
+                ),
+                "country": intermediary.country,
+                "lat": lat,
+                "lon": lon,
+                "is_fallback_capital": True,
+                "accreditations": [fund_name] if fund_name else [],
+                "applications_count": 1,
+            }
+        else:
+            existing["applications_count"] += 1
+            if fund_name and fund_name not in existing["accreditations"]:
+                existing["accreditations"].append(fund_name)
+
+    return list(grouped.values())
+
+
+async def _collect_score_sources(
+    db: AsyncSession, user_id: uuid.UUID, score_type: str
+) -> list[dict]:
+    """F21 (US4) — Collecter les sources mobilisées pour un score (ESG/carbon/credit).
+
+    Stratégie : best-effort lecture des `tool_call_logs(tool_name='cite_source')`
+    rattachés à la conversation racine du score. Best-effort silencieux si la
+    table n'est pas disponible.
+    """
+    try:
+        from app.models.tool_call_log import ToolCallLog
+        from app.models.source import Source, VerificationStatus
+    except Exception:
+        return []
+
+    try:
+        result = await db.execute(
+            select(ToolCallLog)
+            .where(ToolCallLog.tool_name == "cite_source")
+            .order_by(ToolCallLog.created_at.desc())
+            .limit(20)
+        )
+        logs = result.scalars().all()
+    except Exception:
+        return []
+
+    source_ids: list[uuid.UUID] = []
+    seen: set[uuid.UUID] = set()
+    for log in logs:
+        args = getattr(log, "arguments", None) or {}
+        sid = args.get("source_id") if isinstance(args, dict) else None
+        if not sid:
+            continue
+        try:
+            sid_uuid = uuid.UUID(sid)
+        except (ValueError, TypeError):
+            continue
+        if sid_uuid in seen:
+            continue
+        seen.add(sid_uuid)
+        source_ids.append(sid_uuid)
+
+    if not source_ids:
+        return []
+
+    src_result = await db.execute(
+        select(Source).where(
+            Source.id.in_(source_ids),
+            Source.verification_status == VerificationStatus.VERIFIED.value,
+        )
+    )
+    sources = src_result.scalars().all()
+    out: list[dict] = []
+    for src in sources:
+        out.append(
+            {
+                "source_id": src.id,
+                "title": src.title,
+                "publisher": src.publisher,
+                "version": src.version,
+                "url": src.url,
+            }
+        )
+    return out[:5]
+
+
 async def _get_financing_summary(db: AsyncSession, user_id: uuid.UUID) -> dict:
     """Récupérer le résumé financements pour l'utilisateur."""
     from app.models.financing import FundMatch
@@ -236,12 +468,18 @@ async def _get_financing_summary(db: AsyncSession, user_id: uuid.UUID) -> dict:
             "due_date": next_intermediary_item.due_date.isoformat() if next_intermediary_item.due_date else None,
         }
 
+    # F21 (US1, US3) — Cards par offre + intermédiaires actifs.
+    applications_by_offer = await _get_applications_by_offer(db, user_id, limit=5)
+    active_intermediaries = await _get_active_intermediaries(db, user_id)
+
     return {
         "recommended_funds_count": recommended_funds_count,
         "active_applications_count": active_count,
         "application_statuses": application_statuses,
         "next_intermediary_action": next_intermediary_action,
         "has_intermediary_paths": has_intermediary_paths,
+        "applications_by_offer": applications_by_offer,
+        "active_intermediaries": active_intermediaries,
     }
 
 
@@ -475,6 +713,14 @@ async def get_dashboard_summary(db: AsyncSession, user_id: uuid.UUID) -> dict[st
     next_actions = await _get_next_actions(db, user_id)
     recent_activity = await _get_recent_activity(db, user_id)
     badges = await _get_badges(db, user_id)
+
+    # F21 (US4) — Injecter les sources F01 dans chaque ScoreBlock (best-effort).
+    if esg is not None:
+        esg["sources"] = await _collect_score_sources(db, user_id, "esg")
+    if carbon is not None:
+        carbon["sources"] = await _collect_score_sources(db, user_id, "carbon")
+    if credit is not None:
+        credit["sources"] = await _collect_score_sources(db, user_id, "credit")
 
     return {
         "esg": esg,
