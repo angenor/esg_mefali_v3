@@ -8,9 +8,11 @@ import { useSimulator } from '~/composables/useSimulator'
 import { useSimulatorStore } from '~/stores/simulator'
 import SimulationComparator from '~/components/financing/SimulationComparator.vue'
 
-definePageMeta({
-  middleware: ['auth'],
-})
+// Le middleware d'authentification est appliqué globalement via
+// `app/middleware/auth.global.ts` ; il ne doit pas être référencé par nom
+// dans `definePageMeta` (sinon Nuxt lève "Unknown route middleware: 'auth'"
+// car les middlewares globaux ne sont pas exposés au registre nommé).
+// Pas de definePageMeta nécessaire ici.
 
 const store = useSimulatorStore()
 const { simulateMulti, loading, error } = useSimulator()
