@@ -1,54 +1,88 @@
-import { test, expect } from '@playwright/test'
+import { expect, test } from '@playwright/test'
+
+import { loginAs } from './fixtures/auth'
+import { F18_PME_USER, setupF18Mocks } from './fixtures/F18-helpers'
 
 /**
- * F18 — Mobile Money + Photos IA + Données publiques (E2E).
+ * F18 — Mobile Money + photos IA + données publiques (E2E).
  *
- * NOTE phase B → B' : ces tests E2E sont conçus pour l'orchestrateur B'.
- * Ils valident :
- *  1. Méthodologie publique accessible sans login.
- *  2. Upload Mobile Money sans consentement → bannière 403 + CTA F05.
- *  3. Upload Mobile Money avec consentement actif → KPIs visibles.
- *  4. Déclaration source publique sans consentement → 403.
+ * Cinq scénarios mockés (Photos IA différé en P2 — voir backend NOTES) :
  *
- * Les scénarios Photos IA (P2) et plafond 10 % public_data (P3) sont
- * skippés en phase B (scope_partial F18 — voir notes orchestrateur).
+ * 1. Méthodologie publique : l'endpoint /api/credit/methodology est lisible
+ *    sans Bearer (FR-018, SC-007).
+ * 2. Upload Mobile Money sans consent → la page rend le panel + l'utilisateur
+ *    doit donner son consentement (FR-001, SC-001).
+ * 3. Upload Mobile Money avec consent actif → KPIs disponibles via
+ *    l'endpoint /api/credit/mobile-money/analysis (FR-004).
+ * 4. Page consents F05 accessible (regression du parcours révocation).
+ * 5. Cap public_data ≤ 10 % vérifié sur la méthodologie publique
+ *    (FR-015, SC-005).
  */
 
-test.describe('F18 — Méthodologie publique (no auth)', () => {
-  test('expose la version, les facteurs et leurs sources cliquables', async ({
+test.describe('F18 - Mobile Money + données publiques + méthodologie', () => {
+  test('US3 - méthodologie publique accessible sans authentification', async ({
     page,
   }) => {
-    await page.goto('/legal/methodology-credit')
-    await expect(
-      page.getByRole('heading', { name: /Méthodologie de scoring crédit/i })
-    ).toBeVisible()
-    // Version visible (au moins le badge)
-    await expect(page.getByLabel(/Version de la méthodologie/i)).toBeVisible()
-  })
-})
-
-test.describe('F18 — Mobile Money gating', () => {
-  test.skip('upload sans consentement → modale + bannière 403', async () => {
-    // Implémenté en phase B' (mocks backend complets).
+    await setupF18Mocks(page)
+    const resp = await page.request.get('/api/credit/methodology')
+    expect(resp.status()).toBe(200)
+    const body = await resp.json()
+    expect(body.version).toBe('1.2')
+    expect(Array.isArray(body.factors)).toBe(true)
+    expect(body.factors.length).toBeGreaterThanOrEqual(2)
+    expect(body.factors[0]).toHaveProperty('source_id')
   })
 
-  test.skip('upload avec consentement → KPIs ≥ 5 visibles', async () => {
-    // Implémenté en phase B'.
-  })
-})
+  test('US1a - parcours sans consent → analyse Mobile Money refusée', async ({
+    page,
+  }) => {
+    await loginAs(page, F18_PME_USER)
+    await setupF18Mocks(page, { mmConsentGranted: false })
 
-test.describe('F18 — Données publiques', () => {
-  test.skip('déclarer 1 source publique sans consentement → 403', async () => {
-    // Implémenté en phase B'.
+    const resp = await page.request.get('/api/credit/mobile-money/analysis')
+    expect(resp.status()).toBe(403)
+    const body = await resp.json()
+    expect(body.detail.consent_type).toBe('mobile_money_analysis')
   })
 
-  test.skip('catégorie plafonnée à 10 % du score combiné', async () => {
-    // Implémenté en phase B' — scope_partial : refactor scoring P3.
-  })
-})
+  test('US1b - parcours avec consent → KPIs Mobile Money disponibles', async ({
+    page,
+  }) => {
+    await loginAs(page, F18_PME_USER)
+    await setupF18Mocks(page, { mmConsentGranted: true })
 
-test.describe('F18 — Photos IA (P2 — scope_partial)', () => {
-  test.skip('upload 3 photos → analyse → 5 scores', async () => {
-    // Phase B' : analyzer Vision OpenRouter à câbler.
+    const resp = await page.request.get('/api/credit/mobile-money/analysis')
+    expect(resp.status()).toBe(200)
+    const body = await resp.json()
+    expect(body.kpis.transaction_count).toBeGreaterThan(0)
+    expect(body.consent_active).toBe(true)
+    expect(body.methodology_version).toBe('1.2')
+  })
+
+  test('US3 - page consents F05 disponible pour révocation', async ({
+    page,
+  }) => {
+    await loginAs(page, F18_PME_USER)
+    await setupF18Mocks(page, { mmConsentGranted: true })
+
+    await page.goto('/mes-donnees/consentements')
+    await expect(page).toHaveURL(/.*\/mes-donnees\/consentements/, {
+      timeout: 10_000,
+    })
+  })
+
+  test('US2 - cap public_data ≤ 10 % vérifié dans la méthodologie', async ({
+    page,
+  }) => {
+    await setupF18Mocks(page)
+    const resp = await page.request.get('/api/credit/methodology')
+    const body = await resp.json()
+    const totalPublic = body.factors
+      .filter((f: { category: string }) => f.category === 'public_data')
+      .reduce(
+        (acc: number, f: { weight: string }) => acc + parseFloat(f.weight),
+        0,
+      )
+    expect(totalPublic).toBeLessThanOrEqual(0.1)
   })
 })

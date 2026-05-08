@@ -23,13 +23,22 @@
       <p class="text-amber-800 dark:text-amber-300">
         Consentement Mobile Money requis pour cette analyse.
       </p>
-      <a
-        href="/mes-donnees/consentements"
+      <button
+        type="button"
         class="mt-2 inline-block text-sm font-semibold text-amber-700 dark:text-amber-300 hover:underline"
+        @click="showConsentModal = true"
       >
         Donner mon consentement
-      </a>
+      </button>
     </div>
+
+    <ConsentRequestModal
+      :open="showConsentModal"
+      consent-type="mobile_money_analysis"
+      :loading="consentSubmitting"
+      @cancel="showConsentModal = false"
+      @confirm="handleConsentConfirm"
+    />
 
     <form
       v-else
@@ -126,6 +135,7 @@ import type {
   Provider,
 } from '~/types/creditAlternative'
 import KpiCard from './MobileMoneyKpiCard.vue'
+import ConsentRequestModal from './ConsentRequestModal.vue'
 
 const { uploadMobileMoney, loading } = useCreditAlternativeData()
 
@@ -134,6 +144,25 @@ const file = ref<File | null>(null)
 const analysis = ref<MobileMoneyAnalysisRead | null>(null)
 const error = ref('')
 const consentRequired = ref(false)
+const showConsentModal = ref(false)
+const consentSubmitting = ref(false)
+
+async function handleConsentConfirm(): Promise<void> {
+  consentSubmitting.value = true
+  try {
+    const { apiFetch } = useAuth()
+    await apiFetch('/api/me/consents/mobile_money_analysis/grant', {
+      method: 'POST',
+      body: { version: '1.0' },
+    })
+    showConsentModal.value = false
+    consentRequired.value = false
+  } catch (e) {
+    error.value = (e as Error).message || 'Erreur lors de l’enregistrement du consentement'
+  } finally {
+    consentSubmitting.value = false
+  }
+}
 
 function handleFileChange(event: Event) {
   const target = event.target as HTMLInputElement
