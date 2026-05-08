@@ -9,6 +9,15 @@ docker compose up -d postgres
 
 
 
+- caffeinate -dimsu &
+- echo $! > /tmp/caffeinate.pid
+
+- kill $(cat /tmp/caffeinate.pid) 2>/dev/null
+# ou
+- pkill caffeinate
+
+
+
 Champ	Valeur
 URL	http://localhost:3000
 Email	mamadou.kone@ecoplast-ci.com
