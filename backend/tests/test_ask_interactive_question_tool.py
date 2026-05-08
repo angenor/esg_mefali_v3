@@ -37,7 +37,7 @@ async def _make_user_and_conversation(db_session) -> tuple[User, Conversation]:
     )
     db_session.add(user)
     await db_session.flush()
-    conv = Conversation(user_id=user.id, title="t")
+    conv = Conversation(user_id=user.id, account_id=account.id, title="t")
     db_session.add(conv)
     await db_session.flush()
     return user, conv
