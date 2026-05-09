@@ -2,11 +2,28 @@
 
 import uuid
 from datetime import datetime
+from typing import Any
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
 from app.core.constants import UserRole
 from app.schemas.account import AccountSummary
+
+
+def _normalize_email(value: Any) -> Any:
+    """Normaliser un email en ``.strip().lower()`` avant validation.
+
+    Bug fix 2026-05-09 : login était sensible à la casse (``Angenor99@gmail.com``
+    rejeté, ``angenor99@gmail.com`` accepté). On normalise systématiquement à
+    l'inscription comme à la connexion pour rendre l'email canonique en BDD.
+
+    Pydantic v2 ``mode='before'`` : appliqué avant la validation EmailStr,
+    mais on n'altère pas les valeurs non-string (laisser EmailStr produire
+    son ValidationError habituelle).
+    """
+    if isinstance(value, str):
+        return value.strip().lower()
+    return value
 
 
 class RegisterRequest(BaseModel):
@@ -40,12 +57,22 @@ class RegisterRequest(BaseModel):
     )
     privacy_policy_version: str = Field(default="v1.0", max_length=16)
 
+    @field_validator("email", mode="before")
+    @classmethod
+    def _normalize_email_before(cls, value: Any) -> Any:
+        return _normalize_email(value)
+
 
 class LoginRequest(BaseModel):
     """Données requises pour la connexion."""
 
     email: EmailStr
     password: str
+
+    @field_validator("email", mode="before")
+    @classmethod
+    def _normalize_email_before(cls, value: Any) -> Any:
+        return _normalize_email(value)
 
 
 class RefreshRequest(BaseModel):
