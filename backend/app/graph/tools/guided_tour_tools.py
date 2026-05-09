@@ -101,6 +101,7 @@ async def trigger_guided_tour(
             tool_result={"tour_id": tour_id, "status": "triggered"},
             status="success",
             tools_offered=_tools_offered_from_config(config),
+            config=config,
         )
     except Exception:  # pragma: no cover - journalisation defensive
         logger.debug("Echec journalisation tool trigger_guided_tour", exc_info=True)

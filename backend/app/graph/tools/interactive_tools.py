@@ -312,6 +312,7 @@ async def ask_interactive_question(
             await log_tool_call(
                 db,
                 user_id=_user_id,
+                account_id=account_id,
                 conversation_id=conversation_id,
                 node_name=module_name,
                 tool_name="ask_interactive_question",
@@ -323,6 +324,7 @@ async def ask_interactive_question(
                 tool_result={"question_id": str(question.id), "state": "pending"},
                 status="success",
                 tools_offered=_tools_offered_from_config(config),
+                config=config,
             )
         except Exception:  # pragma: no cover
             logger.debug("Echec journalisation tool ask_interactive_question", exc_info=True)
@@ -458,6 +460,7 @@ async def _persist_widget_question(
             await log_tool_call(
                 db,
                 user_id=user_id,
+                account_id=account_id,
                 conversation_id=conversation_id,
                 node_name=module_name,
                 tool_name=tool_name,
@@ -465,6 +468,7 @@ async def _persist_widget_question(
                 tool_result={"question_id": str(question.id), "state": "pending"},
                 status="success",
                 tools_offered=_tools_offered_from_config(config),
+                config=config,
             )
         except Exception:  # pragma: no cover
             logger.debug("Echec journalisation tool %s", tool_name, exc_info=True)

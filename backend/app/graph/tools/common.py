@@ -10,9 +10,71 @@ from typing import Any
 
 from langchain_core.runnables import RunnableConfig
 from pydantic import ValidationError
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = logging.getLogger(__name__)
+
+
+def _coerce_uuid(value: Any) -> uuid.UUID | None:
+    """Coercer une valeur quelconque en UUID (str ou UUID), None si invalide.
+
+    Mutualisé pour les helpers de résolution multi-tenant (account_id) et
+    aligné sur le pattern F18 (cf. ``app/graph/tools/interactive_tools.py``).
+    """
+    if value is None:
+        return None
+    if isinstance(value, uuid.UUID):
+        return value
+    try:
+        return uuid.UUID(str(value))
+    except (ValueError, TypeError):
+        return None
+
+
+async def _resolve_account_id_for_log(
+    db: AsyncSession,
+    config: RunnableConfig | None,
+    conversation_id: uuid.UUID | None,
+) -> uuid.UUID | None:
+    """Résoudre ``account_id`` pour journaliser dans ``tool_call_logs`` (F02).
+
+    Priorité (miroir du fix F18 sur ``interactive_questions``) :
+
+    1. ``config['configurable']['account_id']`` — propagé par
+       ``stream_graph_events`` côté API (cf. ``app/api/chat.py``).
+    2. ``SELECT account_id FROM conversations WHERE id = :conversation_id``
+       — filet de sécurité quand le config ne le contient pas (tests, anciens
+       chemins d'appel).
+
+    Retourne ``None`` si aucune des deux sources ne fournit un UUID. L'appelant
+    DOIT alors skipper l'INSERT (le log est observabilité, jamais bloquant).
+    """
+    configurable = (config or {}).get("configurable", {}) or {}
+    account_id = _coerce_uuid(configurable.get("account_id"))
+    if account_id is not None:
+        return account_id
+
+    if conversation_id is None:
+        return None
+
+    # F02 : la table ``conversations`` porte aussi ``account_id`` (mig 019).
+    try:
+        from app.models.conversation import Conversation
+
+        result = await db.execute(
+            select(Conversation.account_id).where(
+                Conversation.id == conversation_id,
+            ),
+        )
+        row = result.scalar_one_or_none()
+        return _coerce_uuid(row) if row is not None else None
+    except Exception:  # pragma: no cover — defense en profondeur
+        logger.debug(
+            "Echec résolution account_id depuis la conversation",
+            exc_info=True,
+        )
+        return None
 
 
 # ─── F10 — Pattern de confirmation des actions destructives (Module 1.1.3) ──
@@ -122,6 +184,8 @@ async def log_tool_call(
     retry_count: int = 0,
     tools_offered: list[str] | None = None,
     validation_error: list[dict] | None = None,
+    account_id: uuid.UUID | None = None,
+    config: RunnableConfig | None = None,
 ) -> None:
     """Journaliser un appel de tool dans la table tool_call_logs.
 
@@ -137,6 +201,13 @@ async def log_tool_call(
     UUID pour eviter les erreurs SQLAlchemy ``'str' has no attribute 'hex'``.
     Idem pour ``user_id`` (deja gere par get_db_and_user mais defense en
     profondeur).
+
+    Bug fix 2026-05-09 — F02 multi-tenant : ``tool_call_logs.account_id`` est
+    NOT NULL en BDD (mig 019). Si ``account_id`` n'est pas explicite, le helper
+    le résout via ``config['configurable']['account_id']`` puis fallback BDD
+    sur ``conversations.account_id``. Si toujours non résolvable, l'INSERT est
+    SKIPPÉ avec un warning : le log est purement observabilité et ne doit
+    JAMAIS faire échouer le graph (sinon cascade sur tous les tools suivants).
     """
     from app.models.tool_call_log import ToolCallLog
 
@@ -151,6 +222,29 @@ async def log_tool_call(
         except (ValueError, TypeError):
             return  # user_id invalide, on ne peut pas journaliser
 
+    # F02 — Résoudre account_id (kwarg → config → fallback BDD conversation).
+    if account_id is None and config is not None:
+        account_id = _coerce_uuid(
+            (config.get("configurable", {}) or {}).get("account_id")
+        )
+    if account_id is None:
+        account_id = await _resolve_account_id_for_log(
+            db, config, conversation_id,
+        )
+
+    if account_id is None:
+        # SKIP : tool_call_logs.account_id est NOT NULL en BDD (F02 mig 019).
+        # Lever une exception ferait échouer la transaction et casserait
+        # tous les tool calls suivants. Le log étant observabilité pure, on
+        # log un warning et on retourne sans rien insérer.
+        logger.warning(
+            "log_tool_call: account_id non résolvable pour tool=%s "
+            "(conversation_id=%s) — INSERT skippé pour préserver la transaction",
+            tool_name,
+            conversation_id,
+        )
+        return
+
     # F22 — UUID/datetime dans tool_args ne sont pas JSON-serialisables ;
     # les coercer en str pour eviter les erreurs de serialisation JSON SQLite.
     tool_args = _coerce_jsonable(tool_args)
@@ -158,6 +252,7 @@ async def log_tool_call(
 
     log_entry = ToolCallLog(
         user_id=user_id,
+        account_id=account_id,
         conversation_id=conversation_id,
         node_name=node_name,
         tool_name=tool_name,
@@ -315,6 +410,7 @@ def _build_with_retry_wrapper(
                             status="retry_success" if attempt > 0 else "success",
                             retry_count=attempt,
                             tools_offered=_tools_offered_from_config(config),
+                            config=config,
                         )
                     except Exception:
                         logger.debug("Erreur lors de la journalisation du tool call", exc_info=True)
@@ -349,6 +445,7 @@ def _build_with_retry_wrapper(
                                 retry_count=attempt,
                                 tools_offered=_tools_offered_from_config(config),
                                 validation_error=v_error,
+                                config=config,
                             )
                         except Exception:
                             logger.debug("Erreur journalisation retry", exc_info=True)
@@ -372,6 +469,7 @@ def _build_with_retry_wrapper(
                             retry_count=attempt,
                             tools_offered=_tools_offered_from_config(config),
                             validation_error=v_error,
+                            config=config,
                         )
                     except Exception:
                         logger.debug("Erreur journalisation erreur finale", exc_info=True)

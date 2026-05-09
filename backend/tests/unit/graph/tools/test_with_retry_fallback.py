@@ -37,6 +37,12 @@ def mock_conversation_id() -> uuid.UUID:
 
 
 @pytest.fixture
+def mock_account_id() -> uuid.UUID:
+    """F02 — account_id requis par log_tool_call (NOT NULL en BDD)."""
+    return uuid.UUID("00000000-0000-0000-0000-0000000000a1")
+
+
+@pytest.fixture
 def mock_db() -> AsyncMock:
     db = AsyncMock()
     db.add = MagicMock()
@@ -45,12 +51,13 @@ def mock_db() -> AsyncMock:
 
 
 @pytest.fixture
-def mock_config(mock_db, mock_user_id, mock_conversation_id) -> RunnableConfig:
+def mock_config(mock_db, mock_user_id, mock_conversation_id, mock_account_id) -> RunnableConfig:
     return {
         "configurable": {
             "db": mock_db,
             "user_id": mock_user_id,
             "conversation_id": mock_conversation_id,
+            "account_id": mock_account_id,
         },
     }
 
@@ -250,7 +257,9 @@ class TestLogToolCallSignatureExtended:
     """``log_tool_call`` accepte un nouveau paramètre ``validation_error``."""
 
     @pytest.mark.asyncio
-    async def test_log_with_validation_error(self, mock_db, mock_user_id):
+    async def test_log_with_validation_error(
+        self, mock_db, mock_user_id, mock_account_id,
+    ):
         errors_payload = [
             {
                 "type": "missing",
@@ -262,6 +271,7 @@ class TestLogToolCallSignatureExtended:
         await log_tool_call(
             mock_db,
             user_id=mock_user_id,
+            account_id=mock_account_id,
             conversation_id=None,
             node_name="profiling_node",
             tool_name="update_company_profile",

@@ -49,11 +49,12 @@ class TestLogToolCall:
     """Tests pour log_tool_call()."""
 
     @pytest.mark.asyncio
-    async def test_log_success(self, mock_db, mock_user_id):
+    async def test_log_success(self, mock_db, mock_user_id, mock_account_id):
         """Log un appel réussi dans la BDD."""
         await log_tool_call(
             mock_db,
             user_id=mock_user_id,
+            account_id=mock_account_id,
             conversation_id=None,
             node_name="esg_scoring_node",
             tool_name="save_esg_criterion_score",
@@ -71,11 +72,12 @@ class TestLogToolCall:
         assert log_entry.retry_count == 0
 
     @pytest.mark.asyncio
-    async def test_log_error(self, mock_db, mock_user_id):
+    async def test_log_error(self, mock_db, mock_user_id, mock_account_id):
         """Log un appel en erreur avec message."""
         await log_tool_call(
             mock_db,
             user_id=mock_user_id,
+            account_id=mock_account_id,
             conversation_id=None,
             node_name="profiling_node",
             tool_name="update_company_profile",
@@ -90,11 +92,14 @@ class TestLogToolCall:
         assert log_entry.retry_count == 1
 
     @pytest.mark.asyncio
-    async def test_log_retry_success(self, mock_db, mock_user_id, mock_conversation_id):
+    async def test_log_retry_success(
+        self, mock_db, mock_user_id, mock_account_id, mock_conversation_id,
+    ):
         """Log un appel réussi après retry."""
         await log_tool_call(
             mock_db,
             user_id=mock_user_id,
+            account_id=mock_account_id,
             conversation_id=mock_conversation_id,
             node_name="carbon_node",
             tool_name="save_emission_entry",

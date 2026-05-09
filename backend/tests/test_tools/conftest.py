@@ -20,6 +20,12 @@ def mock_conversation_id() -> uuid.UUID:
 
 
 @pytest.fixture
+def mock_account_id() -> uuid.UUID:
+    """UUID account fixe pour les tests (F02 multi-tenant)."""
+    return uuid.UUID("00000000-0000-0000-0000-0000000000a1")
+
+
+@pytest.fixture
 def mock_db() -> AsyncMock:
     """Session DB mockée avec les méthodes async courantes."""
     db = AsyncMock()
@@ -33,14 +39,25 @@ def mock_db() -> AsyncMock:
 
 
 @pytest.fixture
-def mock_config(mock_db: AsyncMock, mock_user_id: uuid.UUID, mock_conversation_id: uuid.UUID) -> RunnableConfig:
-    """RunnableConfig avec db et user_id injectés."""
+def mock_config(
+    mock_db: AsyncMock,
+    mock_user_id: uuid.UUID,
+    mock_conversation_id: uuid.UUID,
+    mock_account_id: uuid.UUID,
+) -> RunnableConfig:
+    """RunnableConfig avec db et user_id injectés.
+
+    F02 — ``account_id`` est désormais propagé par ``stream_graph_events``
+    côté API ; les tests reflètent ce contrat pour que ``log_tool_call``
+    puisse persister sans heurter la contrainte NOT NULL en BDD.
+    """
     return {
         "configurable": {
             "db": mock_db,
             "user_id": mock_user_id,
             "conversation_id": mock_conversation_id,
             "thread_id": str(mock_conversation_id),
+            "account_id": mock_account_id,
         },
     }
 
