@@ -43,7 +43,12 @@ async def widget_config(db_session):
     from tests.conftest import make_pme_user
 
     user = await make_pme_user(db_session)
-    conv = Conversation(id=uuid4(), user_id=user.id, title="Widget test")
+    conv = Conversation(
+        id=uuid4(),
+        user_id=user.id,
+        account_id=user.account_id,
+        title="Widget test",
+    )
     db_session.add(conv)
     await db_session.flush()
 
@@ -52,6 +57,7 @@ async def widget_config(db_session):
             "db": db_session,
             "user_id": str(user.id),
             "conversation_id": str(conv.id),
+            "account_id": str(user.account_id),
             "active_module": "chat",
             "tools_offered": ["ask_yes_no"],
         }

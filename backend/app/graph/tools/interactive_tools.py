@@ -27,13 +27,14 @@ from typing import Any, Literal
 from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import tool
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
-from sqlalchemy import update
+from sqlalchemy import select, update
 
 from app.graph.tools.common import (
     _tools_offered_from_config,
     get_db_and_user,
     log_tool_call,
 )
+from app.models.conversation import Conversation
 from app.models.interactive_question import (
     InteractiveQuestion,
     InteractiveQuestionState,
@@ -60,6 +61,73 @@ from app.schemas.interactive_question_payload import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+# ════════════════════════════════════════════════════════════════════════
+#  Helpers communs F18 + F10 : résolution account_id et assistant_message_id
+# ════════════════════════════════════════════════════════════════════════
+
+
+def _coerce_uuid(value: Any) -> uuid.UUID | None:
+    """Coercer une valeur quelconque en UUID (str ou UUID), None si invalide."""
+    if value is None:
+        return None
+    if isinstance(value, uuid.UUID):
+        return value
+    try:
+        return uuid.UUID(str(value))
+    except (ValueError, TypeError):
+        return None
+
+
+async def _resolve_account_id(
+    db: Any,
+    config: RunnableConfig | None,
+    conversation_id: uuid.UUID,
+) -> uuid.UUID | None:
+    """Résoudre l'account_id du tenant courant (F02) avec fallback BDD.
+
+    Priorité :
+    1. ``config['configurable']['account_id']`` (pattern F12 — propagé par
+       ``stream_graph_events`` côté API).
+    2. ``SELECT account_id FROM conversations WHERE id = :conversation_id``
+       (filet de sécurité si le config ne le contient pas, ex. tests).
+
+    Retourne ``None`` si aucune des deux sources ne fournit un UUID valide.
+    Le caller doit alors retourner une erreur claire au LLM (pas de 500).
+    """
+    configurable = (config or {}).get("configurable", {}) or {}
+    account_id = _coerce_uuid(configurable.get("account_id"))
+    if account_id is not None:
+        return account_id
+
+    # Fallback : lire depuis la conversation (toujours liée à un account
+    # via F02 mig 019, sauf en tests SQLite où account_id peut être NULL).
+    try:
+        result = await db.execute(
+            select(Conversation.account_id).where(
+                Conversation.id == conversation_id,
+            ),
+        )
+        row = result.scalar_one_or_none()
+        return _coerce_uuid(row) if row is not None else None
+    except Exception:  # pragma: no cover — defense en profondeur
+        logger.debug("Echec résolution account_id depuis la conversation", exc_info=True)
+        return None
+
+
+def _resolve_assistant_message_id(config: RunnableConfig | None) -> uuid.UUID | None:
+    """Lire `assistant_message_id` du config s'il a été pré-créé en amont.
+
+    L'API ``send_message`` rattache déjà le ``assistant_message_id`` via
+    ``UPDATE`` post-INSERT (cf. ``app/api/chat.py::generate_sse``). Ce helper
+    couvre le cas où le message assistant est créé en amont du tool call et
+    propagé via ``config['configurable']['assistant_message_id']`` (option 1
+    du fix). Si absent, l'INSERT laisse la colonne à NULL et le UPDATE
+    post-stream prend le relais.
+    """
+    configurable = (config or {}).get("configurable", {}) or {}
+    return _coerce_uuid(configurable.get("assistant_message_id"))
 
 
 # ════════════════════════════════════════════════════════════════════════
@@ -172,6 +240,21 @@ async def ask_interactive_question(
         or "chat"
     )
 
+    # F18 fix — multi-tenant : résoudre account_id (config → conversation BDD).
+    account_id = await _resolve_account_id(db, config, conversation_id)
+    if account_id is None:
+        logger.warning(
+            "ask_interactive_question: account_id introuvable "
+            "(config + fallback BDD) pour conversation %s",
+            conversation_id,
+        )
+        return (
+            "Erreur : account_id du tenant introuvable, "
+            "impossible de persister la question."
+        )
+
+    assistant_message_id = _resolve_assistant_message_id(config)
+
     try:
         payload = InteractiveQuestionCreate(
             question_type=question_type,  # type: ignore[arg-type]
@@ -206,6 +289,8 @@ async def ask_interactive_question(
 
         question = InteractiveQuestion(
             conversation_id=conversation_id,
+            account_id=account_id,
+            assistant_message_id=assistant_message_id,
             module=payload.module,
             question_type=payload.question_type.value,
             prompt=payload.prompt,
@@ -257,10 +342,18 @@ async def ask_interactive_question(
 # ════════════════════════════════════════════════════════════════════════
 
 
-def _extract_context(config: RunnableConfig | None) -> tuple[Any, uuid.UUID, uuid.UUID, str] | str:
-    """Extrait db, user_id, conversation_id et module_name du config.
+async def _extract_context(
+    config: RunnableConfig | None,
+) -> tuple[Any, uuid.UUID, uuid.UUID, str, uuid.UUID, uuid.UUID | None] | str:
+    """Extrait db, user_id, conversation_id, module_name, account_id et
+    assistant_message_id depuis le RunnableConfig.
 
-    Retourne un tuple ou un message d'erreur string si le contexte est manquant.
+    F18 fix — résout systématiquement ``account_id`` (config → fallback
+    BDD via ``conversations.account_id``) afin de garantir un INSERT sans
+    NOT NULL violation côté multi-tenant.
+
+    Retourne un tuple à 6 éléments ou un message d'erreur string si le
+    contexte est incomplet.
     """
     try:
         db, user_id = get_db_and_user(config)
@@ -286,7 +379,21 @@ def _extract_context(config: RunnableConfig | None) -> tuple[Any, uuid.UUID, uui
         or "chat"
     )
 
-    return db, user_id, conversation_id, module_name
+    account_id = await _resolve_account_id(db, config, conversation_id)
+    if account_id is None:
+        logger.warning(
+            "widget tool: account_id introuvable (config + fallback BDD) "
+            "pour conversation %s",
+            conversation_id,
+        )
+        return (
+            "Erreur : account_id du tenant introuvable, "
+            "impossible de persister la question."
+        )
+
+    assistant_message_id = _resolve_assistant_message_id(config)
+
+    return db, user_id, conversation_id, module_name, account_id, assistant_message_id
 
 
 async def _persist_widget_question(
@@ -295,6 +402,8 @@ async def _persist_widget_question(
     user_id: uuid.UUID,
     conversation_id: uuid.UUID,
     module_name: str,
+    account_id: uuid.UUID,
+    assistant_message_id: uuid.UUID | None,
     tool_name: str,
     question_type: str,
     prompt: str,
@@ -322,6 +431,8 @@ async def _persist_widget_question(
 
         question = InteractiveQuestion(
             conversation_id=conversation_id,
+            account_id=account_id,
+            assistant_message_id=assistant_message_id,
             module=module_name,
             question_type=question_type,
             prompt=prompt,
@@ -401,10 +512,10 @@ async def ask_yes_no(
     confirm_label='Oui, supprimer', deny_label='Non, annuler').
     Anti: « Quel secteur ? » -> NE PAS appeler (utiliser ask_select).
     """
-    ctx = _extract_context(config)
+    ctx = await _extract_context(config)
     if isinstance(ctx, str):
         return ctx
-    db, user_id, conversation_id, module_name = ctx
+    db, user_id, conversation_id, module_name, account_id, assistant_message_id = ctx
 
     try:
         validated = YesNoPayload(
@@ -421,6 +532,8 @@ async def ask_yes_no(
         user_id=user_id,
         conversation_id=conversation_id,
         module_name=module_name,
+        account_id=account_id,
+        assistant_message_id=assistant_message_id,
         tool_name="ask_yes_no",
         question_type="yes_no",
         prompt=question,
@@ -484,10 +597,10 @@ async def ask_select(
     Exemple: ask_select(question="Quel pays UEMOA ?", options=[{id:"ci", label:"Côte d'Ivoire", group:"UEMOA"}, ...]).
     Anti: « Confirmer ? » -> NE PAS appeler (utiliser ask_yes_no).
     """
-    ctx = _extract_context(config)
+    ctx = await _extract_context(config)
     if isinstance(ctx, str):
         return ctx
-    db, user_id, conversation_id, module_name = ctx
+    db, user_id, conversation_id, module_name, account_id, assistant_message_id = ctx
 
     try:
         opts_validated = [
@@ -509,6 +622,8 @@ async def ask_select(
         user_id=user_id,
         conversation_id=conversation_id,
         module_name=module_name,
+        account_id=account_id,
+        assistant_message_id=assistant_message_id,
         tool_name="ask_select",
         question_type="select",
         prompt=question,
@@ -586,10 +701,10 @@ async def ask_number(
     Exemple: ask_number(question="CA annuel ?", unit="FCFA", min=0, max=1_000_000_000, currency="XOF").
     Anti: « Quel pays ? » -> NE PAS appeler (utiliser ask_select).
     """
-    ctx = _extract_context(config)
+    ctx = await _extract_context(config)
     if isinstance(ctx, str):
         return ctx
-    db, user_id, conversation_id, module_name = ctx
+    db, user_id, conversation_id, module_name, account_id, assistant_message_id = ctx
 
     try:
         validated = NumberPayload(
@@ -609,6 +724,8 @@ async def ask_number(
         user_id=user_id,
         conversation_id=conversation_id,
         module_name=module_name,
+        account_id=account_id,
+        assistant_message_id=assistant_message_id,
         tool_name="ask_number",
         question_type="number",
         prompt=question,
@@ -654,10 +771,10 @@ async def ask_date(
     Exemple: ask_date(question="Validité jusqu'à ?", min=date.today()).
     Anti: « Pendant combien de jours ? » -> NE PAS appeler (utiliser ask_number).
     """
-    ctx = _extract_context(config)
+    ctx = await _extract_context(config)
     if isinstance(ctx, str):
         return ctx
-    db, user_id, conversation_id, module_name = ctx
+    db, user_id, conversation_id, module_name, account_id, assistant_message_id = ctx
 
     try:
         validated = DatePayload(
@@ -674,6 +791,8 @@ async def ask_date(
         user_id=user_id,
         conversation_id=conversation_id,
         module_name=module_name,
+        account_id=account_id,
+        assistant_message_id=assistant_message_id,
         tool_name="ask_date",
         question_type="date",
         prompt=question,
@@ -713,10 +832,10 @@ async def ask_date_range(
     Exemple: ask_date_range(question="Quelle période fiscale ?", min="2024-01-01").
     Anti: « Date d'échéance ? » -> NE PAS appeler (utiliser ask_date).
     """
-    ctx = _extract_context(config)
+    ctx = await _extract_context(config)
     if isinstance(ctx, str):
         return ctx
-    db, user_id, conversation_id, module_name = ctx
+    db, user_id, conversation_id, module_name, account_id, assistant_message_id = ctx
 
     try:
         validated = DateRangePayload(
@@ -730,6 +849,8 @@ async def ask_date_range(
         user_id=user_id,
         conversation_id=conversation_id,
         module_name=module_name,
+        account_id=account_id,
+        assistant_message_id=assistant_message_id,
         tool_name="ask_date_range",
         question_type="date_range",
         prompt=question,
@@ -780,10 +901,10 @@ async def ask_rating(
     labels=["Très mauvais", "Mauvais", "Moyen", "Très bien", "Excellent"]).
     Anti: « Quel score ESG ? » -> NE PAS appeler (utiliser get_esg_assessment).
     """
-    ctx = _extract_context(config)
+    ctx = await _extract_context(config)
     if isinstance(ctx, str):
         return ctx
-    db, user_id, conversation_id, module_name = ctx
+    db, user_id, conversation_id, module_name, account_id, assistant_message_id = ctx
 
     try:
         validated = RatingPayload(
@@ -797,6 +918,8 @@ async def ask_rating(
         user_id=user_id,
         conversation_id=conversation_id,
         module_name=module_name,
+        account_id=account_id,
+        assistant_message_id=assistant_message_id,
         tool_name="ask_rating",
         question_type="rating",
         prompt=question,
@@ -845,10 +968,10 @@ async def ask_file_upload(
     accept=[".pdf"], max_size_mb=10, doc_type_hint="business_plan").
     Anti: « Voir mes documents ? » -> NE PAS appeler (utiliser list_user_documents).
     """
-    ctx = _extract_context(config)
+    ctx = await _extract_context(config)
     if isinstance(ctx, str):
         return ctx
-    db, user_id, conversation_id, module_name = ctx
+    db, user_id, conversation_id, module_name, account_id, assistant_message_id = ctx
 
     try:
         validated = FileUploadPayload(
@@ -866,6 +989,8 @@ async def ask_file_upload(
         user_id=user_id,
         conversation_id=conversation_id,
         module_name=module_name,
+        account_id=account_id,
+        assistant_message_id=assistant_message_id,
         tool_name="ask_file_upload",
         question_type="file_upload",
         prompt=question,
@@ -920,10 +1045,10 @@ async def show_form(
     Exemple: show_form(title="Nouveau projet", fields=[{name:"project_name", label:"Nom", type:"text"}, ...]).
     Anti: « Quel est ton secteur ? » -> NE PAS appeler (utiliser ask_select).
     """
-    ctx = _extract_context(config)
+    ctx = await _extract_context(config)
     if isinstance(ctx, str):
         return ctx
-    db, user_id, conversation_id, module_name = ctx
+    db, user_id, conversation_id, module_name, account_id, assistant_message_id = ctx
 
     try:
         # Tolérer dict ou pydantic model (LangChain convertit args_schema en model)
@@ -957,6 +1082,8 @@ async def show_form(
         user_id=user_id,
         conversation_id=conversation_id,
         module_name=module_name,
+        account_id=account_id,
+        assistant_message_id=assistant_message_id,
         tool_name="show_form",
         question_type="form",
         prompt=title,
@@ -1009,10 +1136,10 @@ async def show_summary_card(
     Exemple: show_summary_card(title="Voici l'extraction", items=[{label:"Capital", value:"5M FCFA", editable:true}, ...]).
     Anti: « Confirmes-tu ? » -> NE PAS appeler (utiliser ask_yes_no).
     """
-    ctx = _extract_context(config)
+    ctx = await _extract_context(config)
     if isinstance(ctx, str):
         return ctx
-    db, user_id, conversation_id, module_name = ctx
+    db, user_id, conversation_id, module_name, account_id, assistant_message_id = ctx
 
     try:
         items_dicts = [
@@ -1042,6 +1169,8 @@ async def show_summary_card(
         user_id=user_id,
         conversation_id=conversation_id,
         module_name=module_name,
+        account_id=account_id,
+        assistant_message_id=assistant_message_id,
         tool_name="show_summary_card",
         question_type="summary_card",
         prompt=title,
