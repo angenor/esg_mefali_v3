@@ -5,7 +5,7 @@ import { useProjectsStore } from '~/stores/projects'
 import type { ProjectFilters } from '~/types/project'
 
 definePageMeta({
-  layout: false,
+  layout: 'default',
 })
 
 const router = useRouter()

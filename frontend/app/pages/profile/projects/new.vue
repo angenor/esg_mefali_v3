@@ -4,7 +4,7 @@ import { useProjects } from '~/composables/useProjects'
 import type { ProjectCreatePayload } from '~/types/project'
 
 definePageMeta({
-  layout: false,
+  layout: 'default',
 })
 
 const router = useRouter()

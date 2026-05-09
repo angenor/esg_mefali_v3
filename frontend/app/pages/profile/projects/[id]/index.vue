@@ -5,7 +5,7 @@ import { useProjectsStore } from '~/stores/projects'
 import type { ProjectCreatePayload, ProjectDetail } from '~/types/project'
 
 definePageMeta({
-  layout: false,
+  layout: 'default',
 })
 
 const route = useRoute()

@@ -7,7 +7,7 @@ import { useMatching } from '~/composables/useMatching'
 import { useMatchesStore } from '~/stores/matches'
 import type { MatchAlertSubscription } from '~/types/matching'
 
-definePageMeta({ layout: false })
+definePageMeta({ layout: 'default' })
 
 const route = useRoute()
 const matchesStore = useMatchesStore()
