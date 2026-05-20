@@ -23,7 +23,9 @@ const props = withDefaults(defineProps<Props>(), {
 })
 
 const emit = defineEmits<{
-  (e: 'submit', payload: RatingResponse, displayText: string): void
+  // F10 — `submit-ext` porte un `response_payload` structuré
+  // (cf. InteractiveQuestionInputBar → handler `onWidgetSubmit`).
+  (e: 'submit-ext', payload: RatingResponse, displayText: string): void
   (e: 'abandon-and-send', content: string): void
 }>()
 
@@ -59,7 +61,7 @@ function _doSubmit() {
     ? `✓ ${value.value}/${payload.value.scale} (${lbl})`
     : `✓ ${value.value}/${payload.value.scale}`
   emit(
-    'submit',
+    'submit-ext',
     {
       question_type: 'rating',
       value: value.value,

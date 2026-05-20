@@ -67,10 +67,10 @@ describe('YesNoWidget', () => {
     expect(btn.classes().some(c => c.includes('red'))).toBe(true)
   })
 
-  it('clic sur Non émet submit avec value=false', async () => {
+  it('clic sur Non émet submit-ext avec value=false', async () => {
     const wrapper = mount(YesNoWidget, { props: { question: makeQuestion() } })
     await wrapper.find('[data-testid="yesno-deny-q-test-1"]').trigger('click')
-    const emitted = wrapper.emitted('submit')
+    const emitted = wrapper.emitted('submit-ext')
     expect(emitted).toBeTruthy()
     expect(emitted![0]![0]).toMatchObject({ question_type: 'yes_no', value: false })
   })
@@ -78,7 +78,7 @@ describe('YesNoWidget', () => {
   it('mode normal : clic sur Oui émet immédiatement (pas de hold)', async () => {
     const wrapper = mount(YesNoWidget, { props: { question: makeQuestion() } })
     await wrapper.find('[data-testid="yesno-confirm-q-test-1"]').trigger('click')
-    expect(wrapper.emitted('submit')).toBeTruthy()
+    expect(wrapper.emitted('submit-ext')).toBeTruthy()
   })
 
   it('disabled prop verrouille les boutons', () => {
@@ -126,7 +126,7 @@ describe('SelectWidget', () => {
     expect(wrapper.text()).toContain('Sénégal')
 
     await wrapper.find('[data-testid="select-option-ci"]').trigger('click')
-    const emitted = wrapper.emitted('submit')
+    const emitted = wrapper.emitted('submit-ext')
     expect(emitted).toBeTruthy()
     expect(emitted![0]![0]).toMatchObject({ selected: [{ id: 'ci' }] })
   })
@@ -383,7 +383,7 @@ describe('SummaryCardWidget', () => {
     })
     const wrapper = mount(SummaryCardWidget, { props: { question: q } })
     await wrapper.find(`[data-testid="summary-validate-${q.id}"]`).trigger('click')
-    const emitted = wrapper.emitted('submit')
+    const emitted = wrapper.emitted('submit-ext')
     expect(emitted).toBeTruthy()
     const payload = emitted![0]![0] as { validated: boolean; modifications: unknown[] }
     expect(payload.validated).toBe(true)

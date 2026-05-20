@@ -31,7 +31,9 @@ const props = withDefaults(defineProps<Props>(), {
 })
 
 const emit = defineEmits<{
-  (e: 'submit', payload: SelectResponse, displayText: string): void
+  // F10 — `submit-ext` porte un `response_payload` structuré
+  // (cf. InteractiveQuestionInputBar → handler `onWidgetSubmit`).
+  (e: 'submit-ext', payload: SelectResponse, displayText: string): void
   (e: 'abandon-and-send', content: string): void
 }>()
 
@@ -121,7 +123,7 @@ function _doSubmit() {
       selected: [{ id: 'other', label: 'Autre' }],
       other_value: v,
     }
-    emit('submit', resp, `✓ Autre : ${v}`)
+    emit('submit-ext', resp, `✓ Autre : ${v}`)
     return
   }
   const selected = payload.value.options.filter((o) => selectedIds.value.has(o.id))
@@ -132,7 +134,7 @@ function _doSubmit() {
     other_value: null,
   }
   const labels = selected.map((o) => o.label).join(', ')
-  emit('submit', resp, `✓ ${labels}`)
+  emit('submit-ext', resp, `✓ ${labels}`)
 }
 
 const canSubmit = computed(() => {

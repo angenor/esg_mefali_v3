@@ -137,11 +137,27 @@ async def save_emission_entry(
             }, ensure_ascii=False)
 
         # F17 — Resoudre le pays via le profil entreprise.
+        # Bug fix : la table emission_factors stocke les codes ISO 2 lettres
+        # ('CI', 'SN', ...) mais le profil peut contenir le nom complet
+        # ("Cote d'Ivoire", "Senegal", ...). Normaliser via une map UEMOA.
         country: str | None = None
         try:
             profile = await get_profile(db, user_id)
             if profile and profile.country:
-                country = profile.country.strip().upper()
+                raw = profile.country.strip()
+                # Map nom complet (FR ou EN, avec/sans accents) -> ISO 2.
+                _COUNTRY_ISO_MAP = {
+                    "cote d'ivoire": "CI", "côte d'ivoire": "CI", "ivory coast": "CI",
+                    "senegal": "SN", "sénégal": "SN",
+                    "burkina faso": "BF",
+                    "mali": "ML",
+                    "niger": "NE",
+                    "benin": "BJ", "bénin": "BJ",
+                    "togo": "TG",
+                    "guinee-bissau": "GW", "guinée-bissau": "GW", "guinea-bissau": "GW",
+                }
+                key = raw.lower()
+                country = _COUNTRY_ISO_MAP.get(key, raw.upper() if len(raw) == 2 else None)
         except Exception:
             logger.debug("Impossible de resoudre le pays via le profil entreprise.")
 

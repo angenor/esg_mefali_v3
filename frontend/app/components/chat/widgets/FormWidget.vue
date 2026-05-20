@@ -25,7 +25,9 @@ const props = withDefaults(defineProps<Props>(), {
 })
 
 const emit = defineEmits<{
-  (e: 'submit', payload: FormResponse, displayText: string): void
+  // F10 — `submit-ext` porte un `response_payload` structuré
+  // (cf. InteractiveQuestionInputBar → handler `onWidgetSubmit`).
+  (e: 'submit-ext', payload: FormResponse, displayText: string): void
   (e: 'abandon-and-send', content: string): void
 }>()
 
@@ -153,7 +155,7 @@ function _doSubmit() {
   const summary = sigValues ? `${payload.value.title} : ${sigValues}` : payload.value.title
 
   emit(
-    'submit',
+    'submit-ext',
     {
       question_type: 'form',
       values: values.value,

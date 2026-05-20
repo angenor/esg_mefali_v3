@@ -23,7 +23,9 @@ const props = withDefaults(defineProps<Props>(), {
 })
 
 const emit = defineEmits<{
-  (e: 'submit', payload: DateResponse, displayText: string): void
+  // F10 — `submit-ext` porte un `response_payload` structuré
+  // (cf. InteractiveQuestionInputBar → handler `onWidgetSubmit`).
+  (e: 'submit-ext', payload: DateResponse, displayText: string): void
   (e: 'abandon-and-send', content: string): void
 }>()
 
@@ -51,7 +53,7 @@ function _doSubmit() {
   if (!canSubmit.value) return
   const label = formatFr(value.value)
   emit(
-    'submit',
+    'submit-ext',
     { question_type: 'date', value: value.value, label },
     `✓ ${label}`,
   )

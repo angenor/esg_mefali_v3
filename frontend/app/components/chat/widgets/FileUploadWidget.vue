@@ -27,7 +27,9 @@ const props = withDefaults(defineProps<Props>(), {
 })
 
 const emit = defineEmits<{
-  (e: 'submit', payload: FileUploadResponse, displayText: string): void
+  // F10 — `submit-ext` porte un `response_payload` structuré
+  // (cf. InteractiveQuestionInputBar → handler `onWidgetSubmit`).
+  (e: 'submit-ext', payload: FileUploadResponse, displayText: string): void
   (e: 'abandon-and-send', content: string): void
 }>()
 
@@ -158,7 +160,7 @@ function _doSubmit() {
     display = `✓ ${docs.map(d => d.filename).join(', ')} (${docs.length} fichiers uploaded)`
   }
   emit(
-    'submit',
+    'submit-ext',
     { question_type: 'file_upload', documents: docs },
     display,
   )

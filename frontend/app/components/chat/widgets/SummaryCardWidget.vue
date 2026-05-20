@@ -25,7 +25,9 @@ const props = withDefaults(defineProps<Props>(), {
 })
 
 const emit = defineEmits<{
-  (e: 'submit', payload: SummaryCardResponse, displayText: string): void
+  // F10 — `submit-ext` porte un `response_payload` structuré
+  // (cf. InteractiveQuestionInputBar → handler `onWidgetSubmit`).
+  (e: 'submit-ext', payload: SummaryCardResponse, displayText: string): void
   (e: 'abandon-and-send', content: string): void
 }>()
 
@@ -105,7 +107,7 @@ function _doSubmit(asValidation: boolean) {
     const m = modifications[0]!
     display = `✓ Corrigé : ${m.field} ${m.after} (au lieu de ${m.before})`
   }
-  emit('submit', resp, display)
+  emit('submit-ext', resp, display)
 }
 </script>
 

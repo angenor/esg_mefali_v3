@@ -360,14 +360,82 @@ def _build_purchases_factors() -> list[SeedFactor]:
     ]
 
 
+def _build_refrigerant_factors() -> list[SeedFactor]:
+    """Fluides frigorigenes — IPCC AR6 WG1 chap. 7 (GWP100).
+
+    Couvre les fluides les plus courants en chambre froide agroalimentaire
+    en Afrique de l'Ouest. Valeurs en kgCO2e/kg de fluide recharge.
+    """
+    return [
+        SeedFactor(
+            code="refrigerant_r404a_global_2024",
+            label="Fluide frigorigene R-404A",
+            category="refrigerant_r404a",
+            country="global",
+            year=2024,
+            value=3922.0,
+            unit="kgCO2e/kg",
+            publisher="IPCC",
+        ),
+        SeedFactor(
+            code="refrigerant_r134a_global_2024",
+            label="Fluide frigorigene R-134A",
+            category="refrigerant_r134a",
+            country="global",
+            year=2024,
+            value=1430.0,
+            unit="kgCO2e/kg",
+            publisher="IPCC",
+        ),
+        SeedFactor(
+            code="refrigerant_r22_global_2024",
+            label="Fluide frigorigene R-22 (HCFC)",
+            category="refrigerant_r22",
+            country="global",
+            year=2024,
+            value=1810.0,
+            unit="kgCO2e/kg",
+            publisher="IPCC",
+        ),
+        SeedFactor(
+            code="refrigerant_r410a_global_2024",
+            label="Fluide frigorigene R-410A",
+            category="refrigerant_r410a",
+            country="global",
+            year=2024,
+            value=2088.0,
+            unit="kgCO2e/kg",
+            publisher="IPCC",
+        ),
+    ]
+
+
+def _build_waste_recycling_factors() -> list[SeedFactor]:
+    """Categorie recyclage (alias commun utilise par le LLM)."""
+    return [
+        SeedFactor(
+            code="waste_recycling_global_2024",
+            label="Dechets recyclage / valorisation",
+            category="waste_recycling",
+            country="global",
+            year=2024,
+            value=0.020,
+            unit="kgCO2e/kg",
+            publisher="ADEME",
+        ),
+    ]
+
+
 def build_seed_data() -> list[SeedFactor]:
-    """Construit la liste complete des facteurs a seeder (~50 lignes)."""
+    """Construit la liste complete des facteurs a seeder (~55 lignes)."""
     return (
         _build_electricity_factors()
         + _build_fuel_factors()
         + _build_transport_factors()
         + _build_waste_factors()
+        + _build_waste_recycling_factors()
         + _build_purchases_factors()
+        + _build_refrigerant_factors()
     )
 
 

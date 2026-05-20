@@ -31,7 +31,9 @@ const props = withDefaults(defineProps<Props>(), {
 })
 
 const emit = defineEmits<{
-  (e: 'submit', payload: NumberResponse, displayText: string): void
+  // F10 — `submit-ext` porte un `response_payload` structuré
+  // (cf. InteractiveQuestionInputBar → handler `onWidgetSubmit`).
+  (e: 'submit-ext', payload: NumberResponse, displayText: string): void
   (e: 'abandon-and-send', content: string): void
 }>()
 
@@ -144,7 +146,7 @@ function _doSubmit() {
     currency: cur,
     formatted,
   }
-  emit('submit', resp, `✓ ${formatted}`)
+  emit('submit-ext', resp, `✓ ${formatted}`)
 }
 </script>
 

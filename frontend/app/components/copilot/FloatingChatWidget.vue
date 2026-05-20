@@ -8,7 +8,10 @@ import { prefetchDriverJs } from '~/composables/useDriverLoader'
 import { notifyRetractComplete } from '~/composables/useGuidedTour'
 import { useAuthStore } from '~/stores/auth'
 import ConnectionStatusBadge from '~/components/copilot/ConnectionStatusBadge.vue'
-import type { InteractiveQuestionAnswer } from '~/types/interactive-question'
+import type {
+  InteractiveQuestionAnswer,
+  InteractiveQuestionAnswerExt,
+} from '~/types/interactive-question'
 
 const uiStore = useUiStore()
 const runtimeConfig = useRuntimeConfig()
@@ -390,7 +393,9 @@ async function handleSendWithFile(content: string, file: File) {
   }
 }
 
-async function handleInteractiveSubmit(answer: InteractiveQuestionAnswer) {
+async function handleInteractiveSubmit(
+  answer: InteractiveQuestionAnswer | InteractiveQuestionAnswerExt,
+) {
   try {
     if (!currentInteractiveQuestion.value) return
     await submitInteractiveAnswer(currentInteractiveQuestion.value.id, answer)

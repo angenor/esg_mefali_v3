@@ -26,8 +26,13 @@ async def create_assessment(
     year: int,
     sector: str | None = None,
     conversation_id: uuid.UUID | None = None,
+    account_id: uuid.UUID | None = None,
 ) -> CarbonAssessment:
-    """Creer un nouveau bilan carbone. Leve une erreur si un bilan existe deja pour cette annee."""
+    """Creer un nouveau bilan carbone. Leve une erreur si un bilan existe deja pour cette annee.
+
+    F02 multi-tenant : `account_id` est requis (NOT NULL). Si non fourni,
+    resolution automatique via le user (fallback).
+    """
     # Verifier l'unicite user_id + year
     existing = await db.execute(
         select(CarbonAssessment).where(
@@ -38,8 +43,20 @@ async def create_assessment(
     if existing.scalar_one_or_none() is not None:
         raise ValueError(f"Un bilan carbone existe deja pour l'annee {year}")
 
+    if account_id is None:
+        from app.models.user import User as _User
+
+        result = await db.execute(select(_User).where(_User.id == user_id))
+        user_obj = result.scalar_one_or_none()
+        if user_obj is None or user_obj.account_id is None:
+            raise ValueError(
+                "create_assessment carbon: account_id introuvable pour l'utilisateur."
+            )
+        account_id = user_obj.account_id
+
     assessment = CarbonAssessment(
         user_id=user_id,
+        account_id=account_id,
         conversation_id=conversation_id,
         year=year,
         sector=sector,

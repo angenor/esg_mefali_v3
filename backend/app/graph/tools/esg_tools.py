@@ -32,14 +32,29 @@ class SaveESGCriterionScoreArgs(BaseModel):
     justification: str = Field(..., min_length=1, max_length=2000)
 
 
-class _CriterionItem(BaseModel):
-    """Element d'un batch de criteres ESG."""
+# NOTE : `ESGCriterionScoreItem` est volontairement public (sans underscore)
+# car ce nom apparait dans le JSON Schema (`$defs/ESGCriterionScoreItem`)
+# expose au LLM via LangChain.bind_tools. Les classes prefixees par `_` sont
+# parfois rejetees par les validators stricts (OpenAI strict, Anthropic via
+# OpenRouter) qui filtrent les schemas "prives", ce qui provoquait des refus
+# systematiques de `batch_save_esg_criteria` malgre un payload conforme.
+class ESGCriterionScoreItem(BaseModel):
+    """Critere ESG : code (E/S/G + numero), note 0-10, justification."""
 
     model_config = ConfigDict(extra="forbid")
 
-    criterion_code: str = Field(..., pattern=_CRITERION_CODE_PATTERN)
-    score: int = Field(..., ge=0, le=10)
-    justification: str = Field(..., min_length=1, max_length=2000)
+    criterion_code: str = Field(
+        ...,
+        pattern=_CRITERION_CODE_PATTERN,
+        description="Code ESG, ex 'E1', 'S5', 'G10'.",
+    )
+    score: int = Field(..., ge=0, le=10, description="Note de 0 a 10.")
+    justification: str = Field(
+        ...,
+        min_length=1,
+        max_length=2000,
+        description="Justification libre 1 a 2000 caracteres.",
+    )
 
 
 class BatchSaveESGCriteriaArgs(BaseModel):
@@ -48,7 +63,7 @@ class BatchSaveESGCriteriaArgs(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     assessment_id: str = Field(..., min_length=36, max_length=36, pattern=UUID_PATTERN)
-    criteria: list[_CriterionItem] = Field(..., min_length=1, max_length=30)
+    criteria: list[ESGCriterionScoreItem] = Field(..., min_length=1, max_length=30)
 
 
 class FinalizeESGAssessmentArgs(BaseModel):
@@ -357,7 +372,8 @@ async def batch_save_esg_criteria(
     Don't use when:
     - un seul critere (utiliser `save_esg_criterion_score`).
     - pas d'evaluation (utiliser `create_esg_assessment`).
-    Exemple: "Pilier E entier" -> batch_save_esg_criteria(criteria=[...]).
+    Format criteria: [{"criterion_code":"E1","score":7,"justification":"..."}].
+    Exemple: batch_save_esg_criteria(assessment_id='<uuid>', criteria=[10 items E1..E10]).
     Anti: "Note S5 a 8" -> NE PAS appeler.
     """
     from app.models.esg import ESGStatusEnum
@@ -386,12 +402,16 @@ async def batch_save_esg_criteria(
         evaluated_criteria = list(assessment.evaluated_criteria or [])
 
         # Pydantic v2 + args_schema=BatchSaveESGCriteriaArgs convertit chaque entree
-        # en _CriterionItem (BaseModel). Si le tool est appele directement avec un
-        # dict (tests, code legacy), on tolere les deux formes.
+        # en ESGCriterionScoreItem (BaseModel). Si le tool est appele directement
+        # avec un dict (tests, code legacy), on tolere les deux formes.
         normalized: list[dict] = [
             c if isinstance(c, dict) else c.model_dump()
             for c in criteria
         ]
+        logger.debug(
+            "batch_save_esg_criteria invoked (assessment_id=%s, count=%d)",
+            assessment_id, len(normalized),
+        )
 
         for item in normalized:
             code = item["criterion_code"]

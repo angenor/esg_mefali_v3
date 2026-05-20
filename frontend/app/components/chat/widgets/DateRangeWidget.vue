@@ -23,7 +23,9 @@ const props = withDefaults(defineProps<Props>(), {
 })
 
 const emit = defineEmits<{
-  (e: 'submit', payload: DateRangeResponse, displayText: string): void
+  // F10 — `submit-ext` porte un `response_payload` structuré
+  // (cf. InteractiveQuestionInputBar → handler `onWidgetSubmit`).
+  (e: 'submit-ext', payload: DateRangeResponse, displayText: string): void
   (e: 'abandon-and-send', content: string): void
 }>()
 
@@ -58,7 +60,7 @@ function _doSubmit() {
   const toFmt = formatFr(toValue.value)
   const label = `Du ${fromFmt} au ${toFmt}`
   emit(
-    'submit',
+    'submit-ext',
     {
       question_type: 'date_range',
       from: fromValue.value,

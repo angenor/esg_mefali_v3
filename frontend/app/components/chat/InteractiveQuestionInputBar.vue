@@ -48,10 +48,10 @@ const props = withDefaults(defineProps<Props>(), {
 })
 
 const emit = defineEmits<{
-  // Réponse F18 simple (QCU/QCM)
-  (e: 'submit', payload: InteractiveQuestionAnswer): void
-  // F10 — réponse étendue (avec response_payload structuré)
-  (e: 'submit-ext', payload: InteractiveQuestionAnswerExt): void
+  // Event unifié — F18 (QCU/QCM) émet `InteractiveQuestionAnswer`,
+  // F10 (rating/number/yes_no/…) émet `InteractiveQuestionAnswerExt`
+  // (avec `response_payload` structuré). Le consumer parent reste agnostique.
+  (e: 'submit', payload: InteractiveQuestionAnswer | InteractiveQuestionAnswerExt): void
   (e: 'abandon-and-send', content: string): void
 }>()
 
@@ -85,8 +85,9 @@ function onChildSubmit(answer: InteractiveQuestionAnswer) {
 }
 
 function onWidgetSubmit(payload: InteractiveQuestionResponsePayload, displayText: string) {
-  // F10 — convertir en InteractiveQuestionAnswerExt avec response_payload structuré.
-  emit('submit-ext', {
+  // F10 — convertir en InteractiveQuestionAnswerExt avec response_payload
+  // structuré, puis émettre via le même event `submit` (le parent reste agnostique).
+  emit('submit', {
     values: [],
     response_payload: payload,
     display_text: displayText,
@@ -99,17 +100,22 @@ function onAbandon(content: string) {
 </script>
 
 <template>
-  <!-- Bottom sheet animé : conserve le wrapper visuel F18 -->
+  <!-- Bottom sheet animé : conserve le wrapper visuel F18.
+       `max-h: 80vh` + flex column garantissent que le bouton Valider d'un
+       widget long (QCM 7 options, formulaire dense) reste accessible via
+       scroll interne, sans débordement hors viewport. -->
   <div
-    class="iq-sheet relative rounded-t-3xl border-t border-x border-indigo-200/60 dark:border-indigo-700/40 bg-gradient-to-b from-indigo-50 via-white to-white dark:from-indigo-900/30 dark:via-dark-card dark:to-dark-card shadow-[0_-12px_40px_-8px_rgba(99,102,241,0.35)] dark:shadow-[0_-12px_40px_-8px_rgba(99,102,241,0.5)] overflow-hidden"
+    class="iq-sheet relative flex flex-col max-h-[80vh] rounded-t-3xl border-t border-x border-indigo-200/60 dark:border-indigo-700/40 bg-gradient-to-b from-indigo-50 via-white to-white dark:from-indigo-900/30 dark:via-dark-card dark:to-dark-card shadow-[0_-12px_40px_-8px_rgba(99,102,241,0.35)] dark:shadow-[0_-12px_40px_-8px_rgba(99,102,241,0.5)] overflow-hidden"
   >
-    <div class="iq-sheet__accent h-1.5 bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 bg-[length:200%_100%]" />
+    <div class="iq-sheet__accent shrink-0 h-1.5 bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 bg-[length:200%_100%]" />
 
-    <div class="flex justify-center pt-2">
+    <div class="flex justify-center pt-2 shrink-0">
       <div class="w-10 h-1 rounded-full bg-gradient-to-r from-indigo-300 to-purple-300 dark:from-indigo-600 dark:to-purple-600" />
     </div>
 
-    <div class="px-4 pt-2 pb-3">
+    <!-- Zone scrollable : `min-h-0` libère la contrainte flex pour que
+         `overflow-y-auto` reprenne le contrôle quand le contenu dépasse. -->
+    <div class="iq-sheet__scroll flex-1 min-h-0 overflow-y-auto px-4 pt-2 pb-3">
       <!-- Badge + prompt de la question -->
       <div class="flex items-start gap-2.5 mb-3">
         <div

@@ -30,19 +30,19 @@ def test_batch_tool_accepts_criteria_list():
 
 
 def test_batch_save_esg_criteria_accepts_pydantic_items():
-    """Bug [M] — _CriterionItem (Pydantic v2 BaseModel) ne doit PAS planter le tool.
+    """Bug [M] — ESGCriterionScoreItem (Pydantic v2 BaseModel) ne doit PAS planter le tool.
 
     Regression test : avant le fix coercion (esg_tools.py:372-380), le tool
     accedait `criterion["criterion_code"]` ce qui levait
-    `TypeError: '_CriterionItem' object is not subscriptable` quand LangChain
+    `TypeError: 'ESGCriterionScoreItem' object is not subscriptable` quand LangChain
     convertissait l'input en BaseModel via args_schema=BatchSaveESGCriteriaArgs.
     """
-    from app.graph.tools.esg_tools import _CriterionItem
+    from app.graph.tools.esg_tools import ESGCriterionScoreItem
 
     # Coercion : BaseModel ↔ dict — verifie le comportement du fix.
     items_pydantic = [
-        _CriterionItem(criterion_code="E1", score=4, justification="ok"),
-        _CriterionItem(criterion_code="E2", score=5, justification="ok"),
+        ESGCriterionScoreItem(criterion_code="E1", score=4, justification="ok"),
+        ESGCriterionScoreItem(criterion_code="E2", score=5, justification="ok"),
     ]
     normalized = [
         c if isinstance(c, dict) else c.model_dump()
