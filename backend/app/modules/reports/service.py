@@ -370,11 +370,27 @@ async def generate_report(
                 "Generation du resume executif LLM echouee, fallback sur "
                 "texte synthese statique."
             )
+            overall = assessment.overall_score or 0
+            niveau = (
+                "performance solide" if overall >= 70
+                else "performance intermédiaire" if overall >= 50
+                else "performance encore fragile" if overall >= 30
+                else "niveau d'engagement initial"
+            )
             executive_summary = (
-                f"Score ESG global : {assessment.overall_score or 0:.1f}/100. "
-                f"Pilier Environnement : {pillar_scores['environment']:.1f}/100. "
-                f"Pilier Social : {pillar_scores['social']:.1f}/100. "
-                f"Pilier Gouvernance : {pillar_scores['governance']:.1f}/100."
+                f"L'entreprise {user.company_name} affiche un score ESG "
+                f"global de {overall:.1f} sur 100, traduisant une "
+                f"{niveau} en matière de durabilité.\n\n"
+                f"La répartition par pilier s'établit comme suit : "
+                f"Environnement à {pillar_scores['environment']:.1f}/100, "
+                f"Social à {pillar_scores['social']:.1f}/100 et "
+                f"Gouvernance à {pillar_scores['governance']:.1f}/100. "
+                f"Ces résultats positionnent l'entreprise dans une "
+                f"trajectoire d'amélioration continue, avec des leviers "
+                f"d'action identifiés sur les critères les moins notés.\n\n"
+                f"Les sections suivantes détaillent les scores par critère, "
+                f"les forces identifiées, les lacunes à combler ainsi que "
+                f"les recommandations stratégiques associées."
             )
 
         # 6. F01 - collecter les sources mobilisees
