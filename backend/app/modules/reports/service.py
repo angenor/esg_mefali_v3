@@ -318,9 +318,18 @@ async def generate_report(
     user = user_result.scalar_one()
 
     # 3. Creer l'entree Report (status: generating)
+    # F02 multi-tenant : reports.account_id est NOT NULL, on le propage
+    # depuis le user (meme pattern que create_assessment ESG/carbone).
+    if user.account_id is None:
+        raise ValueError(
+            "generate_report: account_id introuvable pour l'utilisateur "
+            f"{user_id}. Toute INSERT sur reports requiert F02."
+        )
+
     file_name = f"rapport-esg-{user.company_name.replace(' ', '-').lower()}-{datetime.now(timezone.utc).strftime('%Y-%m-%d')}-{uuid.uuid4().hex[:8]}.pdf"
     report = Report(
         user_id=user_id,
+        account_id=user.account_id,
         assessment_id=assessment_id,
         report_type=ReportTypeEnum.esg_compliance,
         status=ReportStatusEnum.generating,
