@@ -326,7 +326,9 @@ async def generate_report(
             f"{user_id}. Toute INSERT sur reports requiert F02."
         )
 
-    file_name = f"rapport-esg-{user.company_name.replace(' ', '-').lower()}-{datetime.now(timezone.utc).strftime('%Y-%m-%d')}-{uuid.uuid4().hex[:8]}.pdf"
+    # F02 fix : extension .docx (python-docx remplace WeasyPrint pour
+    # eviter la dependance native Pango/Cairo en prod).
+    file_name = f"rapport-esg-{user.company_name.replace(' ', '-').lower()}-{datetime.now(timezone.utc).strftime('%Y-%m-%d')}-{uuid.uuid4().hex[:8]}.docx"
     report = Report(
         user_id=user_id,
         account_id=user.account_id,
@@ -339,87 +341,75 @@ async def generate_report(
     await db.flush()
 
     try:
-        # 4. Generer les graphiques SVG
+        # 4. Collecter les scores et criteres
         pillar_scores = {
             "environment": assessment.environment_score or 0,
             "social": assessment.social_score or 0,
             "governance": assessment.governance_score or 0,
         }
-        radar_svg = generate_radar_chart_svg(pillar_scores)
 
         assessment_data = assessment.assessment_data or {}
         pillar_criteria = _extract_criteria_by_pillar(assessment_data)
-
-        pillar_bar_charts = {}
-        pillar_labels = {"environment": "Environnement", "social": "Social", "governance": "Gouvernance"}
-        for pillar_key, pillar_label in pillar_labels.items():
-            if pillar_criteria[pillar_key]:
-                pillar_bar_charts[pillar_key] = generate_bar_chart_svg(
-                    pillar_criteria[pillar_key], pillar_label
-                )
-            else:
-                pillar_bar_charts[pillar_key] = ""
-
-        # Benchmark chart
-        benchmark_svg = None
-        benchmark = assessment.sector_benchmark
-        if benchmark and benchmark.get("averages"):
-            company_scores = {
-                **pillar_scores,
-                "overall": assessment.overall_score or 0,
-            }
-            benchmark_svg = generate_benchmark_chart_svg(
-                company_scores,
-                benchmark["averages"],
-                SECTOR_LABELS.get(assessment.sector, assessment.sector),
-            )
+        benchmark = assessment.sector_benchmark or {}
 
         # 5. Generer le resume executif IA
-        executive_summary = await generate_executive_summary(
-            company_name=user.company_name,
-            sector=assessment.sector,
-            overall_score=assessment.overall_score or 0,
-            environment_score=assessment.environment_score or 0,
-            social_score=assessment.social_score or 0,
-            governance_score=assessment.governance_score or 0,
-            strengths=assessment.strengths or [],
-            gaps=assessment.gaps or [],
-            benchmark_position=(benchmark or {}).get("position", "unknown"),
-        )
+        try:
+            executive_summary = await generate_executive_summary(
+                company_name=user.company_name,
+                sector=assessment.sector,
+                overall_score=assessment.overall_score or 0,
+                environment_score=assessment.environment_score or 0,
+                social_score=assessment.social_score or 0,
+                governance_score=assessment.governance_score or 0,
+                strengths=assessment.strengths or [],
+                gaps=assessment.gaps or [],
+                benchmark_position=(benchmark or {}).get("position", "unknown"),
+            )
+        except Exception:
+            logger.exception(
+                "Generation du resume executif LLM echouee, fallback sur "
+                "texte synthese statique."
+            )
+            executive_summary = (
+                f"Score ESG global : {assessment.overall_score or 0:.1f}/100. "
+                f"Pilier Environnement : {pillar_scores['environment']:.1f}/100. "
+                f"Pilier Social : {pillar_scores['social']:.1f}/100. "
+                f"Pilier Gouvernance : {pillar_scores['governance']:.1f}/100."
+            )
 
-        # 6. F01 - collecter les sources mobilisees (cite_source dans tool_call_logs)
+        # 6. F01 - collecter les sources mobilisees
         mobilized_sources = await _collect_mobilized_sources(db, assessment)
 
-        # 7. Rendre le template HTML
-        html_content = _render_html(
+        # 7. Rendre le rapport au format .docx via python-docx
+        # (remplace WeasyPrint/HTML -> PDF pour eviter les dependances
+        # natives Pango/Cairo en prod).
+        from app.modules.reports.docx_renderer import render_esg_report_docx
+
+        UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
+        output_path = UPLOADS_DIR / file_name
+
+        render_esg_report_docx(
+            output_path=output_path,
             assessment=assessment,
             user=user,
             executive_summary=executive_summary,
-            radar_svg=radar_svg,
-            pillar_bar_charts=pillar_bar_charts,
-            benchmark_svg=benchmark_svg,
+            pillar_scores=pillar_scores,
             pillar_criteria=pillar_criteria,
+            sector_label=SECTOR_LABELS.get(
+                assessment.sector, assessment.sector or "Secteur"
+            ),
             mobilized_sources=mobilized_sources,
         )
 
-        # 7. Convertir HTML -> PDF via WeasyPrint (import lazy)
-        from weasyprint import HTML
-
-        UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
-        pdf_path = UPLOADS_DIR / file_name
-
-        html_doc = HTML(string=html_content)
-        html_doc.write_pdf(str(pdf_path))
-
         # 8. Mettre a jour le rapport
-        file_size = pdf_path.stat().st_size
+        file_size = output_path.stat().st_size
         report.status = ReportStatusEnum.completed
         report.file_size = file_size
         report.generated_at = datetime.now(timezone.utc)
         await db.flush()
 
     except Exception:
-        logger.exception("Erreur lors de la generation du rapport PDF")
+        logger.exception("Erreur lors de la generation du rapport DOCX")
         report.status = ReportStatusEnum.failed
         await db.flush()
         raise

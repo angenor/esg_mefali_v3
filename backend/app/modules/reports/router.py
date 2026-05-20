@@ -106,7 +106,11 @@ async def download_report(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> FileResponse:
-    """Telecharger le fichier PDF d'un rapport."""
+    """Telecharger le fichier d'un rapport.
+
+    Le type MIME est deduit de l'extension du fichier (.docx ou .pdf
+    pour retro-compat avec les anciens rapports WeasyPrint).
+    """
     from app.modules.reports.service import get_report, get_report_any_user
 
     # Verifier que le rapport existe
@@ -119,14 +123,24 @@ async def download_report(
         raise HTTPException(status_code=403, detail="Acces refuse.")
 
     # Verifier que le fichier existe
-    pdf_path = UPLOADS_DIR / report.file_path
-    if not pdf_path.exists():
-        raise HTTPException(status_code=404, detail="Fichier PDF non trouve.")
+    file_path = UPLOADS_DIR / report.file_path
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="Fichier rapport non trouve.")
+
+    # MIME type selon l'extension (defaut: octet-stream).
+    ext = file_path.suffix.lower()
+    media_type = {
+        ".docx": (
+            "application/vnd.openxmlformats-officedocument."
+            "wordprocessingml.document"
+        ),
+        ".pdf": "application/pdf",
+    }.get(ext, "application/octet-stream")
 
     filename = report.file_path
     return FileResponse(
-        path=str(pdf_path),
-        media_type="application/pdf",
+        path=str(file_path),
+        media_type=media_type,
         filename=filename,
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )

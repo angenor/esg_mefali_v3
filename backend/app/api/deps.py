@@ -3,7 +3,7 @@
 import logging
 import uuid
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Query, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -32,21 +32,32 @@ def get_email_service() -> EmailDeliveryService:
 
 async def get_current_user(
     credentials: HTTPAuthorizationCredentials | None = Depends(security_scheme),
+    token: str | None = Query(None, description="JWT alternatif pour les liens directs (download PDF/DOCX)."),
     db: AsyncSession = Depends(get_db),
 ) -> User:
     """Extraire et valider l'utilisateur courant depuis le token JWT.
+
+    Priorite : header `Authorization: Bearer <jwt>` puis fallback
+    `?token=<jwt>` (utile pour les liens directs type `<a href>` qui ne
+    peuvent pas attacher de header — download de rapport p.ex.).
 
     F02 : positionne aussi les variables de session PostgreSQL (RLS) avant
     toute requête métier ultérieure dans la transaction. Vérifie également
     que l'`Account` parent est actif (sinon 403).
     """
-    if credentials is None:
+    raw_token: str | None = None
+    if credentials is not None:
+        raw_token = credentials.credentials
+    elif token:
+        raw_token = token
+
+    if not raw_token:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Token d'authentification manquant",
         )
 
-    user_id = decode_token(credentials.credentials, expected_type="access")
+    user_id = decode_token(raw_token, expected_type="access")
     if user_id is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
