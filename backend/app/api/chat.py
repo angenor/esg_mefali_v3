@@ -603,6 +603,60 @@ async def _expire_pending_questions(
     )
 
 
+# Types de widgets F10 qui transportent leur reponse via `response_payload`
+# (JSONB structure) au lieu de `values: list[str]` du flow F18 QCU/QCM.
+_F10_WIDGET_TYPES = frozenset({
+    "yes_no", "select", "number", "date", "date_range",
+    "rating", "file_upload", "form", "summary_card",
+})
+
+
+def _synthesize_f10_response(qtype: str, payload: dict) -> str:
+    """Generer un texte court resumant la reponse F10 pour l'historique chat."""
+    if not isinstance(payload, dict):
+        return ""
+    if qtype == "yes_no":
+        return "Oui" if payload.get("value") else "Non"
+    if qtype == "select":
+        labels = payload.get("labels") or payload.get("selected_labels") or []
+        if isinstance(labels, list) and labels:
+            return ", ".join(str(x) for x in labels)
+        vals = payload.get("values") or payload.get("value") or []
+        if isinstance(vals, list):
+            return ", ".join(str(x) for x in vals)
+        return str(vals) if vals is not None else ""
+    if qtype == "number":
+        val = payload.get("value")
+        unit = payload.get("unit")
+        return f"{val} {unit}".strip() if unit else (str(val) if val is not None else "")
+    if qtype == "date":
+        return str(payload.get("value") or payload.get("date") or "")
+    if qtype == "date_range":
+        start = payload.get("start") or payload.get("from")
+        end = payload.get("end") or payload.get("to")
+        return f"{start} → {end}" if start or end else ""
+    if qtype == "rating":
+        val = payload.get("value")
+        scale = payload.get("scale")
+        lbl = payload.get("label")
+        base = f"{val}/{scale}" if val is not None and scale else str(val or "")
+        return f"{base} ({lbl})" if lbl else base
+    if qtype == "file_upload":
+        files = payload.get("files") or []
+        if isinstance(files, list):
+            names = [str(f.get("name") if isinstance(f, dict) else f) for f in files]
+            return ", ".join(n for n in names if n) or "Fichier(s) joint(s)"
+        return "Fichier joint"
+    if qtype == "form":
+        fields = payload.get("fields") or payload
+        if isinstance(fields, dict):
+            return "; ".join(f"{k}: {v}" for k, v in fields.items() if v not in (None, ""))
+        return ""
+    if qtype == "summary_card":
+        return str(payload.get("confirmation") or payload.get("value") or "")
+    return ""
+
+
 async def _resolve_interactive_question(
     db: AsyncSession,
     *,
@@ -610,10 +664,15 @@ async def _resolve_interactive_question(
     conversation: Conversation,
     values_json: str | None,
     justification: str | None,
+    response_payload_json: str | None = None,
 ):
     """Resoudre une question interactive (passage en answered).
 
     Retourne (question, contenu_synthetise) ou leve HTTPException.
+
+    F18 QCU/QCM : `values_json` est requis (list d'option ids).
+    F10 widgets : `response_payload_json` est utilise (dict structure) ;
+    `values_json` peut etre vide.
     """
     from datetime import datetime, timezone
 
@@ -635,40 +694,63 @@ async def _resolve_interactive_question(
     if question.state != InteractiveQuestionState.PENDING.value:
         raise HTTPException(status_code=409, detail="QUESTION_NOT_PENDING")
 
-    # Parse values
+    # Parse values (F18) et response_payload (F10).
     try:
         values = json.loads(values_json) if values_json else []
     except json.JSONDecodeError as exc:
         raise HTTPException(status_code=400, detail="INVALID_VALUES") from exc
 
-    if not isinstance(values, list) or not values:
-        raise HTTPException(status_code=422, detail="VALUES_REQUIRED")
+    response_payload: dict | None = None
+    if response_payload_json:
+        try:
+            parsed = json.loads(response_payload_json)
+            if isinstance(parsed, dict):
+                response_payload = parsed
+        except json.JSONDecodeError as exc:
+            raise HTTPException(status_code=400, detail="INVALID_PAYLOAD") from exc
 
-    if len(values) < question.min_selections or len(values) > question.max_selections:
-        raise HTTPException(status_code=400, detail="INVALID_VALUES")
+    is_f10 = question.question_type in _F10_WIDGET_TYPES
 
-    valid_ids = {opt.get("id") for opt in (question.options or [])}
-    if not all(v in valid_ids for v in values):
-        raise HTTPException(status_code=400, detail="INVALID_VALUES")
+    if is_f10:
+        if response_payload is None:
+            raise HTTPException(status_code=422, detail="PAYLOAD_REQUIRED")
+        synthesized = _synthesize_f10_response(question.question_type, response_payload)
+    else:
+        # F18 QCU/QCM : validation classique sur values
+        if not isinstance(values, list) or not values:
+            raise HTTPException(status_code=422, detail="VALUES_REQUIRED")
 
-    # Justification (defense en profondeur : tronquer a 400)
+        if len(values) < question.min_selections or len(values) > question.max_selections:
+            raise HTTPException(status_code=400, detail="INVALID_VALUES")
+
+        valid_ids = {opt.get("id") for opt in (question.options or [])}
+        if not all(v in valid_ids for v in values):
+            raise HTTPException(status_code=400, detail="INVALID_VALUES")
+
+        # Justification (defense en profondeur : tronquer a 400)
+        just = justification
+        if question.requires_justification:
+            if not just or not just.strip():
+                raise HTTPException(status_code=400, detail="JUSTIFICATION_REQUIRED")
+        if just and len(just) > 400:
+            raise HTTPException(status_code=400, detail="JUSTIFICATION_TOO_LONG")
+
+        # Synthese textuelle
+        label_by_id = {opt.get("id"): opt.get("label", "") for opt in (question.options or [])}
+        chosen_labels = [label_by_id.get(v, v) for v in values]
+        synthesized = ", ".join(chosen_labels)
+        if just:
+            synthesized = f"{synthesized}\n_{just}_"
+
+    # Justification optionnelle aussi pour les F10
     just = justification
-    if question.requires_justification:
-        if not just or not just.strip():
-            raise HTTPException(status_code=400, detail="JUSTIFICATION_REQUIRED")
     if just and len(just) > 400:
         raise HTTPException(status_code=400, detail="JUSTIFICATION_TOO_LONG")
 
-    # Synthese textuelle
-    label_by_id = {opt.get("id"): opt.get("label", "") for opt in (question.options or [])}
-    chosen_labels = [label_by_id.get(v, v) for v in values]
-    synthesized = ", ".join(chosen_labels)
-    if just:
-        synthesized = f"{synthesized}\n_{just}_"
-
     question.state = InteractiveQuestionState.ANSWERED.value
-    question.response_values = list(values)
+    question.response_values = list(values) if values else []
     question.response_justification = just
+    question.response_payload = response_payload
     question.answered_at = datetime.now(timezone.utc)
 
     await db.flush()
@@ -826,6 +908,7 @@ async def send_message(
     interactive_question_id: str | None = Form(None),
     interactive_question_values: str | None = Form(None),
     interactive_question_justification: str | None = Form(None),
+    interactive_question_response_payload: str | None = Form(None),
     current_page: str | None = Form(None),
     guidance_stats: str | None = Form(None),
     active_entities: str | None = Form(None),
@@ -872,6 +955,7 @@ async def send_message(
                 conversation=conversation,
                 values_json=interactive_question_values,
                 justification=interactive_question_justification,
+                response_payload_json=interactive_question_response_payload,
             )
         except HTTPException as exc:
             return StreamingResponse(
@@ -889,6 +973,8 @@ async def send_message(
             "values": iq.response_values,
             "justification": iq.response_justification,
             "module": iq.module,
+            # F10 — payload structure (rating/number/date/yes_no/...) si present
+            "response_payload": iq.response_payload,
         }
 
     # Si pas de contenu et pas de fichier, tenter de lire le body JSON
@@ -971,6 +1057,14 @@ async def send_message(
     user_profile = full_context.get("profile")
     user_projects_state = full_context.get("projects") or []
     context_memory = await _load_context_memory(db, user_id, conversation_id=conv_id)
+
+    # Fix deadlock : committer la session requete AVANT de demarrer le stream SSE.
+    # Sinon, le UPDATE IQ -> ANSWERED + INSERT user_message restent en lock sur
+    # `db` jusqu'a la fin du stream, et la session `sse_db` se bloque dans
+    # `ask_interactive_question` (UPDATE des PENDING -> EXPIRED) en attendant
+    # le release du row lock. Resultat : deadlock infini sur la 2eme reponse
+    # widget. Le commit explicite libere les locks avant le stream.
+    await db.commit()
 
     async def generate_sse() -> AsyncGenerator[str, None]:
         """Générer les événements SSE via le graphe LangGraph avec tool calling."""

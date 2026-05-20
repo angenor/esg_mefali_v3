@@ -14,10 +14,12 @@ from app.core.config import settings
 # qui crée des sessions SQLAlchemy.
 import app.core.auditable  # noqa: F401, E402
 
-# F12 — enregistre le hook `after_insert` sur Message pour l'embedding
-# asynchrone via asyncio.create_task. Doit être importé au démarrage
-# pour activer le listener SQLAlchemy.
-import app.modules.memory.hooks  # noqa: F401, E402
+# F12 — hook d'embedding automatique des messages chat DESACTIVE.
+# Décision produit : seuls les documents uploadés sont indexés (cf. module
+# documents). Les messages chat ne sont plus chunked/embedded automatiquement.
+# Le tool `recall_history` reste fonctionnel mais retournera des résultats
+# vides en l'absence de chunks.
+# import app.modules.memory.hooks  # noqa: F401, E402 — désactivé
 
 logger = logging.getLogger(__name__)
 

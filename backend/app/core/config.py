@@ -40,6 +40,11 @@ class Settings(BaseSettings):
     # n'expose pas /v1/embeddings ; cle OpenAI native recommandee).
     openai_api_key: str = ""
 
+    # Embeddings VoyageAI (F12 — alternative à OpenAI).
+    # voyage-large-2 retourne des vecteurs 1536 dims (compat schema VECTOR(1536)).
+    voyage_api_key: str = ""
+    voyage_model: str = "voyage-large-2"
+
     def model_post_init(self, __context: object) -> None:
         """Mapper les variables LLM_* vers openrouter_* si non definies."""
         if not self.openrouter_api_key and self.llm_api_key:

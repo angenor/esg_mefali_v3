@@ -2,6 +2,7 @@ test cette feature avec `agent-browser --headed`
 
 `claude --dangerously-skip-permissions`
 
+
 Email: `amadou@ecosolaire.sn`
 Mot de passe: `TestPass123!`
 

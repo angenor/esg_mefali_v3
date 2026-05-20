@@ -257,8 +257,48 @@ def chunk_text(
 # ─── Embedding ────────────────────────────────────────────────────────
 
 
+class _VoyageEmbeddings:
+    """Adaptateur minimal voyageai → interface aembed_documents/aembed_query.
+
+    Utilise le SDK voyageai sync via ``asyncio.to_thread`` (l'AsyncClient de
+    voyageai 0.2.x souffre d'un bug de connexion). Le modèle
+    ``voyage-large-2`` retourne des vecteurs 1536 dims (compat schema
+    VECTOR(1536) F12).
+    """
+
+    def __init__(self, api_key: str, model: str) -> None:
+        import voyageai
+
+        self._client = voyageai.Client(api_key=api_key)
+        self._model = model
+
+    async def aembed_documents(self, texts: list[str]) -> list[list[float]]:
+        import asyncio
+
+        def _call() -> list[list[float]]:
+            return self._client.embed(
+                texts, model=self._model, input_type="document"
+            ).embeddings
+
+        return await asyncio.to_thread(_call)
+
+    async def aembed_query(self, text: str) -> list[float]:
+        import asyncio
+
+        def _call() -> list[float]:
+            return self._client.embed(
+                [text], model=self._model, input_type="query"
+            ).embeddings[0]
+
+        return await asyncio.to_thread(_call)
+
+
 def _embeddings_model() -> Any:
-    """Construire le client OpenAIEmbeddings (text-embedding-3-small).
+    """Construire le client d'embeddings (VoyageAI prioritaire, fallback OpenAI).
+
+    Priorité :
+    1. VoyageAI si ``voyage_api_key`` configurée (recommandé, F12).
+    2. OpenAI / OpenRouter sinon.
 
     Isolé en helper pour faciliter le mocking dans les tests
     (``monkeypatch.setattr("app.modules.memory.service._embeddings_model", ...)``).
@@ -269,14 +309,20 @@ def _embeddings_model() -> Any:
             et applique le fallback best-effort (chunks insérés sans
             ``embedding`` / recherche sémantique vide).
     """
-    from langchain_openai import OpenAIEmbeddings
-
     from app.core.config import settings
+
+    if settings.voyage_api_key:
+        return _VoyageEmbeddings(
+            api_key=settings.voyage_api_key,
+            model=settings.voyage_model,
+        )
+
+    from langchain_openai import OpenAIEmbeddings
 
     api_key = settings.openai_api_key or settings.openrouter_api_key
     if not api_key:
         raise RuntimeError(
-            "Aucune clé d'embedding configurée. Définir OPENAI_API_KEY dans .env."
+            "Aucune clé d'embedding configurée. Définir VOYAGE_API_KEY ou OPENAI_API_KEY dans .env."
         )
     return OpenAIEmbeddings(
         model="text-embedding-3-small",
