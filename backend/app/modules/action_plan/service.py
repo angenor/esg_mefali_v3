@@ -189,7 +189,7 @@ async def generate_action_plan(
     from app.models.company import CompanyProfile
     from app.models.esg import ESGAssessment, ESGStatusEnum
     from app.models.financing import FundMatch, Intermediary
-    from app.prompts.action_plan import build_action_plan_prompt
+    from app.prompts.action_plan import build_action_plan_json_prompt
 
     # 1. Vérifier profil entreprise
     result = await db.execute(select(CompanyProfile).where(CompanyProfile.user_id == user_id))
@@ -237,8 +237,8 @@ async def generate_action_plan(
     )
     intermediaries = list(intermediaries_result.scalars().all())
 
-    # 5. Construire le prompt
-    prompt = build_action_plan_prompt(
+    # 5. Construire le prompt (variante JSON brut, sans tool calling)
+    prompt = build_action_plan_json_prompt(
         company_context=_build_company_context(profile),
         esg_context=_build_esg_context(esg_assessment),
         carbon_context=_build_carbon_context(carbon_assessment),
@@ -264,11 +264,27 @@ async def generate_action_plan(
     try:
         actions_data = _extract_json_array(raw_text)
     except (ValueError, json.JSONDecodeError) as exc:
-        logger.error("Erreur parsing JSON LLM action_plan: %s", exc)
+        # Log de la sortie LLM brute pour faciliter le debug en cas de
+        # format non conforme (markdown sans backticks, JSON encapsule
+        # dans un objet, etc.).
+        logger.error(
+            "Erreur parsing JSON LLM action_plan: %s\n--- raw LLM output (truncated) ---\n%s",
+            exc, (raw_text or "")[:2000],
+        )
         raise HTTPException(
             status_code=500,
             detail="Erreur lors de la génération du plan d'action. Réessayez.",
         ) from exc
+
+    if not isinstance(actions_data, list) or not actions_data:
+        logger.error(
+            "Plan d'action LLM retourne vide ou format invalide. Raw: %s",
+            (raw_text or "")[:500],
+        )
+        raise HTTPException(
+            status_code=500,
+            detail="Le LLM n'a pas retourné d'actions exploitables. Réessayez.",
+        )
 
     # 8. Archiver l'ancien plan actif et committer avant d'insérer le nouveau
     # (nécessaire en SQLite qui n'applique pas les index partiels PostgreSQL)
@@ -283,10 +299,23 @@ async def generate_action_plan(
     # Construire un mapping id -> intermédiaire pour les snapshots
     intermediary_map = {str(inter.id): inter for inter in intermediaries}
 
-    # 9. Créer le nouveau plan
+    # 9. Créer le nouveau plan (F02 multi-tenant : account_id propagé via user)
     company_name = getattr(profile, "company_name", None) or "votre entreprise"
+    account_id = getattr(profile, "account_id", None)
+    if account_id is None:
+        from app.models.user import User as _User
+        user_res = await db.execute(select(_User).where(_User.id == user_id))
+        user_obj = user_res.scalar_one_or_none()
+        if user_obj is None or user_obj.account_id is None:
+            raise HTTPException(
+                status_code=500,
+                detail="account_id introuvable pour l'utilisateur (F02 requis).",
+            )
+        account_id = user_obj.account_id
+
     plan = ActionPlan(
         user_id=user_id,
+        account_id=account_id,
         title=f"Plan d'action ESG {timeframe} mois — {company_name}",
         timeframe=timeframe,
         status=PlanStatus.active,
@@ -331,6 +360,7 @@ async def generate_action_plan(
 
         item = ActionItem(
             plan_id=plan.id,
+            account_id=account_id,
             title=str(action.get("title", "Action sans titre"))[:500],
             description=action.get("description"),
             category=_safe_category(action.get("category")),

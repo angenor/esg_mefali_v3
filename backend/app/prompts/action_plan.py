@@ -92,6 +92,91 @@ Quand tu reçois le résultat du tool generate_action_plan ou get_action_plan, p
 """
 
 
+ACTION_PLAN_JSON_PROMPT = """Tu es un expert en plans d'action ESG pour PME africaines francophones \
+(zones UEMOA / CEDEAO). Tu reçois ci-dessous le contexte d'une entreprise et tu dois produire \
+un plan d'action structuré.
+
+## PROFIL ENTREPRISE
+{company_context}
+
+## CONTEXTE ESG
+{esg_context}
+
+## CONTEXTE CARBONE
+{carbon_context}
+
+## CONTEXTE FINANCEMENT
+{financing_context}
+
+## INTERMÉDIAIRES DISPONIBLES
+{intermediaries_context}
+
+## HORIZON
+{timeframe} mois
+
+## CONSIGNE ABSOLUE — FORMAT DE SORTIE
+
+Tu DOIS répondre EXCLUSIVEMENT avec un tableau JSON valide. AUCUN texte avant ou après.
+PAS de balises markdown. PAS de commentaires. PAS d'appel de tool.
+SEULEMENT le tableau JSON brut.
+
+Génère entre 8 et 15 actions concrètes, priorisées, couvrant les 6 catégories :
+environment, social, governance, financing, carbon, intermediary_contact.
+
+Chaque action DOIT être un objet JSON avec EXACTEMENT ces champs :
+{{
+  "title": "Titre court de l'action (max 200 caractères, en français accentué)",
+  "description": "Description détaillée 1-3 phrases (en français accentué)",
+  "category": "environment" | "social" | "governance" | "financing" | "carbon" | "intermediary_contact",
+  "priority": "high" | "medium" | "low",
+  "due_date": "YYYY-MM-DD" (date ISO, dans l'horizon du plan),
+  "estimated_cost_xof": entier optionnel en FCFA (0 si gratuit),
+  "estimated_benefit": "Bénéfice attendu en 1 phrase",
+  "intermediary_id": null ou UUID d'un intermédiaire listé ci-dessus (pour catégorie intermediary_contact)
+}}
+
+EXEMPLE de sortie attendue (format strict) :
+[
+  {{
+    "title": "Mettre en place un système de tri sélectif des déchets",
+    "description": "Installer 3 points de collecte distincts (organiques, plastique, papier) dans les locaux. Former les équipes en 1 demi-journée.",
+    "category": "environment",
+    "priority": "high",
+    "due_date": "2026-08-01",
+    "estimated_cost_xof": 250000,
+    "estimated_benefit": "Réduction de 60% des déchets envoyés en décharge."
+  }}
+]
+
+INTERDIT : tout texte hors JSON, toute balise markdown, tout appel de tool.
+OBLIGATOIRE : le premier caractère de ta réponse est `[` et le dernier est `]`.
+"""
+
+
+def build_action_plan_json_prompt(
+    company_context: str = "Aucun profil disponible.",
+    esg_context: str = "Aucune évaluation ESG disponible.",
+    carbon_context: str = "Aucun bilan carbone disponible.",
+    financing_context: str = "Aucun matching financement disponible.",
+    intermediaries_context: str = "Aucun intermédiaire identifié.",
+    timeframe: int = 12,
+) -> str:
+    """Construire le prompt pour la génération JSON directe (pas de tool calling).
+
+    Utilisé par le service `generate_action_plan` qui appelle le LLM sans
+    tools bindés et attend un tableau JSON brut en sortie. Distinct de
+    `build_action_plan_prompt` qui sert au node LangGraph conversationnel.
+    """
+    return ACTION_PLAN_JSON_PROMPT.format(
+        company_context=company_context,
+        esg_context=esg_context,
+        carbon_context=carbon_context,
+        financing_context=financing_context,
+        intermediaries_context=intermediaries_context,
+        timeframe=timeframe,
+    )
+
+
 def build_action_plan_prompt(
     company_context: str = "Aucun profil disponible.",
     esg_context: str = "Aucune évaluation ESG disponible.",

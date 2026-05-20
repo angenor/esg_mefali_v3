@@ -560,6 +560,35 @@ async def router_node(
         active_module = None
         active_module_data = None
 
+    # Même garde défensive pour les autres modules (carbon, financing,
+    # application, credit, action_plan). Sans cela, le classifieur LLM
+    # `_is_topic_continuation` peut interpréter à tort une demande de
+    # changement comme une continuation du module en cours et router
+    # vers le mauvais node (donc sans les bons tools), entraînant des
+    # hallucinations type « je n'ai pas accès à ce tool ».
+    _EXPLICIT_INTENT_DETECTORS = {
+        "carbon": _detect_carbon_request,
+        "financing": _detect_financing_request,
+        "application": _detect_application_request,
+        "credit": _detect_credit_request,
+        "action_plan": _detect_action_plan_request,
+    }
+    if active_module and last_user_msg:
+        for target_module, detector in _EXPLICIT_INTENT_DETECTORS.items():
+            try:
+                explicit = detector(last_user_msg)
+            except Exception:
+                explicit = False
+            if explicit and active_module != target_module:
+                logger.info(
+                    "router_node : intention %s explicite détectée, reset "
+                    "active_module=%s",
+                    target_module, active_module,
+                )
+                active_module = None
+                active_module_data = None
+                break
+
     # Variable suivie pour les logs DEBUG (None si on ne passe pas par la branche).
     is_continuation: bool | None = None
 

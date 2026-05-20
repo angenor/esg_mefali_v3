@@ -31,8 +31,17 @@ def _import_memory_tools() -> list:
 def _route_after_router(state: ConversationState) -> str:
     """Décider du prochain nœud après le routeur.
 
-    Priorité : ESG > carbon > financing > application > credit > action_plan > document > chat.
+    Priorité : action_plan > ESG > carbon > financing > application > credit > document > chat.
+
+    `action_plan` est prioritaire car ses mots-clés ("plan d'action ESG",
+    "feuille de route", "roadmap") chevauchent souvent ceux d'ESG
+    ("évaluation ESG"). Sans cette priorité, une demande de plan d'action
+    se baserait sur l'évaluation ESG existante (has_active_esg=True) et
+    serait routée à tort vers esg_scoring, qui n'a pas les tools
+    `generate_action_plan` ni `get_action_plan`.
     """
+    if state.get("_route_action_plan"):
+        return "action_plan"
     if state.get("_route_esg"):
         return "esg_scoring"
     if state.get("_route_carbon"):
@@ -43,8 +52,6 @@ def _route_after_router(state: ConversationState) -> str:
         return "application"
     if state.get("_route_credit"):
         return "credit"
-    if state.get("_route_action_plan"):
-        return "action_plan"
     if state.get("has_document"):
         return "document"
     return "chat"
