@@ -460,12 +460,165 @@ async def batch_save_esg_criteria(
         return f"Erreur lors de la sauvegarde par lot : {e}"
 
 
+class GenerateESGReportArgs(BaseModel):
+    """Args strict pour `generate_esg_report`."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    assessment_id: str | None = Field(
+        None,
+        min_length=36,
+        max_length=36,
+        pattern=UUID_PATTERN,
+        description=(
+            "UUID de l'évaluation ESG. Si omis, on prend la dernière "
+            "évaluation au statut 'completed' de l'utilisateur."
+        ),
+    )
+
+
+@tool(args_schema=GenerateESGReportArgs)
+async def generate_esg_report(
+    config: RunnableConfig,
+    assessment_id: str | None = None,
+) -> str:
+    """Génère et sauvegarde le rapport ESG Word (.docx) d'une évaluation finalisée.
+
+    Use when:
+    - l'utilisateur demande « génère mon rapport ESG », « télécharge mon
+      rapport », « exporte mon évaluation ESG en document ».
+    - l'évaluation est au statut `completed` et l'utilisateur veut un
+      livrable partageable (bailleur, banque, audit).
+    - APRÈS un `finalize_esg_assessment` réussi, proposer ce tool à
+      l'utilisateur si la PME doit transmettre son score à un tiers.
+    Don't use when:
+    - l'évaluation n'est pas encore au statut `completed`
+      (utiliser `finalize_esg_assessment` d'abord).
+    - simple consultation des scores (utiliser `get_esg_assessment`).
+    - rapport carbone (utiliser `generate_carbon_report`).
+
+    Exemple: « Génère mon rapport ESG » -> generate_esg_report().
+    Anti: « Quel est mon score ESG ? » -> NE PAS appeler (consultation).
+
+    Retourne un JSON `{ok, report_id, status, file_size, message}`.
+    Le rapport est ensuite consultable et téléchargeable depuis la page
+    `/reports` ou `/esg/results` (bloc « Rapports générés »).
+
+    Args:
+        assessment_id: UUID de l'évaluation. Optionnel — si omis, prend
+            la dernière `completed`.
+    """
+    from app.core.audit_context import source_of_change_scope
+    from app.modules.esg.service import get_assessment as _get_esg
+    from app.modules.reports.service import generate_report as _gen
+
+    try:
+        db, user_id = get_db_and_user(config)
+
+        # Résoudre l'assessment_id : explicite ou dernière completed.
+        if assessment_id:
+            try:
+                assessment_uuid = uuid.UUID(assessment_id)
+            except (ValueError, TypeError):
+                return json.dumps(
+                    {"ok": False, "error": "assessment_id invalide."},
+                    ensure_ascii=False,
+                )
+        else:
+            # Récupérer la dernière évaluation completed.
+            from app.models.esg import ESGAssessment, ESGStatusEnum
+            from sqlalchemy import select
+
+            result = await db.execute(
+                select(ESGAssessment)
+                .where(
+                    ESGAssessment.user_id == user_id,
+                    ESGAssessment.status == ESGStatusEnum.completed,
+                )
+                .order_by(ESGAssessment.updated_at.desc())
+                .limit(1)
+            )
+            latest = result.scalar_one_or_none()
+            if latest is None:
+                return json.dumps(
+                    {
+                        "ok": False,
+                        "error": (
+                            "Aucune évaluation ESG finalisée trouvée. "
+                            "Terminez d'abord l'évaluation via "
+                            "`finalize_esg_assessment`."
+                        ),
+                        "code": "no_completed_assessment",
+                    },
+                    ensure_ascii=False,
+                )
+            assessment_uuid = latest.id
+
+        # Pré-check : assessment existe et appartient au user.
+        existing = await _get_esg(db, assessment_uuid, user_id)
+        if existing is None:
+            return json.dumps(
+                {
+                    "ok": False,
+                    "error": "Évaluation ESG introuvable pour cet utilisateur.",
+                    "code": "not_found",
+                },
+                ensure_ascii=False,
+            )
+
+        # Génération synchrone (LLM executive summary + Word doc).
+        with source_of_change_scope("llm"):
+            try:
+                report = await _gen(db, assessment_uuid, user_id)
+            except ValueError as exc:
+                msg = str(exc)
+                if "introuvable" in msg:
+                    code = "not_found"
+                elif "completed" in msg:
+                    code = "not_finalized"
+                elif "deja en cours" in msg:
+                    code = "concurrent"
+                else:
+                    code = "invalid"
+                return json.dumps(
+                    {"ok": False, "error": msg, "code": code},
+                    ensure_ascii=False,
+                )
+
+        return json.dumps(
+            {
+                "ok": True,
+                "report_id": str(report.id),
+                "assessment_id": str(assessment_uuid),
+                "status": (
+                    report.status.value
+                    if hasattr(report.status, "value")
+                    else str(report.status)
+                ),
+                "file_size": report.file_size,
+                "message": (
+                    "Rapport ESG Word généré avec succès. "
+                    "Consultable depuis la page Rapports ou "
+                    "Résultats ESG."
+                ),
+            },
+            ensure_ascii=False,
+        )
+    except Exception as exc:  # pragma: no cover — filet de sécurité
+        logger.exception("Erreur lors de la génération du rapport ESG via tool")
+        return json.dumps(
+            {"ok": False, "error": str(exc)},
+            ensure_ascii=False,
+        )
+
+
 ESG_TOOLS = [
     create_esg_assessment,
     save_esg_criterion_score,
     finalize_esg_assessment,
     get_esg_assessment,
     batch_save_esg_criteria,
+    generate_esg_report,
 ]
 
 

@@ -110,6 +110,8 @@ PAGE_TOOL_MAPPING: dict[str, frozenset[str]] = {
         "finalize_esg_assessment",
         "get_esg_assessment",
         "get_esg_assessment_chat",
+        # Generation du rapport ESG Word (.docx) post-finalisation.
+        "generate_esg_report",
         # F11 — KPICard pour synthèses ESG (score global, scores par pilier)
         "show_kpi_card",
         # F10 — summary card pour valider extractions critères ESG
@@ -247,6 +249,8 @@ MODULE_TOOL_MAPPING: dict[str, frozenset[str]] = {
         "batch_save_esg_criteria",
         "finalize_esg_assessment",
         "get_esg_assessment",
+        # Generation du rapport ESG Word (.docx) post-finalisation.
+        "generate_esg_report",
         # F11 — KPICard pour résumés ESG
         "show_kpi_card",
         # F10 — summary card pour valider extractions critères ESG
