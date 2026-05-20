@@ -112,7 +112,7 @@ def generate_recommendations(criteria_scores: dict[str, dict]) -> list[dict]:
             "priority": priority,
             "criteria_code": code,
             "pillar": criterion.pillar,
-            "title": f"Ameliorer : {criterion.label}",
+            "title": f"Améliorer : {criterion.label}",
             "description": f"Score actuel : {score}/10. {criterion.description}",
             "impact": impact,
             "effort": effort,
