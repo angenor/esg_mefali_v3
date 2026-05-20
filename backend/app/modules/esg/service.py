@@ -228,10 +228,28 @@ async def create_assessment(
     user_id: uuid.UUID,
     sector: str,
     conversation_id: uuid.UUID | None = None,
+    account_id: uuid.UUID | None = None,
 ) -> ESGAssessment:
-    """Creer une nouvelle evaluation ESG."""
+    """Creer une nouvelle evaluation ESG.
+
+    F02 multi-tenant : `account_id` est requis cote schema (NOT NULL).
+    Si non fourni, on resout via le user (fallback) pour rester compatible
+    avec les callers existants.
+    """
+    if account_id is None:
+        from app.models.user import User as _User
+
+        result = await db.execute(select(_User).where(_User.id == user_id))
+        user_obj = result.scalar_one_or_none()
+        if user_obj is None or user_obj.account_id is None:
+            raise ValueError(
+                "create_assessment: account_id introuvable pour l'utilisateur."
+            )
+        account_id = user_obj.account_id
+
     assessment = ESGAssessment(
         user_id=user_id,
+        account_id=account_id,
         sector=sector,
         conversation_id=conversation_id,
         status=ESGStatusEnum.draft,

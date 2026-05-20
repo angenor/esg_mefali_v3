@@ -8,6 +8,8 @@ from collections.abc import AsyncGenerator
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
 from fastapi.responses import StreamingResponse
 from langchain_core.messages import HumanMessage
+from datetime import datetime, timezone
+
 from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -611,6 +613,108 @@ _F10_WIDGET_TYPES = frozenset({
 })
 
 
+def _extract_profile_value(question, values: list, response_payload: dict | None):
+    """Extraire la valeur a ecrire dans `company_profiles.<profile_field>`.
+
+    Strategie par type de widget :
+    - qcu : option.id (chaine canonique, ex 'agroalimentaire' pour sector)
+    - qcm : list d'option.ids (concatenees pour les champs text type
+      environmental_practices / social_practices)
+    - number : payload.value (int converti pour les Integer cols, float sinon)
+    - yes_no : payload.value (bool natif pour has_* fields)
+    - select (mono) : premier id de payload.values
+    - rating : payload.value (int)
+    - date : payload.value (str ISO ; les champs year_founded utilisent ask_number)
+
+    Retourne `None` si non extractible (le caller skip silencieusement).
+    """
+    qtype = question.question_type
+    if qtype in ("qcu", "qcu_justification"):
+        return values[0] if values else None
+    if qtype in ("qcm", "qcm_justification"):
+        if not values:
+            return None
+        # Champs text (environmental_practices/social_practices) : joindre.
+        return ", ".join(str(v) for v in values)
+    if response_payload is None:
+        return None
+    if qtype == "number":
+        v = response_payload.get("value")
+        try:
+            f = float(v)
+            return int(f) if f.is_integer() else f
+        except (TypeError, ValueError):
+            return None
+    if qtype == "yes_no":
+        v = response_payload.get("value")
+        return bool(v) if v is not None else None
+    if qtype == "select":
+        vals = response_payload.get("values") or response_payload.get("value")
+        if isinstance(vals, list):
+            return vals[0] if vals else None
+        return vals
+    if qtype == "rating":
+        v = response_payload.get("value")
+        try:
+            return int(v) if v is not None else None
+        except (TypeError, ValueError):
+            return None
+    if qtype == "date":
+        return response_payload.get("value") or response_payload.get("date")
+    return None
+
+
+async def _apply_profile_update_from_widget(
+    db: AsyncSession,
+    *,
+    user_id: uuid.UUID,
+    question,
+    values: list,
+    response_payload: dict | None,
+) -> None:
+    """Hook deterministe : si le widget porte `payload.profile_field`, ecrire
+    automatiquement la reponse dans `company_profiles`.
+
+    Best-effort : toute erreur est loguee mais n'interrompt jamais le flow
+    chat. Whitelist stricte via `interactive_tools.VALID_PROFILE_FIELDS`
+    (defense en profondeur contre injection LLM).
+    """
+    from app.graph.tools.interactive_tools import VALID_PROFILE_FIELDS
+    from app.models.company import CompanyProfile
+
+    payload = question.payload or {}
+    if not isinstance(payload, dict):
+        return
+    field = payload.get("profile_field")
+    if not field or field not in VALID_PROFILE_FIELDS:
+        return
+
+    value = _extract_profile_value(question, values, response_payload)
+    if value is None or value == "":
+        return
+
+    try:
+        result = await db.execute(
+            update(CompanyProfile)
+            .where(CompanyProfile.user_id == user_id)
+            .values({field: value, "updated_at": datetime.now(timezone.utc)})
+        )
+        if result.rowcount == 0:
+            # Pas de profil existant : on cree minimal.
+            new = CompanyProfile(user_id=user_id, **{field: value})
+            db.add(new)
+            await db.flush()
+        logger.info(
+            "Profil auto-update : user=%s field=%s value=%r (via widget %s)",
+            user_id, field, value, question.question_type,
+        )
+    except Exception:  # noqa: BLE001 — best effort
+        logger.exception(
+            "Echec auto-update profil (field=%s, widget=%s)",
+            field, question.question_type,
+        )
+
+
 def _synthesize_f10_response(qtype: str, payload: dict) -> str:
     """Generer un texte court resumant la reponse F10 pour l'historique chat."""
     if not isinstance(payload, dict):
@@ -754,6 +858,20 @@ async def _resolve_interactive_question(
     question.answered_at = datetime.now(timezone.utc)
 
     await db.flush()
+
+    # Hook auto-update profil (si widget porte `payload.profile_field`).
+    # Best-effort : erreur loguee mais n'interrompt jamais le flow.
+    try:
+        await _apply_profile_update_from_widget(
+            db,
+            user_id=conversation.user_id,
+            question=question,
+            values=values,
+            response_payload=response_payload,
+        )
+    except Exception:  # noqa: BLE001 — defense en profondeur
+        logger.exception("Hook profile auto-update a leve")
+
     return question, synthesized
 
 

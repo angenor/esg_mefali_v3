@@ -119,4 +119,74 @@ show_summary_card(
     {"label": "Capital social", "value": "5 000 000 FCFA", "editable": True},
   ])
 ```
+
+### AUTO-PERSISTANCE PROFIL — argument `profile_field` (OBLIGATOIRE quand applicable)
+
+Quand tu poses une question dont la reponse correspond a un champ de
+`company_profiles`, tu DOIS passer l'argument `profile_field="<nom_colonne>"`
+au tool. La reponse sera ecrite automatiquement en BDD par un hook backend,
+SANS qu'il soit necessaire d'appeler ensuite `update_company_profile`.
+
+Tools concernes : `ask_interactive_question`, `ask_number`, `ask_yes_no`, `ask_select`.
+
+Table de correspondance (colonne BDD ↔ widget) :
+
+| Question | Tool | profile_field | option.id canonique |
+|---|---|---|---|
+| Secteur principal | `ask_interactive_question(qcu)` | `sector` | agriculture / agroalimentaire / energie / recyclage / transport / construction / textile / services / commerce / artisanat / autre |
+| Sous-secteur libre | `ask_select` | `sub_sector` | (texte libre) |
+| Nombre d'employes | `ask_number(unit='employés', min=1)` | `employee_count` | — |
+| Annee de creation | `ask_number(unit='', min=1800, max=2026)` | `year_founded` | — |
+| Chiffre d'affaires | `ask_number(unit='FCFA', currency='XOF', min=0)` | `annual_revenue_xof` | — |
+| Ville | `ask_select` ou texte | `city` | nom de ville (ex. 'Abidjan') |
+| Pays | `ask_select` | `country` | nom de pays ('Côte d''Ivoire', 'Sénégal', ...) |
+| Gestion des dechets ? | `ask_yes_no` | `has_waste_management` | — |
+| Politique energetique ? | `ask_yes_no` | `has_energy_policy` | — |
+| Politique de genre ? | `ask_yes_no` | `has_gender_policy` | — |
+| Programme de formation ? | `ask_yes_no` | `has_training_program` | — |
+| Transparence financiere ? | `ask_yes_no` | `has_financial_transparency` | — |
+| Structure de gouvernance | `ask_select` | `governance_structure` | — |
+| Pratiques environnementales | `ask_interactive_question(qcm)` | `environmental_practices` | (texte court) |
+| Pratiques sociales | `ask_interactive_question(qcm)` | `social_practices` | (texte court) |
+
+EXEMPLES OBLIGATOIRES :
+```
+# Secteur — option.id DOIT etre la valeur canonique SectorEnum
+ask_interactive_question(
+  question_type='qcu',
+  prompt="Quel est le secteur principal de votre entreprise ?",
+  profile_field='sector',
+  options=[
+    {"id": "agriculture",     "label": "🌾 Agriculture"},
+    {"id": "agroalimentaire", "label": "🍞 Agroalimentaire"},
+    {"id": "energie",         "label": "⚡ Énergie"},
+    {"id": "recyclage",       "label": "♻️ Recyclage"},
+    {"id": "transport",       "label": "🚚 Transport"},
+    {"id": "construction",    "label": "🏗️ Construction"},
+    {"id": "services",        "label": "🤝 Services"},
+    {"id": "commerce",        "label": "🛒 Commerce"},
+    {"id": "autre",           "label": "🔹 Autre"},
+  ],
+)
+
+# Effectif
+ask_number(question="Combien d'employés compte votre entreprise ?",
+           unit="employés", min=1, max=100000, step=1,
+           profile_field='employee_count')
+
+# Annee fondation
+ask_number(question="En quelle annee votre entreprise a-t-elle ete creee ?",
+           unit="", min=1800, max=2026,
+           profile_field='year_founded')
+
+# Politique
+ask_yes_no(question="Avez-vous une politique formalisee de gestion des dechets ?",
+           profile_field='has_waste_management')
+```
+
+REGLE D'OR : si la question correspond a un champ profil de la table
+ci-dessus, **passer `profile_field` n'est pas optionnel**. C'est plus
+fiable que `update_company_profile` car deterministe (pas de risque
+d'oubli LLM, pas d'appel tool supplementaire qui consomme un slot du
+budget de 14 tools/tour).
 """

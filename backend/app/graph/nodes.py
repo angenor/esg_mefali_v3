@@ -486,6 +486,10 @@ def _build_profiling_instructions(profile: dict | None) -> str:
         "Ne réponds JAMAIS uniquement en texte si des champs sont extractibles.\n"
         "Ensuite, intègre naturellement UNE question sur un champ manquant "
         "dans ta réponse, sans poser la question de façon abrupte.\n"
+        "Pour les questions interactives sur le profil, utilise l'argument "
+        "`profile_field` (cf. table de correspondance dans la section "
+        "AUTO-PERSISTANCE PROFIL des OUTILS INTERACTIFS).\n"
+        "\n"
         "Champs manquants :\n" + "\n".join(missing_fields)
     )
 

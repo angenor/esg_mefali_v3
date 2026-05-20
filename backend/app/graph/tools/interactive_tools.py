@@ -135,6 +135,19 @@ def _resolve_assistant_message_id(config: RunnableConfig | None) -> uuid.UUID | 
 # ════════════════════════════════════════════════════════════════════════
 
 
+# Champs `company_profiles` auto-persistables via le hook backend
+# `_apply_profile_update_from_widget` (cf. app/api/chat.py). Toute valeur
+# en dehors de cette whitelist est ignoree silencieusement (defense en
+# profondeur contre injection / mauvaise utilisation par le LLM).
+VALID_PROFILE_FIELDS: frozenset[str] = frozenset({
+    "sector", "sub_sector", "employee_count", "annual_revenue_xof",
+    "year_founded", "city", "country",
+    "has_waste_management", "has_energy_policy", "has_gender_policy",
+    "has_training_program", "has_financial_transparency",
+    "governance_structure", "environmental_practices", "social_practices",
+})
+
+
 class AskInteractiveQuestionArgs(BaseModel):
     """Args strict pour le tool ask_interactive_question (F18).
 
@@ -151,6 +164,12 @@ class AskInteractiveQuestionArgs(BaseModel):
     max_selections: int = Field(1, ge=1, le=8)
     requires_justification: bool = False
     justification_prompt: str | None = Field(None, min_length=1, max_length=200)
+    # Auto-persistance profil : si fourni, l'option.id selectionnee sera
+    # ecrite dans `company_profiles.<profile_field>` via hook backend
+    # (`_apply_profile_update_from_widget`). Pour les QCU profil-typed,
+    # chaque `option.id` DOIT etre une valeur canonique du champ cible
+    # (ex. sector : agriculture, agroalimentaire, energie, ...).
+    profile_field: str | None = Field(None, max_length=64)
 
 
 def _serialize_for_sse(question: InteractiveQuestion) -> dict[str, Any]:
@@ -202,6 +221,7 @@ async def ask_interactive_question(
     max_selections: int = 1,
     requires_justification: bool = False,
     justification_prompt: str | None = None,
+    profile_field: str | None = None,
     config: RunnableConfig = None,  # type: ignore[assignment]
 ) -> str:
     """Pose une question interactive cliquable (QCU/QCM, +/- justification).
@@ -214,6 +234,17 @@ async def ask_interactive_question(
     - reponse connue (utiliser `update_company_profile`).
     Exemple: "Quel secteur ?" -> ask_interactive_question(question_type='qcu', options=[...]).
     Anti: "Mon score ESG ?" -> NE PAS appeler.
+
+    Auto-persistance profil (`profile_field`) — recommande pour les QCU
+    profil-typed. Si fourni, l'option.id selectionnee est ecrite
+    automatiquement dans `company_profiles.<profile_field>` cote backend
+    (pas besoin d'appeler ensuite `update_company_profile`).
+
+    IMPORTANT : chaque `option.id` DOIT etre la valeur canonique exacte
+    du champ. Exemple pour `profile_field='sector'` :
+    options=[{id: 'agriculture', label: 'Agriculture'}, {id: 'agroalimentaire', label: 'Agroalimentaire'}, ...]
+    Valeurs canoniques sector : agriculture, energie, recyclage, transport,
+    construction, textile, agroalimentaire, services, commerce, artisanat, autre.
     """
     try:
         db, _user_id = get_db_and_user(config)
@@ -287,6 +318,11 @@ async def ask_interactive_question(
             )
         )
 
+        # Filtrer profile_field via whitelist avant persistance.
+        meta_payload: dict[str, Any] = {}
+        if profile_field and profile_field in VALID_PROFILE_FIELDS:
+            meta_payload["profile_field"] = profile_field
+
         question = InteractiveQuestion(
             conversation_id=conversation_id,
             account_id=account_id,
@@ -299,6 +335,7 @@ async def ask_interactive_question(
             max_selections=payload.max_selections,
             requires_justification=payload.requires_justification,
             justification_prompt=payload.justification_prompt,
+            payload=meta_payload or None,
             state=InteractiveQuestionState.PENDING.value,
         )
         db.add(question)
@@ -414,8 +451,18 @@ async def _persist_widget_question(
     min_selections: int = 1,
     max_selections: int = 1,
     log_args: dict[str, Any] | None = None,
+    profile_field: str | None = None,
 ) -> str:
-    """Pattern uniforme F10 : expire pending → insert → journalise → marker SSE."""
+    """Pattern uniforme F10 : expire pending → insert → journalise → marker SSE.
+
+    Si `profile_field` est dans la whitelist `VALID_PROFILE_FIELDS`, il est
+    injecte dans `payload["profile_field"]` pour que le hook backend
+    `_apply_profile_update_from_widget` (chat.py) auto-persiste la reponse
+    dans `company_profiles` apres resolution du widget.
+    """
+    if profile_field and profile_field in VALID_PROFILE_FIELDS:
+        payload = {**payload, "profile_field": profile_field}
+
     try:
         now = datetime.now(timezone.utc)
         # Marquer toutes les pending comme expired (invariant 1 pending max).
@@ -494,6 +541,7 @@ class AskYesNoArgs(BaseModel):
     confirm_label: str = Field("Oui", min_length=1, max_length=50)
     deny_label: str = Field("Non", min_length=1, max_length=50)
     destructive: bool = False
+    profile_field: str | None = Field(None, max_length=64)
 
 
 @tool(args_schema=AskYesNoArgs)
@@ -502,6 +550,7 @@ async def ask_yes_no(
     confirm_label: str = "Oui",
     deny_label: str = "Non",
     destructive: bool = False,
+    profile_field: str | None = None,
     config: RunnableConfig = None,  # type: ignore[assignment]
 ) -> str:
     """Pose une question oui/non (avec mode destructif optionnel).
@@ -547,6 +596,7 @@ async def ask_yes_no(
             "question": question[:200],
             "destructive": destructive,
         },
+        profile_field=profile_field,
     )
 
 
@@ -570,6 +620,7 @@ class AskSelectArgs(BaseModel):
     min_selections: int = Field(1, ge=1, le=200)
     max_selections: int = Field(1, ge=1, le=200)
     allow_other: bool = False
+    profile_field: str | None = Field(None, max_length=64)
 
     @field_validator("max_selections")
     @classmethod
@@ -587,6 +638,7 @@ async def ask_select(
     min_selections: int = 1,
     max_selections: int = 1,
     allow_other: bool = False,
+    profile_field: str | None = None,
     config: RunnableConfig = None,  # type: ignore[assignment]
 ) -> str:
     """Pose une question avec sélection dans une liste de 1 à 200 options.
@@ -640,6 +692,7 @@ async def ask_select(
             "options_count": len(options),
             "allow_other": allow_other,
         },
+        profile_field=profile_field,
     )
 
 
@@ -657,6 +710,7 @@ class AskNumberArgs(BaseModel):
     step: float = Field(1, gt=0)
     currency: SupportedCurrency | None = None
     default: float | None = None
+    profile_field: str | None = Field(None, max_length=64)
 
     @field_validator("max")
     @classmethod
@@ -691,6 +745,7 @@ async def ask_number(
     step: float = 1,
     currency: str | None = None,
     default: float | None = None,
+    profile_field: str | None = None,
     config: RunnableConfig = None,  # type: ignore[assignment]
 ) -> str:
     """Pose une question avec saisie numérique formatée (séparateurs milliers + devise).
@@ -740,6 +795,7 @@ async def ask_number(
             "unit": unit,
             "currency": currency,
         },
+        profile_field=profile_field,
     )
 
 
