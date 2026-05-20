@@ -1,6 +1,8 @@
 <script setup lang="ts">
+import { useAuth } from '~/composables/useAuth'
 import { useEsg } from '~/composables/useEsg'
 import { useEsgMultiReferential } from '~/composables/useEsgMultiReferential'
+import { useAuthStore } from '~/stores/auth'
 import { useEsgStore } from '~/stores/esg'
 import { useUiStore } from '~/stores/ui'
 import type { BenchmarkResponse, ReferentialOption } from '~/types/esg'
@@ -22,6 +24,22 @@ const {
 const benchmark = ref<BenchmarkResponse | null>(null)
 const allAssessments = ref<import('~/types/esg').ESGAssessmentSummary[]>([])
 const assessmentId = computed(() => route.query.id as string | undefined)
+
+// Rapports liés à cette évaluation (PDF/DOCX déjà générés)
+interface ReportRow {
+  id: string
+  report_type: string
+  status: string
+  file_path?: string | null
+  file_size?: number | null
+  generated_at?: string | null
+  created_at: string
+}
+const reports = ref<ReportRow[]>([])
+const reportsLoading = ref(false)
+
+const runtimeConfig = useRuntimeConfig()
+const apiBase = (runtimeConfig.public.apiBase as string) || 'http://localhost:8000/api'
 
 // F13 — Multi-référentiels
 const showReportModal = ref(false)
@@ -75,6 +93,7 @@ onMounted(async () => {
     loadBenchmark(),
     loadHistory(),
     loadMultiReferentialScores(assessmentId.value),
+    loadReports(assessmentId.value),
   ])
 })
 
@@ -90,8 +109,51 @@ async function loadLatestAssessment() {
     await Promise.all([
       loadBenchmark(),
       loadHistory(),
+      loadReports(latest.id),
     ])
   }
+}
+
+async function loadReports(id: string) {
+  reportsLoading.value = true
+  try {
+    const { apiFetch } = useAuth()
+    const data = await apiFetch<{ items: ReportRow[]; total: number }>(
+      `/reports/?assessment_id=${id}&type=esg&page=1&limit=5`,
+    )
+    reports.value = data?.items ?? []
+  } catch (e) {
+    reports.value = []
+  } finally {
+    reportsLoading.value = false
+  }
+}
+
+function formatBytes(bytes: number | null): string {
+  if (!bytes) return '—'
+  if (bytes < 1024) return `${bytes} o`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} Ko`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} Mo`
+}
+
+function formatReportDate(iso: string | null): string {
+  if (!iso) return '—'
+  const d = new Date(iso)
+  return d.toLocaleString('fr-FR', {
+    day: '2-digit', month: '2-digit', year: 'numeric',
+    hour: '2-digit', minute: '2-digit',
+  })
+}
+
+function reportExtension(filePath: string | null | undefined): string {
+  if (!filePath) return 'DOCX'
+  const m = String(filePath).match(/\.([a-zA-Z0-9]+)$/)
+  return m ? m[1].toUpperCase() : 'DOCX'
+}
+
+function downloadReportUrl(reportId: string): string {
+  const authStore = useAuthStore()
+  return `${apiBase}/reports/${reportId}/download?token=${authStore.accessToken ?? ''}`
 }
 
 async function loadBenchmark() {
@@ -278,6 +340,84 @@ const pillarLabels: Record<string, string> = {
             Recommandations
           </h2>
           <EsgRecommendations :recommendations="esgStore.currentAssessment.recommendations" />
+        </div>
+
+        <!-- Rapports générés (PDF/DOCX liés à cette évaluation) -->
+        <div
+          class="bg-white dark:bg-dark-card border border-gray-200 dark:border-dark-border rounded-xl p-6"
+        >
+          <div class="flex items-center justify-between mb-4 gap-3 flex-wrap">
+            <h2 class="text-lg font-semibold text-surface-text dark:text-surface-dark-text">
+              Rapports générés
+            </h2>
+            <NuxtLink
+              to="/reports"
+              class="inline-flex items-center gap-1.5 text-sm font-medium text-brand-blue hover:text-brand-blue/80 dark:text-blue-400 dark:hover:text-blue-300 transition-colors"
+            >
+              Voir tous mes rapports
+              <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 20 20" fill="currentColor">
+                <path fill-rule="evenodd" d="M10.293 3.293a1 1 0 011.414 0l6 6a1 1 0 010 1.414l-6 6a1 1 0 01-1.414-1.414L14.586 11H3a1 1 0 110-2h11.586l-4.293-4.293a1 1 0 010-1.414z" clip-rule="evenodd"/>
+              </svg>
+            </NuxtLink>
+          </div>
+
+          <!-- Chargement -->
+          <div v-if="reportsLoading" class="flex items-center justify-center py-6">
+            <div class="animate-spin rounded-full h-5 w-5 border-b-2 border-brand-blue" />
+          </div>
+
+          <!-- Aucun rapport -->
+          <div
+            v-else-if="reports.length === 0"
+            class="text-center py-6 text-sm text-gray-500 dark:text-gray-400"
+          >
+            <p class="mb-3">Aucun rapport n'a encore été généré pour cette évaluation.</p>
+            <p class="text-xs">Utilisez le bouton « Générer un rapport » en haut de la page pour produire votre premier document Word.</p>
+          </div>
+
+          <!-- Liste -->
+          <ul v-else class="divide-y divide-gray-100 dark:divide-dark-border">
+            <li
+              v-for="r in reports"
+              :key="r.id"
+              class="py-3 flex items-center justify-between gap-4"
+            >
+              <div class="flex items-start gap-3 min-w-0 flex-1">
+                <div class="shrink-0 w-9 h-9 rounded-lg bg-blue-50 dark:bg-blue-900/30 flex items-center justify-center">
+                  <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-blue-600 dark:text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                  </svg>
+                </div>
+                <div class="min-w-0 flex-1">
+                  <p class="text-sm font-medium text-surface-text dark:text-surface-dark-text truncate">
+                    Rapport ESG — {{ reportExtension(r.file_path) }}
+                  </p>
+                  <p class="text-xs text-gray-500 dark:text-gray-400">
+                    {{ formatReportDate(r.generated_at || r.created_at) }} · {{ formatBytes(r.file_size) }}
+                    <span
+                      v-if="r.status !== 'completed'"
+                      class="ml-2 px-1.5 py-0.5 rounded text-[10px] uppercase tracking-wide"
+                      :class="r.status === 'failed'
+                        ? 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300'
+                        : 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300'"
+                    >{{ r.status === 'failed' ? 'Échec' : 'En cours' }}</span>
+                  </p>
+                </div>
+              </div>
+              <a
+                v-if="r.status === 'completed'"
+                :href="downloadReportUrl(r.id)"
+                target="_blank"
+                rel="noopener"
+                class="shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-brand-blue text-brand-blue text-sm font-medium hover:bg-brand-blue hover:text-white transition-colors dark:border-blue-400 dark:text-blue-400"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5m0 0l5-5m-5 5V4"/>
+                </svg>
+                Télécharger
+              </a>
+            </li>
+          </ul>
         </div>
 
         <!-- Benchmark sectoriel -->
