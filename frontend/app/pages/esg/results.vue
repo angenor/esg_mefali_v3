@@ -251,7 +251,7 @@ const pillarLabels: Record<string, string> = {
         <!-- Criteres detailles -->
         <div class="bg-white dark:bg-dark-card border border-gray-200 dark:border-dark-border rounded-xl p-6">
           <h2 class="text-lg font-semibold text-surface-text dark:text-surface-dark-text mb-4">
-            Detail des criteres
+            Détail des critères
           </h2>
           <EsgCriteriaProgress :pillars="esgStore.currentScore.pillars" />
         </div>

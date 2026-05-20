@@ -18,13 +18,13 @@ const impactColors: Record<string, string> = {
 }
 
 const effortLabels: Record<string, string> = {
-  high: 'Effort eleve',
+  high: 'Effort élevé',
   medium: 'Effort moyen',
   low: 'Effort faible',
 }
 
 const impactLabels: Record<string, string> = {
-  high: 'Impact eleve',
+  high: 'Impact élevé',
   medium: 'Impact moyen',
   low: 'Impact faible',
 }
@@ -40,7 +40,7 @@ const impactLabels: Record<string, string> = {
           <th class="text-left py-3 px-2 font-semibold text-gray-600 dark:text-gray-400">Pilier</th>
           <th class="text-left py-3 px-2 font-semibold text-gray-600 dark:text-gray-400">Impact</th>
           <th class="text-left py-3 px-2 font-semibold text-gray-600 dark:text-gray-400">Effort</th>
-          <th class="text-left py-3 px-2 font-semibold text-gray-600 dark:text-gray-400">Delai</th>
+          <th class="text-left py-3 px-2 font-semibold text-gray-600 dark:text-gray-400">Délai</th>
         </tr>
       </thead>
       <tbody>
