@@ -3,13 +3,97 @@
 import json
 import logging
 import uuid
+from difflib import get_close_matches
 
 from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import tool
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.graph.tools.common import get_db_and_user, with_retry
 
 logger = logging.getLogger(__name__)
+
+
+async def _build_factor_not_found_payload(
+    db: AsyncSession,
+    lookup_category: str,
+    country: str | None,
+    year: int,
+) -> dict:
+    """Construit un payload d'erreur enrichi quand aucun facteur d'emission
+    n'est trouve : echantillon de categories disponibles + suggestions
+    fuzzy via difflib. Le LLM doit retry avec une cle valide au lieu de
+    basculer en calcul mental (cf. CLAUDE.md BUG #3 / F17).
+    """
+    from app.models.emission_factor import EmissionFactor
+    from app.models.source import PublicationStatus
+
+    available: list[str] = []
+    try:
+        # Cohérent avec la stratégie de fallback de factor_service :
+        # on liste les categories disponibles pour cette annee ou
+        # anterieure (pas de match exact strict, sinon la liste est
+        # vide quand le bilan est sur une annee non encore seedee).
+        stmt = (
+            select(EmissionFactor.category)
+            .where(
+                EmissionFactor.year <= year,
+                EmissionFactor.publication_status
+                == PublicationStatus.PUBLISHED.value,
+            )
+            .distinct()
+            .order_by(EmissionFactor.category)
+        )
+        result = await db.execute(stmt)
+        available = [row[0] for row in result.all() if row[0] is not None]
+    except Exception:
+        logger.debug(
+            "Impossible de recuperer la liste des facteurs disponibles "
+            "pour les suggestions did_you_mean.",
+            exc_info=True,
+        )
+
+    # Fuzzy match large (cutoff bas) pour attraper aussi les variantes
+    # FR avec accents -> EN sans accent (electricite -> electricity).
+    suggestions = get_close_matches(
+        lookup_category, available, n=3, cutoff=0.4
+    )
+
+    # Fallback substring : si difflib echoue (ex. "R-404A" vs
+    # "refrigerant_r404a"), on cherche la forme normalisee (lower,
+    # sans tirets/underscores) en sous-chaine d'une cle disponible.
+    if not suggestions and available:
+        needle = "".join(
+            c for c in lookup_category.lower() if c.isalnum()
+        )
+        if needle:
+            substring_matches = [
+                cat for cat in available
+                if needle in "".join(c for c in cat.lower() if c.isalnum())
+            ]
+            suggestions = substring_matches[:3]
+
+    return {
+        "status": "error",
+        "error_code": "factor_not_found",
+        "message": (
+            f"Aucun facteur d'emission publie trouve pour la subcategory "
+            f"'{lookup_category}' (pays={country or 'aucun'}, "
+            f"annee={year})."
+        ),
+        "available_categories_sample": available[:20],
+        "did_you_mean": suggestions,
+        "instruction_to_llm": (
+            "RETRY immediatement save_emission_entry avec une "
+            "'subcategory' valide tiree de 'did_you_mean' si non vide, "
+            "sinon de 'available_categories_sample'. NE PAS abandonner "
+            "la sauvegarde, NE PAS basculer en calcul mental. Les "
+            "subcategories valides sont en anglais (ex. 'electricity', "
+            "'fuel_diesel', 'transport_personal_diesel', "
+            "'waste_landfill', 'refrigerant_r404a', 'purchases_cement')."
+        ),
+    }
 
 
 @tool
@@ -103,6 +187,24 @@ async def save_emission_entry(
     tool, invoquer ``cite_source(source_id)`` (invariant n°1 — sourcage
     obligatoire pour tout chiffre publie).
 
+    Subcategories valides les plus courantes (toujours en anglais, snake_case) :
+      - energy : ``electricity``, ``fuel_diesel``, ``fuel_gasoline``,
+        ``fuel_butane``.
+      - transport : ``transport_personal_diesel``,
+        ``transport_personal_gasoline``, ``transport_freight_light_truck``,
+        ``transport_freight_heavy_truck``, ``fuel_diesel``.
+      - waste : ``waste_landfill``, ``waste_incineration``, ``waste_compost``,
+        ``waste_recycling``.
+      - agriculture : ``refrigerant_r404a``, ``refrigerant_r134a``,
+        ``refrigerant_r22``, ``refrigerant_r410a``.
+      - purchases : ``purchases_food``, ``purchases_steel``,
+        ``purchases_cement``, ``purchases_paper``, ``purchases_plastic``,
+        ``purchases_other``.
+
+    En cas d'erreur ``factor_not_found``, le payload retourne
+    ``did_you_mean`` (suggestions fuzzy) et ``available_categories_sample``.
+    L'agent DOIT retry avec une cle valide, jamais basculer en calcul mental.
+
     Args:
         assessment_id: UUID du bilan carbone.
         category: Categorie d'emission (energy, transport, waste, industrial,
@@ -112,6 +214,7 @@ async def save_emission_entry(
         source_description: Texte libre legacy decrivant la source utilisateur.
         subcategory: Sous-categorie / cle du facteur d'emission (ex:
             ``electricity``, ``electricity_ci_2024``, ``purchases_cement``).
+            Toujours en anglais snake_case. Voir la liste ci-dessus.
 
     Returns:
         JSON string avec status, entry, total_emissions_tco2e, factor_used,
@@ -184,21 +287,22 @@ async def save_emission_entry(
                         country=country,
                         year=assessment.year,
                     )
-                except EmissionFactorNotFoundError as exc:
-                    return json.dumps({
-                        "status": "error",
-                        "message": str(exc),
-                        "error_code": "factor_not_found",
-                    }, ensure_ascii=False)
+                except EmissionFactorNotFoundError:
+                    payload = await _build_factor_not_found_payload(
+                        db,
+                        lookup_category=subcategory,
+                        country=country,
+                        year=assessment.year,
+                    )
+                    return json.dumps(payload, ensure_ascii=False)
             else:
-                exc = EmissionFactorNotFoundError(
-                    lookup_category, country, assessment.year
+                payload = await _build_factor_not_found_payload(
+                    db,
+                    lookup_category=lookup_category,
+                    country=country,
+                    year=assessment.year,
                 )
-                return json.dumps({
-                    "status": "error",
-                    "message": str(exc),
-                    "error_code": "factor_not_found",
-                }, ensure_ascii=False)
+                return json.dumps(payload, ensure_ascii=False)
 
         factor = resolution.factor
         emission_factor_value = float(factor.value)

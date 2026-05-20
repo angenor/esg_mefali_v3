@@ -238,8 +238,12 @@ async def list_matches(
         profile = await get_or_create_profile(db, current_user.id)
         if profile.sector:
             company_sector = profile.sector.value if hasattr(profile.sector, "value") else profile.sector
-        if profile.annual_revenue:
-            company_revenue = int(profile.annual_revenue)
+        # F04 — la colonne legacy est ``annual_revenue_xof`` (BigInteger XOF),
+        # cohabite avec ``annual_revenue_amount``/``annual_revenue_currency``.
+        # ``get_fund_matches`` compare ce montant à ``fund.min_amount_xof``/
+        # ``fund.max_amount_xof`` : on garde donc l'entier XOF natif.
+        if profile.annual_revenue_xof is not None:
+            company_revenue = int(profile.annual_revenue_xof)
         if profile.city:
             company_city = profile.city
         if profile.country:
