@@ -172,8 +172,8 @@ async def _render_pdf_async(
     """Job asynchrone : rendu PDF + transition de statut."""
     from app.models.carbon import CarbonEmissionEntry
     from app.models.user import User
+    from app.modules.reports.carbon.docx_renderer import render_carbon_report_docx
     from app.modules.reports.carbon.equivalences import compute_equivalences
-    from app.modules.reports.carbon.pdf_renderer import render_carbon_pdf
     from app.modules.reports.carbon.sources_collector import collect_sources
 
     async with db_factory() as db:
@@ -202,7 +202,7 @@ async def _render_pdf_async(
             context = _build_context(assessment, user, entries, numbered, equivalences)
 
             output_path = UPLOADS_DIR / file_path
-            render_carbon_pdf(context, output_path)
+            render_carbon_report_docx(output_path=output_path, context=context)
 
             file_size = output_path.stat().st_size
             report.status = ReportStatusEnum.completed
@@ -245,7 +245,7 @@ async def generate_carbon_report(
 
     file_name = (
         f"rapport-carbone-{(user.company_name or 'pme').replace(' ', '-').lower()}"
-        f"-{datetime.now(timezone.utc).strftime('%Y-%m-%d')}-{uuid.uuid4().hex[:8]}.pdf"
+        f"-{datetime.now(timezone.utc).strftime('%Y-%m-%d')}-{uuid.uuid4().hex[:8]}.docx"
     )
     report = Report(
         user_id=user_id,

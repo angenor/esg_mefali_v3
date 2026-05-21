@@ -160,7 +160,14 @@ def build_graph() -> StateGraph:
     # MEMORY_TOOLS (recall_history) injecte partout (F12).
     # Le tool doit figurer AUSSI dans le ToolNode (et pas seulement bind_tools cote LLM),
     # sinon l'executeur rejette le tool_call et le LLM hallucine "tool indisponible".
-    create_tool_loop(graph, "chat", chat_node, tools=PROFILING_TOOLS + CHAT_TOOLS + DOCUMENT_TOOLS + INTERACTIVE_TOOLS + GUIDED_TOUR_TOOLS + MEMORY_TOOLS + PROJECT_TOOLS + RESOURCE_TOOLS)
+    # Tools de generation de rapports accessibles depuis le chat global
+    # (fallback robuste : sans cela, le LLM hallucine quand le routing
+    # ne bascule pas vers esg_scoring / carbon).
+    from app.graph.tools.esg_tools import generate_esg_report
+    from app.graph.tools.carbon_tools import generate_carbon_report
+    REPORT_TOOLS = [generate_esg_report, generate_carbon_report]
+
+    create_tool_loop(graph, "chat", chat_node, tools=PROFILING_TOOLS + CHAT_TOOLS + DOCUMENT_TOOLS + INTERACTIVE_TOOLS + GUIDED_TOUR_TOOLS + MEMORY_TOOLS + PROJECT_TOOLS + RESOURCE_TOOLS + REPORT_TOOLS)
     create_tool_loop(graph, "esg_scoring", esg_scoring_node, tools=ESG_TOOLS + INTERACTIVE_TOOLS + GUIDED_TOUR_TOOLS + MEMORY_TOOLS + RESOURCE_TOOLS)
     create_tool_loop(graph, "carbon", carbon_node, tools=CARBON_TOOLS + INTERACTIVE_TOOLS + GUIDED_TOUR_TOOLS + MEMORY_TOOLS + RESOURCE_TOOLS)
     create_tool_loop(graph, "financing", financing_node, tools=FINANCING_TOOLS + INTERACTIVE_TOOLS + GUIDED_TOUR_TOOLS + MEMORY_TOOLS + RESOURCE_TOOLS)

@@ -8,9 +8,14 @@ from pydantic import BaseModel, Field
 
 
 class ReportTypeEnum(str, Enum):
-    """Type de rapport genere."""
+    """Type de rapport genere.
+
+    Doit rester aligne avec le modele SQLAlchemy `app.models.report.ReportTypeEnum`
+    et l'enum PG `report_type_enum` (cf. migration 044).
+    """
 
     esg_compliance = "esg_compliance"
+    carbon = "carbon"
 
 
 class ReportStatusEnum(str, Enum):

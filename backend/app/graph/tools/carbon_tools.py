@@ -14,6 +14,10 @@ from app.graph.tools.common import get_db_and_user, with_retry
 
 logger = logging.getLogger(__name__)
 
+# Set au niveau module pour éviter le garbage collection prématuré des
+# tâches de rendering carbone dispatchées depuis le tool LLM.
+_BACKGROUND_RENDER_TASKS: set = set()
+
 
 async def _build_factor_not_found_payload(
     db: AsyncSession,
@@ -565,12 +569,53 @@ async def generate_carbon_report(
                     ensure_ascii=False,
                 )
 
+        # Commit explicite avant de lancer le job background, sinon
+        # `_render_pdf_async` ne verra pas la row Report fraîchement
+        # créée (autre session).
+        await db.commit()
+
+        # Bug fix : le service `generate_carbon_report` crée la row
+        # Report avec status='generating' mais ne dispatche PAS le job
+        # de rendering. Le router REST le fait via `BackgroundTasks`,
+        # mais ici (tool LangChain appelé depuis le chat SSE) on doit
+        # le déclencher manuellement via asyncio.create_task pour que
+        # le rapport passe à `completed`.
+        import asyncio
+        from app.core.database import async_session_factory
+        from app.modules.reports.carbon.service import _render_pdf_async
+
+        # Le job est best-effort : on garde une référence pour éviter
+        # le garbage collection prematuré (RuntimeWarning).
+        try:
+            loop = asyncio.get_running_loop()
+            task = loop.create_task(
+                _render_pdf_async(
+                    async_session_factory,
+                    report.id,
+                    assessment_uuid,
+                    user_id,
+                    report.file_path,
+                )
+            )
+            # Référence dans un set au niveau module pour éviter GC.
+            _BACKGROUND_RENDER_TASKS.add(task)
+            task.add_done_callback(_BACKGROUND_RENDER_TASKS.discard)
+        except RuntimeError:
+            logger.warning(
+                "Pas de loop asyncio : rapport carbone créé en 'generating' "
+                "mais rendering non dispatché (à compléter manuellement)."
+            )
+
         return json.dumps(
             {
                 "ok": True,
                 "report_id": str(report.id),
                 "status": "generating",
-                "message": "Generation du rapport carbone PDF demarree.",
+                "message": (
+                    "Génération du rapport carbone démarrée. "
+                    "Le rapport apparaîtra dans Mes rapports — onglet Carbone "
+                    "dans quelques secondes."
+                ),
             },
             ensure_ascii=False,
         )

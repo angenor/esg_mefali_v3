@@ -124,6 +124,8 @@ PAGE_TOOL_MAPPING: dict[str, frozenset[str]] = {
         "finalize_carbon_assessment",
         "get_carbon_summary",
         "get_carbon_summary_chat",
+        # Generation du rapport carbone Word (.docx) post-finalisation.
+        "generate_carbon_report",
         # F11 — KPICard pour résumé tCO2e + delta vs année précédente
         "show_kpi_card",
         # F10 — formulaire pour saisie rapide d'un poste d'émission
@@ -235,6 +237,10 @@ MODULE_TOOL_MAPPING: dict[str, frozenset[str]] = {
         "list_user_documents",
         # F06 — lecture projets depuis le noeud chat
         "list_projects",
+        # Génération de rapports accessibles depuis le chat global
+        # (évite que le LLM hallucine quand le routing reste sur chat).
+        "generate_esg_report",
+        "generate_carbon_report",
         # F11 — tools de visualisation tous disponibles dans le chat général.
         "show_kpi_card",
         "show_match_card",
@@ -261,6 +267,8 @@ MODULE_TOOL_MAPPING: dict[str, frozenset[str]] = {
         "save_emission_entry",
         "finalize_carbon_assessment",
         "get_carbon_summary",
+        # Generation du rapport carbone Word (.docx) post-finalisation.
+        "generate_carbon_report",
         # F11 — KPICard pour résumé tCO2e
         "show_kpi_card",
         # F10 — formulaire pour saisie rapide d'un poste d'émission

@@ -184,6 +184,9 @@ _CARBON_KEYWORDS = [
     r"\b[ée]missions?\s+de\s+gaz\b", r"\bgaz\s+[àa]\s+effet\b",
     r"\bempreinte\s+[ée]cologique\b", r"\bimpact\s+carbone\b",
     r"\br[ée]duction.*[ée]missions?\b",
+    # Rapport / export du bilan carbone (generate_carbon_report).
+    r"\brapport\s+carbone\b", r"\bexport.*carbone\b",
+    r"\bt[ée]l[ée]charger\s+(?:mon\s+)?bilan\s+carbone\b",
 ]
 _CARBON_PATTERNS = [re.compile(p, re.IGNORECASE) for p in _CARBON_KEYWORDS]
 
