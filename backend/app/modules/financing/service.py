@@ -369,6 +369,7 @@ async def get_fund_matches(
     company_country: str | None = None,
     company_city: str | None = None,
     available_documents: list[str] | None = None,
+    account_id: uuid.UUID | None = None,
 ) -> list[FundMatch]:
     """Calcule ou met a jour les matches pour un utilisateur.
 
@@ -422,6 +423,7 @@ async def get_fund_matches(
         if match is None:
             match = FundMatch(
                 user_id=user_id,
+                account_id=account_id,
                 fund_id=fund.id,
                 compatibility_score=score,
                 matching_criteria=criteria,

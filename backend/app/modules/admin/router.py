@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_admin, get_db
 from app.models.user import User
+from app.modules.admin.catalog_router import router as catalog_router
 from app.modules.admin.funds_router import router as funds_router
 from app.modules.admin.intermediaries_router import router as intermediaries_router
 from app.modules.admin.offers_router import router as offers_router
@@ -32,6 +33,8 @@ router.include_router(
 router.include_router(offers_router, prefix="/offers", tags=["admin-offers"])
 router.include_router(sources_router, prefix="/sources", tags=["admin-sources"])
 router.include_router(users_router, prefix="/users", tags=["admin-users"])
+# F25 (feature 044) — Catalogue admin unifié
+router.include_router(catalog_router, prefix="/catalog", tags=["admin-catalog"])
 
 
 @router.get("/health", response_model=AdminHealthResponse)

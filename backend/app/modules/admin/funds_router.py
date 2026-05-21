@@ -19,6 +19,10 @@ from app.api.deps import get_current_admin, get_db
 from app.models.financing import Fund
 from app.models.user import User
 from app.modules.admin.audit_helpers import log_admin_action
+from app.modules.admin.catalog_helpers import (
+    compute_has_incoherence,
+    escape_like_pattern,
+)
 from app.modules.admin.catalog_publish_helper import (
     EntityNotFoundError,
     PublishGatingError,
@@ -42,13 +46,24 @@ class FundCreatePayload(BaseModel):
 
 
 def _serialize_fund(fund: Fund) -> dict:
+    # F25 — exposition des champs versioning F04 (`version`, `valid_from`,
+    # `valid_to`, `superseded_by`) requis par le catalogue admin US2.
     return {
         "id": fund.id,
         "name": fund.name,
+        "organization": getattr(fund, "organization", None),
         "description": getattr(fund, "description", None),
         "publication_status": fund.publication_status,
         "status": fund.status.value if hasattr(fund.status, "value") else str(fund.status),
-        "fund_type": getattr(fund, "fund_type", None),
+        "fund_type": (
+            fund.fund_type.value if hasattr(fund.fund_type, "value") else str(fund.fund_type)
+        ) if getattr(fund, "fund_type", None) is not None else None,
+        "version": getattr(fund, "version", None),
+        "valid_from": getattr(fund, "valid_from", None),
+        "valid_to": getattr(fund, "valid_to", None),
+        "superseded_by": getattr(fund, "superseded_by", None),
+        "source_id": getattr(fund, "source_id", None),
+        "has_incoherence": compute_has_incoherence(fund, "fund"),
         "created_at": fund.created_at,
         "updated_at": fund.updated_at,
     }
@@ -73,9 +88,9 @@ async def list_funds(
         stmt = stmt.where(Fund.fund_type == fund_type)
         count_stmt = count_stmt.where(Fund.fund_type == fund_type)
     if q:
-        pattern = f"%{q.lower()}%"
+        pattern = f"%{escape_like_pattern(q.lower())}%"
         cond = or_(
-            func.lower(Fund.name).like(pattern),
+            func.lower(Fund.name).like(pattern, escape="\\"),
         )
         stmt = stmt.where(cond)
         count_stmt = count_stmt.where(cond)

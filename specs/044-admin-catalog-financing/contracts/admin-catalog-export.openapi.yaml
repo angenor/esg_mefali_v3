@@ -1,0 +1,71 @@
+openapi: 3.0.3
+info:
+  title: Admin Catalog — Export CSV
+  version: 1.0.0
+  description: |
+    Endpoint d'export CSV unifié pour les 4 onglets du catalogue admin.
+    Streaming UTF-8 avec BOM, séparateur virgule. ADMIN uniquement.
+servers:
+  - url: /api/admin/catalog
+
+paths:
+  /export:
+    get:
+      summary: Exporter la vue courante d'un onglet au format CSV
+      operationId: exportCatalogTab
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: tab
+          required: true
+          schema:
+            type: string
+            enum: [funds, intermediaries, offers, fund_intermediaries]
+        - in: query
+          name: q
+          schema: { type: string }
+          description: Recherche plein-texte appliquée (cohérente avec les listes)
+        - in: query
+          name: publication_status
+          schema:
+            type: string
+            enum: [draft, published, deprecated]
+        - in: query
+          name: fund_type
+          schema: { type: string }
+          description: Applicable à tab=funds uniquement
+        - in: query
+          name: status
+          schema:
+            type: string
+            enum: [active, expired, all]
+          description: Applicable à tab=fund_intermediaries uniquement
+        - in: query
+          name: sort
+          schema: { type: string, default: updated_at_desc }
+      responses:
+        "200":
+          description: Flux CSV streamé
+          headers:
+            Content-Disposition:
+              schema:
+                type: string
+                example: 'attachment; filename="catalog-funds-20260521.csv"'
+          content:
+            text/csv:
+              schema:
+                type: string
+                format: binary
+        "400": { description: Paramètre `tab` manquant ou invalide }
+        "401": { description: Non authentifié }
+        "403": { description: Accès réservé ADMIN }
+        "422":
+          description: Combinaison de filtres incompatible avec l'onglet demandé
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT

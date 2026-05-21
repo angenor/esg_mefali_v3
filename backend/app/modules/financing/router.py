@@ -292,6 +292,7 @@ async def list_matches(
         company_country=company_country,
         company_city=company_city,
         available_documents=available_documents,
+        account_id=current_user.account_id,
     )
     await db.commit()
 

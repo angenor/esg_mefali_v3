@@ -12,6 +12,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_current_admin, get_db
 from app.models.financing import Intermediary
 from app.models.user import User
+from app.modules.admin.catalog_helpers import (
+    compute_has_incoherence,
+    escape_like_pattern,
+)
 from app.modules.admin.catalog_publish_helper import (
     EntityNotFoundError,
     PublishGatingError,
@@ -26,12 +30,26 @@ router = APIRouter()
 
 
 def _serialize(intermediary: Intermediary) -> dict:
+    # F25 — exposition des champs versioning F04 pour le catalogue admin US2.
+    inter_type = getattr(intermediary, "intermediary_type", None)
+    org_type = getattr(intermediary, "organization_type", None)
     return {
         "id": intermediary.id,
         "name": intermediary.name,
         "publication_status": intermediary.publication_status,
         "country": getattr(intermediary, "country", None),
-        "type": getattr(intermediary, "type", None),
+        "intermediary_type": (
+            inter_type.value if hasattr(inter_type, "value") else str(inter_type)
+        ) if inter_type is not None else None,
+        "organization_type": (
+            org_type.value if hasattr(org_type, "value") else str(org_type)
+        ) if org_type is not None else None,
+        "version": getattr(intermediary, "version", None),
+        "valid_from": getattr(intermediary, "valid_from", None),
+        "valid_to": getattr(intermediary, "valid_to", None),
+        "superseded_by": getattr(intermediary, "superseded_by", None),
+        "source_id": getattr(intermediary, "source_id", None),
+        "has_incoherence": compute_has_incoherence(intermediary, "intermediary"),
         "created_at": intermediary.created_at,
         "updated_at": intermediary.updated_at,
     }
@@ -52,8 +70,8 @@ async def list_intermediaries(
         stmt = stmt.where(Intermediary.publication_status == publication_status)
         count_stmt = count_stmt.where(Intermediary.publication_status == publication_status)
     if q:
-        pattern = f"%{q.lower()}%"
-        cond = or_(func.lower(Intermediary.name).like(pattern))
+        pattern = f"%{escape_like_pattern(q.lower())}%"
+        cond = or_(func.lower(Intermediary.name).like(pattern, escape="\\"))
         stmt = stmt.where(cond)
         count_stmt = count_stmt.where(cond)
     offset = (page - 1) * page_size

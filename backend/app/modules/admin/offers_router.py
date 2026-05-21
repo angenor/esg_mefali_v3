@@ -17,6 +17,7 @@ from app.api.deps import get_current_admin, get_db
 from app.models.financing import Fund, Intermediary
 from app.models.offer import Offer
 from app.models.user import User
+from app.modules.admin.catalog_helpers import compute_has_incoherence
 from app.modules.admin.catalog_publish_helper import (
     EntityNotFoundError,
     PublishGatingError,
@@ -31,11 +32,19 @@ router = APIRouter()
 
 
 def _serialize(offer: Offer) -> dict:
+    # F25 — exposition des champs versioning F04 + name + alertes incohérence.
     return {
         "id": offer.id,
+        "name": getattr(offer, "name", None),
         "publication_status": offer.publication_status,
         "fund_id": offer.fund_id,
         "intermediary_id": offer.intermediary_id,
+        "version": getattr(offer, "version", None),
+        "valid_from": getattr(offer, "valid_from", None),
+        "valid_to": getattr(offer, "valid_to", None),
+        "superseded_by": getattr(offer, "superseded_by", None),
+        "source_id": getattr(offer, "source_id", None),
+        "has_incoherence": compute_has_incoherence(offer, "offer"),
         "created_at": offer.created_at,
         "updated_at": offer.updated_at,
     }
