@@ -24,7 +24,10 @@ import re
 # date/date_range/rating/file_upload) ce qui requiert une elevation a 22.
 # F14 ajoute 4 tools matching (list/compare/recompute/details) sur 3 noeuds → 26.
 # F20 ajoute 3 tools resources globaux (search/get/recommend) → 29.
-MAX_TOOLS_PER_TURN: int = 29
+# F045 ajoute match_funds_for_project sur 4 mappings (financing/application
+# modules + profile_projects/chat pages) → portee a 31 pour respecter la
+# borne MAX_TOOLS_PER_TURN sans casser les pages existantes.
+MAX_TOOLS_PER_TURN: int = 31
 
 # Whitelist transverse : tools toujours disponibles, ajoutes a chaque selection.
 # Source de verite : seuls les tools EFFECTIVEMENT exposes par le code peuvent
@@ -107,6 +110,8 @@ PAGE_TOOL_MAPPING: dict[str, frozenset[str]] = {
         "list_matches_for_project",
         "compare_offers_for_fund_v2",
         "get_match_details",
+        # F045 — Matching projet-centric depuis la page projets
+        "match_funds_for_project",
     }),
     # Evaluation ESG (pages /esg, /esg/results).
     "esg": frozenset({
@@ -154,6 +159,8 @@ PAGE_TOOL_MAPPING: dict[str, frozenset[str]] = {
         "compare_offers_for_fund_v2",
         "recompute_matches_for_project",
         "get_match_details",
+        # F045 — Matching projet-centric
+        "match_funds_for_project",
         # F16 — Comparateur multi-offres sourcé
         "compare_simulations",
     }),
@@ -254,6 +261,8 @@ MODULE_TOOL_MAPPING: dict[str, frozenset[str]] = {
         "show_map",
         # F14 — Lecture matching depuis le chat global
         "list_matches_for_project",
+        # F045 — Matching projet-centric depuis le chat global
+        "match_funds_for_project",
     }),
     "esg_scoring": frozenset({
         "create_esg_assessment",
@@ -296,6 +305,8 @@ MODULE_TOOL_MAPPING: dict[str, frozenset[str]] = {
         "compare_offers_for_fund_v2",
         "recompute_matches_for_project",
         "get_match_details",
+        # F045 — Matching projet-centric
+        "match_funds_for_project",
         # F16 — Comparateur multi-offres sourcé
         "compare_simulations",
     }),
@@ -315,6 +326,8 @@ MODULE_TOOL_MAPPING: dict[str, frozenset[str]] = {
         "list_matches_for_project",
         "compare_offers_for_fund_v2",
         "recompute_matches_for_project",
+        # F045 — Matching projet-centric
+        "match_funds_for_project",
         # F16 — Comparateur multi-offres sourcé
         "compare_simulations",
         "get_match_details",

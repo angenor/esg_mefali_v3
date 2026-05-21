@@ -667,6 +667,228 @@ async def link_document_to_project(
         return json.dumps({"ok": False, "error": str(e)}, ensure_ascii=False)
 
 
+# =====================================================================
+# F045 — match_funds_for_project (tool LangChain projet-centric)
+# Reference : specs/045-matching-projet-centric/contracts/tool-match-funds-for-project.md
+# =====================================================================
+
+
+class MatchFundsForProjectArgs(BaseModel):
+    """Args pour match_funds_for_project."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    project_id: Annotated[
+        uuid.UUID,
+        Field(
+            description=(
+                "UUID du projet pour lequel calculer le matching. Doit appartenir "
+                "au compte de l'utilisateur (RLS F02 silencieux sinon)."
+            ),
+        ),
+    ]
+    min_score: Annotated[
+        int,
+        Field(
+            default=60,
+            ge=0,
+            le=100,
+            description=(
+                "Seuil minimum sur project_score (0..100). Defaut 60."
+            ),
+        ),
+    ] = 60
+    limit: Annotated[
+        int,
+        Field(
+            default=10,
+            ge=1,
+            le=10,
+            description="Nombre maximum de matches retournes (top N). Hard cap 10.",
+        ),
+    ] = 10
+
+
+def _build_top_blockers_for_match(item: Any) -> list[dict[str, Any]]:
+    """Extrait jusqu'à 3 missing_criteria depuis project_score_breakdown."""
+    bd = item.project_score_breakdown or {}
+    missing = bd.get("missing_criteria") or []
+    out: list[dict[str, Any]] = []
+    for m in missing[:3]:
+        out.append({
+            "key": m.get("key", "unknown"),
+            "label_fr": m.get("label_fr", ""),
+            "current_value": m.get("current_value"),
+            "target_value": m.get("target_value"),
+        })
+    return out
+
+
+def _emit_match_card_project_marker(payload: dict[str, Any]) -> str:
+    """Construit un marker SSE F11 block_type='match_card_project'."""
+    from app.graph.tools.visualization_tools import _build_sse_marker
+    return _build_sse_marker("match_card_project", payload)
+
+
+@tool(args_schema=MatchFundsForProjectArgs)
+async def match_funds_for_project(
+    config: RunnableConfig,
+    project_id: uuid.UUID,
+    min_score: int = 60,
+    limit: int = 10,
+) -> str:
+    """Calculer les fonds verts compatibles avec un projet (matching projet-centric).
+
+    Use when:
+    - la PME a un projet concret et veut savoir quels fonds verts s'y appliquent.
+    - tu veux relancer le matching apres modification de critères du projet.
+    Don't use when:
+    - la PME n'a pas encore de projet (utiliser create_project d'abord).
+    - tu veux comparer plusieurs intermediaires pour un meme fonds (utiliser
+      compare_offers_for_fund).
+
+    Retourne un JSON compact avec project_score / company_score / divergence_short
+    pour chaque match (top N) + emet jusqu'a 5 <MatchCardBlock> F11 (block_type
+    'match_card_project') via marker SSE en parallele.
+
+    Args:
+        project_id: UUID du projet (doit appartenir au compte courant).
+        min_score: seuil minimum sur project_score (defaut 60).
+        limit: nombre max de matches retournes (defaut 10, hard cap 10).
+
+    Returns:
+        JSON string : {project_id, project_name, matches_count, top_matches: [...],
+        no_match_reason, visualization_emitted}.
+    """
+    from app.modules.financing import matching_service
+    from app.modules.financing.divergence_templates import build_divergence_short
+
+    try:
+        db, _user_id, account_id = await _get_account_id_from_config(config)
+    except ValueError as exc:
+        return json.dumps(
+            {"error": {"code": "account_missing", "message_fr": str(exc)}},
+            ensure_ascii=False,
+        )
+
+    try:
+        with source_of_change_scope("llm"):
+            response = await matching_service.match_funds_for_project(
+                db,
+                account_id=account_id,
+                project_id=project_id,
+                min_score=min_score,
+                limit=min(limit, 10),
+                force_recompute=False,
+            )
+            await db.commit()
+    except ValueError:
+        return json.dumps(
+            {
+                "error": {
+                    "code": "project_not_found",
+                    "message_fr": (
+                        "Le projet demandé n'existe pas ou n'appartient pas "
+                        "à votre compte."
+                    ),
+                }
+            },
+            ensure_ascii=False,
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("match_funds_for_project tool failed (project=%s)", project_id)
+        msg = str(exc).lower()
+        if "project_score" in msg and "column" in msg:
+            return json.dumps(
+                {
+                    "error": {
+                        "code": "migration_not_applied",
+                        "message_fr": (
+                            "La fonctionnalité de matching projet n'est pas "
+                            "encore disponible."
+                        ),
+                    }
+                },
+                ensure_ascii=False,
+            )
+        return json.dumps(
+            {
+                "error": {
+                    "code": "internal_error",
+                    "message_fr": "Erreur interne lors du calcul du matching.",
+                }
+            },
+            ensure_ascii=False,
+        )
+
+    # Emission F11 (max 5 blocks)
+    visualization_emitted = False
+    sse_markers: list[str] = []
+    for item in response.top_matches[:5]:
+        bd = item.project_score_breakdown or {}
+        sources_used = bd.get("sources_used") or []
+        block_payload = {
+            "title": (
+                f"{item.fund_name} via {item.intermediary_name}"
+                if item.intermediary_name else item.fund_name
+            )[:120],
+            "fund_name": item.fund_name,
+            "intermediary_name": item.intermediary_name,
+            "project_score": int(item.project_score),
+            "company_score": int(item.company_score),
+            "divergence": build_divergence_short(
+                int(item.project_score), int(item.company_score),
+            ),
+            "fund_url": f"/financing/offers/{item.offer_id}",
+            "offer_id": str(item.offer_id),
+            "project_id": str(response.project_id),
+            "sources": [
+                {
+                    "source_id": str(s.get("source_id"))
+                    if s.get("source_id") else None,
+                    "source_name": s.get("source_name", ""),
+                    "url": s.get("url"),
+                }
+                for s in sources_used[:10]
+                if isinstance(s, dict)
+            ],
+            "missing_criteria_top_3": _build_top_blockers_for_match(item),
+            "factor_status": bd.get("factor_status", "ok"),
+        }
+        sse_markers.append(_emit_match_card_project_marker(block_payload))
+        visualization_emitted = True
+
+    # Payload compact pour le LLM
+    top_matches_payload: list[dict[str, Any]] = []
+    for item in response.top_matches:
+        top_matches_payload.append({
+            "offer_id": str(item.offer_id),
+            "fund_id": str(item.fund_id),
+            "fund_name": item.fund_name,
+            "intermediary_name": item.intermediary_name,
+            "project_score": int(item.project_score),
+            "company_score": int(item.company_score),
+            "divergence_short": build_divergence_short(
+                int(item.project_score), int(item.company_score),
+            ),
+            "top_3_blockers_project": _build_top_blockers_for_match(item),
+        })
+
+    payload = {
+        "project_id": str(response.project_id),
+        "project_name": response.project_name,
+        "matches_count": response.matches_count,
+        "top_matches": top_matches_payload,
+        "no_match_reason": response.no_match_reason,
+        "visualization_emitted": visualization_emitted,
+    }
+
+    result = json.dumps(payload, ensure_ascii=False)
+    if sse_markers:
+        result = result + "".join(sse_markers)
+    return result
+
+
 PROJECT_TOOLS = [
     list_projects,
     get_project,
@@ -675,7 +897,8 @@ PROJECT_TOOLS = [
     delete_project,
     duplicate_project,
     link_document_to_project,
+    match_funds_for_project,
 ]
 
 
-__all__ = ["PROJECT_TOOLS"]
+__all__ = ["PROJECT_TOOLS", "match_funds_for_project"]

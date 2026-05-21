@@ -554,3 +554,107 @@ async def get_active_projects_for_user(
             "auto_generated": project.auto_generated,
         })
     return out
+
+
+# =====================================================================
+# F045 — Listener after_update Project : debounce 30s + recompute async
+# Reference : specs/045-matching-projet-centric/research.md R7
+# =====================================================================
+
+import asyncio  # noqa: E402  # late import : evite cycle avec matching_service charge en lifespan
+import time  # noqa: E402
+
+from sqlalchemy import event, inspect as sa_inspect  # noqa: E402
+
+
+# Champs critiques dont la modification declenche un recompute matching.
+# Couvre les criteres F06 (target_amount, objective_env, expected_impact_tco2e,
+# expected_beneficiaries) + les 5 nouveaux F045 (taxonomie_verte_uemoa_aligned,
+# gcf_priority_themes, gender_inclusion, vulnerable_populations, project_esg_score).
+_MATCHING_CRITICAL_FIELDS: frozenset[str] = frozenset({
+    "sector",
+    "target_amount_amount",
+    "target_amount_currency",
+    "objective_env",
+    "expected_impact_tco2e",
+    "expected_beneficiaries",
+    # F045
+    "taxonomie_verte_uemoa_aligned",
+    "gcf_priority_themes",
+    "gender_inclusion",
+    "vulnerable_populations",
+    "project_esg_score",
+})
+
+# Debounce in-process : {project_id_str: last_recompute_request_ts}.
+# Volatile (perd l'etat au restart) — acceptable par R7.
+_DEBOUNCE_WINDOW_SECONDS: float = 30.0
+_LAST_RECOMPUTE_REQUEST: dict[str, float] = {}
+
+# References aux taches background pour eviter GC precoce.
+_BACKGROUND_RECOMPUTE_TASKS: set[asyncio.Task[Any]] = set()
+
+
+def _has_critical_field_changed(project: Project) -> bool:
+    """Inspecte les attrs SQLAlchemy pour detecter un changement critique."""
+    try:
+        state = sa_inspect(project)
+    except Exception:  # noqa: BLE001
+        return False
+    for field in _MATCHING_CRITICAL_FIELDS:
+        try:
+            attr = state.attrs[field]
+            if attr.history.has_changes():
+                return True
+        except Exception:  # noqa: BLE001 — champ absent (compat sql)
+            continue
+    return False
+
+
+async def _async_recompute_runner(project_id: uuid.UUID) -> None:
+    """Ouvre une session async dediee et execute le batch."""
+    from app.core.database import async_session_factory
+    from app.modules.financing import matching_service
+    try:
+        async with async_session_factory() as bg_db:
+            await matching_service.execute_recompute_batch(
+                bg_db, project_id=project_id,
+            )
+    except Exception:  # noqa: BLE001
+        logger.exception(
+            "F045 recompute async: echec batch project=%s", project_id,
+        )
+
+
+@event.listens_for(Project, "after_update", propagate=True)
+def _project_after_update_recompute(_mapper: Any, _connection: Any, target: Project) -> None:
+    """Schedule un recompute matching async (best-effort) avec debounce 30s.
+
+    Pattern aligne avec F12 hooks.py : tente asyncio.create_task ; no-op
+    silencieux si pas d'event loop (tests sync, scripts batch).
+    """
+    if not _has_critical_field_changed(target):
+        return
+
+    project_id_str = str(target.id)
+    now = time.monotonic()
+    last = _LAST_RECOMPUTE_REQUEST.get(project_id_str)
+    if last is not None and (now - last) < _DEBOUNCE_WINDOW_SECONDS:
+        return  # debounce hit
+    _LAST_RECOMPUTE_REQUEST[project_id_str] = now
+
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        # Pas de loop : no-op (tests sync). On a deja marque le debounce.
+        return
+
+    coro = _async_recompute_runner(target.id)
+    task = loop.create_task(coro)
+    _BACKGROUND_RECOMPUTE_TASKS.add(task)
+    task.add_done_callback(_BACKGROUND_RECOMPUTE_TASKS.discard)
+
+
+def is_after_update_listener_registered() -> bool:
+    """Verifie que le listener est bien enregistre (utile pour les tests)."""
+    return event.contains(Project, "after_update", _project_after_update_recompute)

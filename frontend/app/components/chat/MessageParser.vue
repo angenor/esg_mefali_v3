@@ -14,6 +14,11 @@ const MapBlock = defineAsyncComponent(
   () => import('~/components/richblocks/MapBlock.vue'),
 )
 
+// F045 — ProjectMatchCardBlock pour block_type='match_card_project'.
+const ProjectMatchCardBlock = defineAsyncComponent(
+  () => import('~/components/financing/ProjectMatchCardBlock.vue'),
+)
+
 const props = defineProps<{
   content: string
   isStreaming?: boolean
@@ -61,7 +66,11 @@ const camelBlocks = computed(() => {
   if (!props.visualizationBlocks) return []
   return props.visualizationBlocks.map((b) => ({
     blockType: b.blockType,
-    componentProps: toCamelCase(b.payload),
+    // F045 : match_card_project conserve le payload snake_case (mirror Pydantic).
+    componentProps:
+      b.blockType === 'match_card_project'
+        ? { payload: b.payload }
+        : toCamelCase(b.payload),
   }))
 })
 
@@ -137,6 +146,11 @@ function handleBlockOpenSource(sid: string) {
       />
       <MapBlock
         v-else-if="block.blockType === 'show_map'"
+        v-bind="block.componentProps"
+        @navigate="handleBlockNavigate"
+      />
+      <ProjectMatchCardBlock
+        v-else-if="block.blockType === 'match_card_project'"
         v-bind="block.componentProps"
         @navigate="handleBlockNavigate"
       />

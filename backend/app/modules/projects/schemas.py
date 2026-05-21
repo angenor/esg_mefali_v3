@@ -9,6 +9,10 @@ from typing import Annotated, Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from app.core.matching_constants import (
+    PROJECT_GCF_PRIORITY_THEMES_VALUES,
+    PROJECT_VULNERABLE_POPULATIONS_VALUES,
+)
 from app.core.money import Money
 
 
@@ -88,6 +92,13 @@ class ProjectBase(BaseModel):
         str | None, Field(default=None, max_length=100)
     ] = None
 
+    # --- F045 : 5 nouveaux champs projet-centric ---
+    taxonomie_verte_uemoa_aligned: bool | None = None
+    gcf_priority_themes: list[str] = Field(default_factory=list, max_length=8)
+    gender_inclusion: bool | None = None
+    vulnerable_populations: list[str] = Field(default_factory=list, max_length=5)
+    project_esg_score: Annotated[int | None, Field(default=None, ge=0, le=100)] = None
+
     @field_validator("objective_env")
     @classmethod
     def _validate_objective_env(cls, v: list[str]) -> list[str]:
@@ -97,6 +108,29 @@ class ProjectBase(BaseModel):
                     f"objective_env value '{o}' not in {sorted(OBJECTIVE_ENV_VALUES)}"
                 )
         return v
+
+    @field_validator("gcf_priority_themes")
+    @classmethod
+    def _validate_gcf_themes(cls, v: list[str]) -> list[str]:
+        for theme in v:
+            if theme not in PROJECT_GCF_PRIORITY_THEMES_VALUES:
+                raise ValueError(
+                    f"gcf_priority_themes value '{theme}' not in "
+                    f"{sorted(PROJECT_GCF_PRIORITY_THEMES_VALUES)}"
+                )
+        # dedupe en preservant l'ordre
+        return list(dict.fromkeys(v))
+
+    @field_validator("vulnerable_populations")
+    @classmethod
+    def _validate_vulnerable(cls, v: list[str]) -> list[str]:
+        for pop in v:
+            if pop not in PROJECT_VULNERABLE_POPULATIONS_VALUES:
+                raise ValueError(
+                    f"vulnerable_populations value '{pop}' not in "
+                    f"{sorted(PROJECT_VULNERABLE_POPULATIONS_VALUES)}"
+                )
+        return list(dict.fromkeys(v))
 
     @field_validator("maturity")
     @classmethod
@@ -165,6 +199,47 @@ class ProjectUpdate(BaseModel):
     location_region: Annotated[
         str | None, Field(default=None, max_length=100)
     ] = None
+
+    # --- F045 : 5 nouveaux champs projet-centric (PATCH) ---
+    taxonomie_verte_uemoa_aligned: bool | None = None
+    gcf_priority_themes: list[str] | None = None
+    gender_inclusion: bool | None = None
+    vulnerable_populations: list[str] | None = None
+    project_esg_score: Annotated[int | None, Field(default=None, ge=0, le=100)] = None
+
+    @field_validator("gcf_priority_themes")
+    @classmethod
+    def _validate_gcf_themes_update(
+        cls, v: list[str] | None,
+    ) -> list[str] | None:
+        if v is None:
+            return None
+        if len(v) > 8:
+            raise ValueError("gcf_priority_themes max_length=8")
+        for theme in v:
+            if theme not in PROJECT_GCF_PRIORITY_THEMES_VALUES:
+                raise ValueError(
+                    f"gcf_priority_themes value '{theme}' not in "
+                    f"{sorted(PROJECT_GCF_PRIORITY_THEMES_VALUES)}"
+                )
+        return list(dict.fromkeys(v))
+
+    @field_validator("vulnerable_populations")
+    @classmethod
+    def _validate_vulnerable_update(
+        cls, v: list[str] | None,
+    ) -> list[str] | None:
+        if v is None:
+            return None
+        if len(v) > 5:
+            raise ValueError("vulnerable_populations max_length=5")
+        for pop in v:
+            if pop not in PROJECT_VULNERABLE_POPULATIONS_VALUES:
+                raise ValueError(
+                    f"vulnerable_populations value '{pop}' not in "
+                    f"{sorted(PROJECT_VULNERABLE_POPULATIONS_VALUES)}"
+                )
+        return list(dict.fromkeys(v))
 
     @field_validator("objective_env")
     @classmethod

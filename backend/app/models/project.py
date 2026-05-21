@@ -147,6 +147,24 @@ class Project(Auditable, UUIDMixin, TimestampMixin, Base):
         Boolean, nullable=False, default=False, server_default="false",
     )
 
+    # --- F045 (matching projet-centric) : 5 colonnes ajoutees par mig 046 ---
+    # Voir specs/045-matching-projet-centric/data-model.md §1.1.
+    taxonomie_verte_uemoa_aligned: Mapped[bool | None] = mapped_column(
+        Boolean, nullable=True,
+    )
+    gcf_priority_themes: Mapped[list[str]] = mapped_column(
+        JSONType, nullable=False, server_default="[]", default=list,
+    )
+    gender_inclusion: Mapped[bool | None] = mapped_column(
+        Boolean, nullable=True,
+    )
+    vulnerable_populations: Mapped[list[str]] = mapped_column(
+        JSONType, nullable=False, server_default="[]", default=list,
+    )
+    project_esg_score: Mapped[int | None] = mapped_column(
+        Integer, nullable=True,
+    )
+
     # Relations
     project_documents: Mapped[list["ProjectDocument"]] = relationship(
         "ProjectDocument",
@@ -213,5 +231,11 @@ class Project(Auditable, UUIDMixin, TimestampMixin, Base):
         CheckConstraint(
             "location_country IS NULL OR length(location_country) = 2",
             name="projects_location_country_chk",
+        ),
+        # F045 : project_esg_score 0..100
+        CheckConstraint(
+            "project_esg_score IS NULL OR "
+            "(project_esg_score >= 0 AND project_esg_score <= 100)",
+            name="projects_project_esg_score_chk",
         ),
     )

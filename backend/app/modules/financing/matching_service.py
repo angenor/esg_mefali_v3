@@ -27,6 +27,11 @@ from app.models.match_alert_subscription import MatchAlertSubscription
 from app.models.offer import Offer
 from app.models.offer_match import OfferMatch
 from app.models.project import Project
+from app.modules.financing.matching_schemas import (
+    BoostAppliedSchema,
+    MatchFundsItem,
+    MatchFundsResponse,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -362,6 +367,16 @@ async def compute_offer_match(
     now = datetime.now(timezone.utc)
     expires_at = now + timedelta(days=MATCH_TTL_DAYS)
 
+    # F045 : populate aussi les 4 nouvelles colonnes (project_score, company_score,
+    # project_score_breakdown, divergence_explanation) pour que les recompute F14
+    # existants ne laissent pas ces colonnes a leur DEFAULT 0 / {} / NULL.
+    company_score_int, _ = _compute_company_score(
+        project, offer, fund, esg_fund_score=esg_fund_score,
+    )
+    project_score_int, project_breakdown_dict = _compute_project_score(
+        project, fund,
+    )
+
     if existing is None:
         match = OfferMatch(
             account_id=project.account_id,
@@ -370,6 +385,10 @@ async def compute_offer_match(
             global_score=global_score,
             fund_score=fund_score,
             intermediary_score=intermediary_score,
+            project_score=project_score_int,
+            company_score=company_score_int,
+            project_score_breakdown=project_breakdown_dict,
+            divergence_explanation=None,
             score_breakdown=score_breakdown,
             bottleneck=bottleneck,
             recommended_actions=recommended_actions,
@@ -383,6 +402,9 @@ async def compute_offer_match(
         existing.global_score = global_score
         existing.fund_score = fund_score
         existing.intermediary_score = intermediary_score
+        existing.project_score = project_score_int
+        existing.company_score = company_score_int
+        existing.project_score_breakdown = project_breakdown_dict
         existing.score_breakdown = score_breakdown
         existing.bottleneck = bottleneck
         existing.recommended_actions = recommended_actions
@@ -428,9 +450,14 @@ async def list_matches_for_project(
     total = (await db.execute(count_q)).scalar_one()
 
     # Page
+    # F045 : tri bascule vers project_score DESC, company_score DESC (R12).
     offset = (page - 1) * limit
     items_q = (
-        base.order_by(desc(OfferMatch.global_score))
+        base.order_by(
+            desc(OfferMatch.project_score),
+            desc(OfferMatch.company_score),
+            desc(OfferMatch.computed_at),
+        )
         .offset(offset)
         .limit(limit)
     )
@@ -731,3 +758,725 @@ async def get_subscription(
         )
     )
     return result.scalar_one_or_none()
+
+
+# =====================================================================
+# F045 - Matching projet-centric : 8 sub-scores + orchestrateur + boost
+# Reference : specs/045-matching-projet-centric/research.md R5 + R13
+# =====================================================================
+
+
+# Pondération MVP figée. Total = 1.0. (research.md R5)
+PROJECT_SCORE_WEIGHTS: dict[str, float] = {
+    "sector": 0.15,
+    "taxonomy": 0.20,
+    "gcf_themes": 0.20,
+    "co2_impact": 0.15,
+    "beneficiaries": 0.10,
+    "gender": 0.05,
+    "vulnerable": 0.05,
+    "project_esg": 0.10,
+}
+
+# Noms des 3 fonds prioritaires impact (R13 - case-insensitive match)
+PRIORITY_IMPACT_FUND_NAMES: frozenset[str] = frozenset({
+    "green climate fund",
+    "fonds pour l'environnement mondial",
+    "fonds d'adaptation",
+})
+
+# Seuil tCO2e pour le critere co2_impact "below_threshold" GCF (R13)
+CO2_IMPACT_THRESHOLD_GCF: int = 1000
+
+
+# --- 8 sub-scores projet ---
+
+
+def _compute_project_score_sector(project: Any, fund: Any) -> int:
+    """100 si project.objective_env intersecte fund.sectors_eligible.
+
+    Si fund.sectors_eligible est vide -> 100 (pas de contrainte).
+    Si project.objective_env est vide -> 0 (donnee manquante).
+    """
+    eligible = getattr(fund, "sectors_eligible", None) or []
+    if not eligible:
+        return 100
+    project_objectives = list(getattr(project, "objective_env", None) or [])
+    if not project_objectives:
+        return 0
+    return 100 if any(o in eligible for o in project_objectives) else 0
+
+
+def _compute_project_score_taxonomy(project: Any, fund: Any) -> int:
+    """100 si taxonomie_verte_uemoa_aligned=True, 0 sinon (incl. NULL)."""
+    return 100 if getattr(project, "taxonomie_verte_uemoa_aligned", None) is True else 0
+
+
+def _compute_project_score_gcf_themes(project: Any, fund: Any) -> int:
+    """Jaccard project.gcf_priority_themes ∩ fund.theme × 100."""
+    project_themes = set(getattr(project, "gcf_priority_themes", None) or [])
+    fund_themes = set(getattr(fund, "theme", None) or [])
+    if not project_themes or not fund_themes:
+        return 0
+    intersection = project_themes & fund_themes
+    union = project_themes | fund_themes
+    return int(round(100 * len(intersection) / len(union)))
+
+
+def _compute_project_score_co2_impact(project: Any, fund: Any) -> int:
+    """Graduel selon expected_impact_tco2e vs fund.min_co2_threshold.
+
+    - Pas de tCO2e renseigne -> 0.
+    - Pas de seuil sur le fonds -> 100 si renseigne.
+    - tCO2e >= seuil -> 100. Sinon ratio borne 0..100.
+    """
+    impact = getattr(project, "expected_impact_tco2e", None)
+    if impact is None or impact <= 0:
+        return 0
+    threshold = getattr(fund, "min_co2_threshold", None)
+    if threshold is None or threshold <= 0:
+        return 100
+    try:
+        from decimal import Decimal as _D
+        ratio = float(_D(str(impact)) / _D(str(threshold)))
+        return max(0, min(100, int(round(ratio * 100))))
+    except Exception:  # noqa: BLE001
+        return 100
+
+
+def _compute_project_score_beneficiaries(project: Any, fund: Any) -> int:
+    """Ratio expected_beneficiaries / fund.target_beneficiaries, borne 0..100.
+
+    Si target_beneficiaries non defini sur le fonds : 100 si renseigne, 50 sinon.
+    """
+    beneficiaries = getattr(project, "expected_beneficiaries", None)
+    if beneficiaries is None or beneficiaries <= 0:
+        return 0
+    target = getattr(fund, "target_beneficiaries", None)
+    if target is None or target <= 0:
+        return 100
+    return max(0, min(100, int(round(100 * beneficiaries / target))))
+
+
+def _compute_project_score_gender(project: Any, fund: Any) -> int:
+    """100 si gender_inclusion=True, 0 si False, 50 si NULL (neutre).
+
+    Source GCF Gender Policy 2019 mobilisee dans sources_used si > 0.
+    """
+    gender = getattr(project, "gender_inclusion", None)
+    if gender is True:
+        return 100
+    if gender is False:
+        return 0
+    return 50
+
+
+def _compute_project_score_vulnerable(project: Any, fund: Any) -> int:
+    """Jaccard project.vulnerable_populations ∩ fund.vulnerable_target × 100.
+
+    Si project ou fund vide -> 0.
+    Source ODD 10 mobilisee dans sources_used si > 0.
+    """
+    project_pops = set(getattr(project, "vulnerable_populations", None) or [])
+    fund_target = set(getattr(fund, "vulnerable_target", None) or [])
+    if not project_pops:
+        return 0
+    if not fund_target:
+        # Le projet cible des vulnerables mais le fonds ne contraint pas -> 100
+        return 100
+    intersection = project_pops & fund_target
+    union = project_pops | fund_target
+    return int(round(100 * len(intersection) / len(union)))
+
+
+def _compute_project_score_project_esg(project: Any, fund: Any) -> int:
+    """project.project_esg_score si renseigne, 50 (neutre) sinon."""
+    score = getattr(project, "project_esg_score", None)
+    if score is None:
+        return 50
+    return max(0, min(100, int(score)))
+
+
+# --- Orchestrateur project_score ---
+
+
+def _compute_project_score(
+    project: Any, fund: Any,
+) -> tuple[int, dict[str, Any]]:
+    """Calcule project_score 0..100 et retourne (score, breakdown_dict).
+
+    Le breakdown contient :
+    - sub_scores : dict 8 cles
+    - sources_used : list (vide en MVP, alimente par F01 post-impl)
+    - missing_criteria : top 5 critères negatifs (kind/key/label_fr)
+    - boost_applied : place-holder (rule_triggered=False initial)
+    - weights_version, computed_at, factor_status
+    """
+    sub_scores = {
+        "sector": _compute_project_score_sector(project, fund),
+        "taxonomy": _compute_project_score_taxonomy(project, fund),
+        "gcf_themes": _compute_project_score_gcf_themes(project, fund),
+        "co2_impact": _compute_project_score_co2_impact(project, fund),
+        "beneficiaries": _compute_project_score_beneficiaries(project, fund),
+        "gender": _compute_project_score_gender(project, fund),
+        "vulnerable": _compute_project_score_vulnerable(project, fund),
+        "project_esg": _compute_project_score_project_esg(project, fund),
+    }
+    weighted = sum(sub_scores[k] * PROJECT_SCORE_WEIGHTS[k] for k in sub_scores)
+    score = max(0, min(100, int(round(weighted))))
+
+    # Top 5 missing_criteria : sub_scores triés par score ASC, dérivés en
+    # critères negatifs concrets.
+    missing: list[dict[str, Any]] = []
+    sorted_subs = sorted(sub_scores.items(), key=lambda kv: kv[1])
+    for key, value in sorted_subs[:5]:
+        if value >= 80:
+            break
+        missing.append(_build_missing_for_sub_score(key, value, project, fund))
+
+    breakdown: dict[str, Any] = {
+        "weights_version": "1.0",
+        "sub_scores": sub_scores,
+        "sources_used": [],
+        "missing_criteria": missing,
+        "boost_applied": {"rule_triggered": False, "rule_name": None},
+        "computed_at": datetime.now(timezone.utc).isoformat(),
+        "factor_status": "ok",
+    }
+    return score, breakdown
+
+
+def _build_missing_for_sub_score(
+    key: str, value: int, project: Any, fund: Any,
+) -> dict[str, Any]:
+    """Construit un MissingCriterionSchema dict pour un sub_score deficient."""
+    if key == "taxonomy":
+        return {
+            "key": "taxonomy_not_aligned",
+            "label_fr": "Alignement à la taxonomie verte UEMOA non démontré.",
+            "source_id": None,
+            "kind": "missing" if value == 0 else "wrong_value",
+        }
+    if key == "gcf_themes":
+        return {
+            "key": "gcf_themes_empty",
+            "label_fr": "Aucun thème prioritaire GCF déclaré pour le projet.",
+            "source_id": None,
+            "kind": "missing" if value == 0 else "wrong_value",
+        }
+    if key == "co2_impact":
+        return {
+            "key": "co2_impact_below_threshold",
+            "label_fr": (
+                f"Impact CO2 estimé en dessous du seuil GCF ({CO2_IMPACT_THRESHOLD_GCF} tCO2e/an)."
+            ),
+            "source_id": None,
+            "kind": "below_threshold",
+            "current_value": float(getattr(project, "expected_impact_tco2e", None) or 0),
+            "target_value": CO2_IMPACT_THRESHOLD_GCF,
+        }
+    if key == "beneficiaries":
+        return {
+            "key": "beneficiaries_missing",
+            "label_fr": "Nombre de bénéficiaires non renseigné ou trop faible.",
+            "source_id": None,
+            "kind": "missing",
+        }
+    if key == "gender":
+        return {
+            "key": "gender_inclusion_missing",
+            "label_fr": "Volet genre (GCF Gender Policy 2019) non évalué.",
+            "source_id": None,
+            "kind": "missing",
+        }
+    if key == "vulnerable":
+        return {
+            "key": "vulnerable_populations_empty",
+            "label_fr": "Aucune population vulnérable ciblée (ODD 10).",
+            "source_id": None,
+            "kind": "missing",
+        }
+    if key == "sector":
+        return {
+            "key": "sector_not_eligible",
+            "label_fr": "Secteur projet hors champ d'éligibilité du fonds.",
+            "source_id": None,
+            "kind": "wrong_value",
+        }
+    # project_esg
+    return {
+        "key": "project_esg_score_missing",
+        "label_fr": "Score ESG propre au projet non renseigné.",
+        "source_id": None,
+        "kind": "missing",
+    }
+
+
+# --- Refactor company_score (heritage F14 isole) ---
+
+
+def _compute_company_score(
+    project: Any,
+    offer: Any,
+    fund: Any,
+    *,
+    esg_fund_score: int = 50,
+) -> tuple[int, dict[str, Any]]:
+    """Score entreprise heritage F14 (sector=0.25, esg=0.30, size=0.15,
+    location=0.10, documents=0.10, instrument=0.10).
+
+    Retourne (score 0..100, breakdown dict des sub_scores).
+    """
+    sector = _compute_sector_match(project, fund)
+    size, currency_mismatch = _compute_size_match(project, fund)
+    location = _compute_location_match(project, fund)
+    documents = _compute_documents_match(project, offer)
+    instrument = _compute_instrument_match(project, fund)
+
+    w = MATCHING_WEIGHTS
+    score = (
+        w["sector"] * sector
+        + w["esg"] * esg_fund_score
+        + w["size"] * size
+        + w["location"] * location
+        + w["documents"] * documents
+        + w["instrument"] * instrument
+    )
+    score = max(0, min(100, int(round(score))))
+    breakdown = {
+        "sector_match": sector,
+        "esg_match": esg_fund_score,
+        "size_match": size,
+        "location_match": location,
+        "documents_match": documents,
+        "instrument_match": instrument,
+        "size_match_currency_mismatch": currency_mismatch,
+    }
+    return score, breakdown
+
+
+# --- Boost rule R13 ---
+
+
+def _project_is_green_strong(project: Any) -> bool:
+    """R13 : au moins 2 criteres parmi (taxonomie OK, themes GCF ≥ 1, CO2 ≥ 1000)."""
+    criteria_met = 0
+    if getattr(project, "taxonomie_verte_uemoa_aligned", None) is True:
+        criteria_met += 1
+    if len(getattr(project, "gcf_priority_themes", None) or []) >= 1:
+        criteria_met += 1
+    impact = getattr(project, "expected_impact_tco2e", None)
+    if impact is not None and float(impact) >= CO2_IMPACT_THRESHOLD_GCF:
+        criteria_met += 1
+    return criteria_met >= 2
+
+
+def _apply_boost_rule_rouge_entreprise_vert_projet(
+    matches: list[Any], project: Any,
+) -> tuple[list[Any], BoostAppliedSchema]:
+    """Promeut les 3 fonds prioritaires impact en tete si conditions remplies.
+
+    Conditions (R13) :
+    - Au moins 1 match avec fund_name in PRIORITY_IMPACT_FUND_NAMES
+      ET project_score >= 60 ET project_score - company_score > 30
+    - ET le projet est "green_strong" (>=2 criteres impact)
+
+    Args:
+        matches: liste d'objets/SimpleNamespace avec .fund_name, .project_score,
+            .company_score
+        project: objet projet
+
+    Returns:
+        (nouvelle_liste_triee, BoostAppliedSchema)
+    """
+    if not matches:
+        return list(matches), BoostAppliedSchema(rule_triggered=False)
+
+    if not _project_is_green_strong(project):
+        return list(matches), BoostAppliedSchema(rule_triggered=False)
+
+    priority_matches: list[Any] = []
+    others: list[Any] = []
+    triggered = False
+
+    for m in matches:
+        name = (getattr(m, "fund_name", "") or "").strip().lower()
+        is_priority = name in PRIORITY_IMPACT_FUND_NAMES
+        proj_score = int(getattr(m, "project_score", 0) or 0)
+        comp_score = int(getattr(m, "company_score", 0) or 0)
+
+        if is_priority and proj_score >= 60 and (proj_score - comp_score) > 30:
+            priority_matches.append(m)
+            triggered = True
+        else:
+            others.append(m)
+
+    if not triggered:
+        return list(matches), BoostAppliedSchema(rule_triggered=False)
+
+    new_matches = priority_matches + others
+    return new_matches, BoostAppliedSchema(
+        rule_triggered=True,
+        rule_name="rouge_entreprise_vert_projet",
+    )
+
+
+# --- Refactor compute_offer_match : populate project_score + company_score ---
+
+
+async def _compute_offer_match_v045(
+    db: AsyncSession,
+    *,
+    project: Project,
+    offer: Offer,
+    fund: Any,
+) -> OfferMatch:
+    """Variante 045 : calcule project_score + company_score séparément,
+    persiste les 4 nouvelles colonnes en plus des colonnes F14 (rétrocompat).
+
+    Reuse maximalement la logique F14 existante (compute_offer_match) pour
+    le score entreprise + ESG, mais ajoute le scoring projet et populate
+    project_score / company_score / project_score_breakdown / divergence_explanation.
+    """
+    # ESG layer F13 (best-effort) — reutilise la logique F14.
+    assessment = await _get_latest_esg_assessment(db, project.account_id)
+    esg_fund_score = 50
+    esg_intermediary_score = 50
+    fund_missing: list[dict[str, Any]] = []
+    intermediary_missing: list[dict[str, Any]] = []
+    assessment_missing = assessment is None
+
+    if assessment is not None:
+        try:
+            from app.modules.esg.multi_referential_service import (
+                compute_referential_score_for_offer,
+            )
+            f13 = await compute_referential_score_for_offer(
+                db, assessment_id=assessment.id, offer_id=offer.id,
+            )
+            fs = f13.get("fund_score")
+            is_ = f13.get("intermediary_score")
+            if fs is not None and fs.overall_score is not None:
+                esg_fund_score = int(round(float(fs.overall_score)))
+                fund_missing = list(fs.missing_criteria or [])
+            if is_ is not None and is_.overall_score is not None:
+                esg_intermediary_score = int(round(float(is_.overall_score)))
+                intermediary_missing = list(is_.missing_criteria or [])
+            else:
+                esg_intermediary_score = esg_fund_score
+                intermediary_missing = list(fund_missing)
+        except Exception:  # noqa: BLE001
+            logger.exception(
+                "F045 - compute_referential_score_for_offer fail offer=%s",
+                offer.id,
+            )
+
+    # company_score (heritage F14)
+    company_score, company_breakdown = _compute_company_score(
+        project, offer, fund, esg_fund_score=esg_fund_score,
+    )
+
+    # project_score (F045)
+    project_score, project_breakdown = _compute_project_score(project, fund)
+
+    # Heritage F14 (fund_score / intermediary_score / bottleneck) :
+    # on calcule pour preserver la retrocompat.
+    w = MATCHING_WEIGHTS
+    sector = company_breakdown["sector_match"]
+    size = company_breakdown["size_match"]
+    location = company_breakdown["location_match"]
+    documents = company_breakdown["documents_match"]
+    instrument = company_breakdown["instrument_match"]
+    base = (
+        w["sector"] * sector + w["size"] * size + w["location"] * location
+        + w["documents"] * documents + w["instrument"] * instrument
+    )
+    fund_score = max(0, min(100, int(round(base + w["esg"] * esg_fund_score))))
+    intermediary_score = max(
+        0, min(100, int(round(base + w["esg"] * esg_intermediary_score))),
+    )
+    bottleneck = _compute_bottleneck(fund_score, intermediary_score)
+    if bottleneck == "fund":
+        critical_missing = fund_missing
+    elif bottleneck == "intermediary":
+        critical_missing = intermediary_missing
+    else:
+        critical_missing = fund_missing or intermediary_missing
+    recommended_actions = _build_recommended_actions(critical_missing)
+
+    # global_score deprecie : backfill = project_score pour rétrocompat tri.
+    global_score = project_score
+
+    # divergence_explanation : place-holder MVP (US4 implementera build_divergence_explanation)
+    divergence_explanation: str | None = None
+    try:
+        from app.modules.financing.divergence_templates import (
+            build_divergence_explanation,
+        )
+        if callable(getattr(build_divergence_explanation, "__call__", None)):
+            divergence_explanation = build_divergence_explanation(
+                project_score=project_score,
+                company_score=company_score,
+                project_breakdown=project_breakdown,
+                company_breakdown=company_breakdown,
+            )
+    except Exception:  # noqa: BLE001 — US4 pas encore impl
+        divergence_explanation = None
+
+    # score_breakdown (F14 format etendu)
+    score_breakdown = {
+        "fund": {**company_breakdown, "missing_criteria": fund_missing},
+        "intermediary": {**company_breakdown, "missing_criteria": intermediary_missing},
+        "project": project_breakdown,  # F045
+        "company": company_breakdown,  # F045
+        "assessment_missing": assessment_missing,
+        "size_match_currency_mismatch": company_breakdown.get(
+            "size_match_currency_mismatch", False,
+        ),
+    }
+
+    # UPSERT
+    existing_q = await db.execute(
+        select(OfferMatch).where(
+            OfferMatch.project_id == project.id,
+            OfferMatch.offer_id == offer.id,
+        )
+    )
+    existing = existing_q.scalar_one_or_none()
+
+    now = datetime.now(timezone.utc)
+    expires_at = now + timedelta(days=MATCH_TTL_DAYS)
+
+    if existing is None:
+        match = OfferMatch(
+            account_id=project.account_id,
+            project_id=project.id,
+            offer_id=offer.id,
+            global_score=global_score,
+            fund_score=fund_score,
+            intermediary_score=intermediary_score,
+            project_score=project_score,
+            company_score=company_score,
+            project_score_breakdown=project_breakdown,
+            divergence_explanation=divergence_explanation,
+            score_breakdown=score_breakdown,
+            bottleneck=bottleneck,
+            recommended_actions=recommended_actions,
+            status="suggested",
+            computed_at=now,
+            expires_at=expires_at,
+            last_notified_at=None,
+        )
+        db.add(match)
+    else:
+        existing.global_score = global_score
+        existing.fund_score = fund_score
+        existing.intermediary_score = intermediary_score
+        existing.project_score = project_score
+        existing.company_score = company_score
+        existing.project_score_breakdown = project_breakdown
+        existing.divergence_explanation = divergence_explanation
+        existing.score_breakdown = score_breakdown
+        existing.bottleneck = bottleneck
+        existing.recommended_actions = recommended_actions
+        existing.computed_at = now
+        existing.expires_at = expires_at
+        match = existing
+
+    await db.flush()
+    return match
+
+
+# --- Service principal match_funds_for_project ---
+
+
+async def match_funds_for_project(
+    db: AsyncSession,
+    *,
+    account_id: uuid.UUID,
+    project_id: uuid.UUID,
+    min_score: int = 60,
+    limit: int = 10,
+    force_recompute: bool = False,
+) -> MatchFundsResponse:
+    """Calcule (ou retourne en cache) les matches projet-centric d'un projet.
+
+    Steps :
+    1. Charge le projet + verifie l'account_id (RLS).
+    2. Charge les offres publiees actives (cap 50).
+    3. Pour chaque offre, calcule project_score + company_score via
+       _compute_offer_match_v045.
+    4. Applique le boost R13 (3 fonds prioritaires impact).
+    5. Tri par project_score DESC, company_score DESC.
+    6. Persiste (UPSERT) puis retourne MatchFundsResponse.
+
+    Raises:
+        ValueError: project introuvable (RLS) -> caller traduit en 404.
+    """
+    # 1. Charge le projet en respectant l'account_id (RLS applicatif)
+    project_q = await db.execute(
+        select(Project).where(
+            Project.id == project_id,
+            Project.account_id == account_id,
+        )
+    )
+    project = project_q.scalar_one_or_none()
+    if project is None:
+        raise ValueError(f"Project introuvable (RLS) : {project_id}")
+
+    # 2. Charge les offres publiees actives
+    offers_q = await db.execute(
+        select(Offer).where(
+            Offer.publication_status == "published",
+            Offer.is_active == True,  # noqa: E712
+        ).limit(RECOMPUTE_OFFER_CAP)
+    )
+    offers = list(offers_q.scalars().all())
+
+    # 3. Calcul des matches
+    matches: list[OfferMatch] = []
+    for offer in offers:
+        fund = offer.fund
+        if fund is None:
+            continue
+        try:
+            m = await _compute_offer_match_v045(
+                db, project=project, offer=offer, fund=fund,
+            )
+            matches.append(m)
+        except Exception:  # noqa: BLE001
+            logger.exception(
+                "F045 match_funds_for_project: fail offer=%s project=%s",
+                offer.id, project_id,
+            )
+
+    # 4. Tri par project_score DESC, company_score DESC
+    matches.sort(
+        key=lambda m: (-(m.project_score or 0), -(m.company_score or 0)),
+    )
+
+    # Hydrate fund_name / intermediary_name pour le boost (champs non SQL)
+    enriched: list[Any] = []
+    offer_by_id = {o.id: o for o in offers}
+    for m in matches:
+        offer_obj = offer_by_id.get(m.offer_id)
+        fund_name = ""
+        intermediary_name: str | None = None
+        if offer_obj is not None:
+            fund_name = getattr(offer_obj.fund, "name", "") or ""
+            inter = offer_obj.intermediary
+            intermediary_name = getattr(inter, "name", None) if inter else None
+        # Wrapper enrichi pour le boost (n'altère pas m)
+        from types import SimpleNamespace
+        enriched.append(SimpleNamespace(
+            match=m,
+            fund_name=fund_name,
+            intermediary_name=intermediary_name,
+            project_score=m.project_score,
+            company_score=m.company_score,
+        ))
+
+    # 5. Boost R13
+    enriched, boost = _apply_boost_rule_rouge_entreprise_vert_projet(
+        enriched, project,
+    )
+
+    # Persiste le boost_applied dans le breakdown des matches concernés
+    if boost.rule_triggered:
+        for w in enriched:
+            m = w.match
+            try:
+                bd = dict(m.project_score_breakdown or {})
+                bd["boost_applied"] = boost.model_dump()
+                m.project_score_breakdown = bd
+            except Exception:  # noqa: BLE001
+                pass
+        await db.flush()
+
+    # 6. Filtrage min_score + cap limit
+    filtered = [w for w in enriched if (w.project_score or 0) >= min_score][:limit]
+
+    items = [
+        MatchFundsItem(
+            offer_id=w.match.offer_id,
+            fund_id=offer_by_id[w.match.offer_id].fund_id,
+            fund_name=w.fund_name,
+            intermediary_id=offer_by_id[w.match.offer_id].intermediary_id,
+            intermediary_name=w.intermediary_name,
+            project_score=w.match.project_score,
+            company_score=w.match.company_score,
+            project_score_breakdown=dict(w.match.project_score_breakdown or {}),
+            divergence_explanation=w.match.divergence_explanation,
+            computed_at=w.match.computed_at,
+            expires_at=w.match.expires_at,
+        )
+        for w in filtered
+    ]
+
+    no_match_reason: str | None = None
+    if not items:
+        no_match_reason = _build_no_match_reason_minimal(project)
+
+    return MatchFundsResponse(
+        project_id=project.id,
+        project_name=project.name,
+        matches_count=len(items),
+        top_matches=items,
+        no_match_reason=no_match_reason,
+        recompute_request_id=None,
+    )
+
+
+def _build_no_match_reason_minimal(project: Any) -> str | None:
+    """Delegue à _build_no_match_reason(project) - Phase 5 T061."""
+    return _build_no_match_reason(project)
+
+
+# --- F045 Phase 5 : no_match_reason builder enrichi (T061) ---
+
+
+def _build_no_match_reason(project: Any) -> str | None:
+    """Construit un message FR explicatif quand aucun match ne ressort.
+
+    Inspecte 3 attributs critiques (taxonomie verte UEMOA, themes GCF, impact
+    CO2 chiffré) + 2 secondaires (gender_inclusion, vulnerable_populations).
+    Identifie les 2-3 thèmes manquants prioritaires et génère un gabarit FR.
+
+    Reference : research.md R11 + spec US3 acceptance scenario 1.
+    """
+    primary_missing: list[str] = []
+    secondary_missing: list[str] = []
+
+    if getattr(project, "taxonomie_verte_uemoa_aligned", None) is not True:
+        primary_missing.append("alignement à la taxonomie verte UEMOA")
+    if not (getattr(project, "gcf_priority_themes", None) or []):
+        primary_missing.append("thèmes GCF prioritaires")
+    impact = getattr(project, "expected_impact_tco2e", None)
+    if impact is None or float(impact or 0) <= 0:
+        primary_missing.append("impact CO2 chiffré")
+
+    if getattr(project, "gender_inclusion", None) is not True:
+        secondary_missing.append("volet genre (GCF Gender Policy 2019)")
+    if not (getattr(project, "vulnerable_populations", None) or []):
+        secondary_missing.append("populations vulnérables ciblées (ODD 10)")
+
+    if not primary_missing and not secondary_missing:
+        # Cas degenere : projet apparemment complet mais aucun match.
+        # Probablement un probleme catalogue (aucune offre publiee).
+        return (
+            "Aucun fonds ne correspond actuellement aux critères de ce projet. "
+            "Le catalogue d'offres publiées est peut-être limité — réessayez "
+            "ultérieurement."
+        )
+
+    # Prioritaire : 2-3 themes principaux, fallback secondaires si moins de 2 manques.
+    themes_to_show = list(primary_missing)
+    if len(themes_to_show) < 2 and secondary_missing:
+        themes_to_show.extend(secondary_missing[: 2 - len(themes_to_show)])
+    themes_to_show = themes_to_show[:3]
+    themes_fr = ", ".join(themes_to_show)
+
+    return (
+        "Aucun fonds n'aligne ses critères avec ce projet. Pour augmenter "
+        f"votre éligibilité, renseignez : {themes_fr}."
+    )

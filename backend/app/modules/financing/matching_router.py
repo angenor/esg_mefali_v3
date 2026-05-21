@@ -31,6 +31,7 @@ from app.modules.financing.matching_schemas import (
     ComparisonResult,
     MatchAlertSubscriptionRead,
     MatchAlertSubscriptionUpdate,
+    MatchFundsResponse,
     OfferMatchDetail,
     OfferMatchListResponse,
     OfferMatchRead,
@@ -195,6 +196,59 @@ async def update_match_alerts_endpoint(
         )
     await db.commit()
     return MatchAlertSubscriptionRead.model_validate(sub)
+
+
+@router.post(
+    "/{project_id}/match-funds", response_model=MatchFundsResponse,
+)
+async def match_funds_endpoint(
+    project_id: uuid.UUID,
+    min_score: int = Query(default=60, ge=0, le=100),
+    limit: int = Query(default=10, ge=1, le=50),
+    force_recompute: bool = Query(default=False),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> MatchFundsResponse:
+    """F045 - Calcule les matches projet-centric d'un projet (project_score
+    + company_score séparés). Conforme contracts/api-endpoints.md §1.
+
+    RLS F02 : un projet d'un autre account_id -> 404 silencieux.
+    Verifie egalement la presence de la colonne project_score (HTTP 503 si
+    la migration 046 n'est pas encore appliquée).
+    """
+    account_id = _require_account_id(current_user)
+    try:
+        response = await matching_service.match_funds_for_project(
+            db,
+            account_id=account_id,
+            project_id=project_id,
+            min_score=min_score,
+            limit=limit,
+            force_recompute=force_recompute,
+        )
+        await db.commit()
+        return response
+    except ValueError:
+        # RLS : projet introuvable pour cet account
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Projet introuvable",
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.exception(
+            "match_funds_endpoint: erreur (project=%s)", project_id,
+        )
+        # Si la colonne project_score n'existe pas (migration 046 absente)
+        msg = str(exc).lower()
+        if "project_score" in msg and "column" in msg:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Migration F045 non appliquée (colonne project_score manquante)",
+            )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Erreur interne lors du calcul du matching",
+        )
 
 
 @router.get(

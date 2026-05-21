@@ -2,6 +2,7 @@
 import { onMounted, ref } from 'vue'
 import { useProjects } from '~/composables/useProjects'
 import { useProjectsStore } from '~/stores/projects'
+import ProjectFundsSection from '~/components/financing/ProjectFundsSection.vue'
 import type { ProjectCreatePayload, ProjectDetail } from '~/types/project'
 
 definePageMeta({
@@ -117,15 +118,21 @@ onMounted(load)
       />
     </div>
 
-    <ProjectForm
-      v-else-if="project"
-      mode="edit"
-      :initial-project="project"
-      :loading="loading"
-      :error="errorMsg"
-      @submit="onSubmit"
-      @cancel="onCancel"
-    />
+    <template v-else-if="project">
+      <ProjectForm
+        mode="edit"
+        :initial-project="project"
+        :loading="loading"
+        :error="errorMsg"
+        @submit="onSubmit"
+        @cancel="onCancel"
+      />
+
+      <!-- F045 — Section Fonds compatibles avec ce projet (top 5) -->
+      <div class="mt-6">
+        <ProjectFundsSection :project-id="projectId" />
+      </div>
+    </template>
 
     <!-- Modale de blocage suppression -->
     <Teleport to="body">

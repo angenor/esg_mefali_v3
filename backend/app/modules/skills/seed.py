@@ -32,6 +32,7 @@ SEED_SKILL_NAMES: list[str] = [
     "skill_esg_diagnostic",
     "skill_score_gcf",
     "skill_dossier_gcf_via_boad",
+    "skill_match_project_funds",
 ]
 
 
@@ -220,6 +221,121 @@ def _build_seeds(creator_id: uuid.UUID) -> list[dict]:
                 ),
             ],
         },
+        # ---- F045 : skill_match_project_funds (US1-US4) ----
+        {
+            "name": "skill_match_project_funds",
+            "domain": SkillDomain.SCORING_REFERENTIEL.value,
+            "prompt_expert": (
+                "Tu es un conseiller financement vert spécialisé dans le matching "
+                "projet-centric pour les PME africaines francophones (UEMOA/CEDEAO). "
+                "Ton rôle est d'orchestrer le cycle de vie complet d'un projet vert "
+                "en chat : guider la création du projet (5 attributs critiques : "
+                "secteur, taxonomie verte UEMOA, thèmes prioritaires GCF, impact CO2 "
+                "estimé, populations vulnérables ciblées), déclencher le matching "
+                "via le tool ``match_funds_for_project``, et expliquer les résultats. "
+                "Cite systématiquement les sources F01 verified (BCEAO Taxonomie verte "
+                "2024, GCF Strategic Plan 2024-2027, GCF Gender Policy 2019, ODD 10). "
+                "Distingue ``project_score`` (impact climat) et ``company_score`` "
+                "(solidité financière + ESG entreprise) — ce sont 2 scores séparés. "
+                "Une PME informelle avec un projet ambitieux peut obtenir un score "
+                "projet élevé même si son score entreprise est faible : c'est le "
+                "cœur de l'inclusion financière. Visualise les matches avec les "
+                "blocs F11 ``match_card_project``."
+            ),
+            "procedure": (
+                "1) Lister les projets actifs de la PME via ``list_projects`` ; "
+                "si aucun, guider la création via ``create_project`` + widgets F18.\n"
+                "2) Demander/confirmer les 5 attributs critiques projet "
+                "(taxonomie UEMOA, thèmes GCF, gender_inclusion, vulnerable_populations, "
+                "expected_impact_tco2e) — chacun avec source F01 si applicable.\n"
+                "3) Appeler ``match_funds_for_project(project_id, min_score=60, "
+                "limit=10)`` pour obtenir la liste triée par project_score DESC.\n"
+                "4) Présenter les 3-5 meilleurs matches sous forme de ``match_card_project`` "
+                "blocs F11 (fund_name + intermediary + project_score + company_score + "
+                "divergence_explanation courte).\n"
+                "5) Si l'utilisateur modifie le projet (update_project), relancer "
+                "automatiquement le matching et présenter la nouvelle liste.\n"
+                "6) Si ``matches_count == 0``, expliquer le ``no_match_reason`` "
+                "et proposer 2-3 thèmes à renforcer (citations F01)."
+            ),
+            "tool_whitelist": [
+                # Tools projet F06 (8)
+                "create_project",
+                "update_project",
+                "delete_project",
+                "list_projects",
+                "get_project",
+                "duplicate_project",
+                "link_document_to_project",
+                "match_funds_for_project",
+                # Tools matching F14 reutilises (4)
+                "list_matches_for_project",
+                "recompute_matches_for_project",
+                "get_match_details",
+                "compare_offers_for_fund",
+                # Tools sourcage F01 globaux (3)
+                "cite_source",
+                "search_source",
+                "flag_unsourced",
+                # Tools visualisation F11 (4)
+                "show_kpi_card",
+                "show_match_card",
+                "show_map",
+                "show_comparison_table",
+                # Tool widget F18 (1)
+                "ask_interactive_question",
+                # Profil (1)
+                "get_company_profile",
+            ],
+            "sources": [],
+            "activation_rules": {
+                "page_slugs": ["/financing", "/profile/projects", "/applications"],
+                "intent_keywords": [
+                    "matching",
+                    "financement",
+                    "fonds",
+                    "bailleur",
+                    "GCF",
+                    "FEM",
+                    "BOAD",
+                    "subvention",
+                    "projet vert",
+                ],
+                "min_keyword_matches": 1,
+                "requires_active_project": False,
+                "active_module": ["financing", "application", "profile_projects"],
+                "priority": 80,
+            },
+            "golden_examples": [
+                _golden_example(
+                    "match-project-us1",
+                    SkillDomain.SCORING_REFERENTIEL.value,
+                    "Je suis une PME informelle au Togo et j'ai un projet d'agroforesterie "
+                    "qui va séquestrer 1500 tCO2e/an, aligné taxonomie UEMOA.",
+                    "match_funds_for_project",
+                ),
+                _golden_example(
+                    "match-project-us2",
+                    SkillDomain.SCORING_REFERENTIEL.value,
+                    "Mets à jour mon projet pour ajouter le thème REDD+ et relance le matching.",
+                    "update_project",
+                ),
+                _golden_example(
+                    "match-project-us3",
+                    SkillDomain.SCORING_REFERENTIEL.value,
+                    "Mon projet est juste une boutique commerciale classique, "
+                    "quels fonds verts puis-je obtenir ?",
+                    "match_funds_for_project",
+                ),
+                _golden_example(
+                    "match-project-us4",
+                    SkillDomain.SCORING_REFERENTIEL.value,
+                    "Pourquoi mon score projet est de 78% alors que mon score "
+                    "entreprise n'est que de 12% pour ce fonds ?",
+                    "get_match_details",
+                ),
+            ],
+        },
     ]
 
 
@@ -279,18 +395,27 @@ async def seed_skills(
             )
         creator_id = admin.id
 
+    # F045 : skill_match_project_funds reste en draft initial (gating eval >= 90%
+    # avant publication).
+    DRAFT_ONLY: set[str] = {"skill_match_project_funds"}
+
     inserted = 0
     for seed in _build_seeds(creator_id):
         if seed["name"] in existing:
             logger.info("[skills.seed] %s déjà présent, skip", seed["name"])
             continue
+        status = (
+            SkillStatus.DRAFT.value
+            if seed["name"] in DRAFT_ONLY
+            else SkillStatus.PUBLISHED.value
+        )
         skill = Skill(
             **seed,
-            status=SkillStatus.PUBLISHED.value,
+            status=status,
             created_by=creator_id,
         )
         db.add(skill)
         inserted += 1
-        logger.info("[skills.seed] %s insérée", seed["name"])
+        logger.info("[skills.seed] %s insérée (status=%s)", seed["name"], status)
     await db.flush()
     return inserted

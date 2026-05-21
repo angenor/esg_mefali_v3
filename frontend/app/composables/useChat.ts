@@ -52,7 +52,13 @@ const interactiveQuestionsByMessage = ref<Record<string, InteractiveQuestion>>({
 // F11 — Visualization blocks typés (KPICard, MatchCard, Map, ComparisonTable)
 // Indexés par messageId, ordre d'arrivée préservé (concaténation).
 export interface VisualizationBlock {
-  blockType: 'show_kpi_card' | 'show_match_card' | 'show_map' | 'show_comparison_table'
+  blockType:
+    | 'show_kpi_card'
+    | 'show_match_card'
+    | 'show_map'
+    | 'show_comparison_table'
+    // F045 — block_type emis par le tool match_funds_for_project
+    | 'match_card_project'
   payload: Record<string, unknown>
 }
 const visualizationBlocksByMessage = ref<Record<string, VisualizationBlock[]>>({})

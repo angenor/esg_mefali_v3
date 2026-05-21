@@ -73,6 +73,11 @@ class OfferMatchRead(BaseModel):
     global_score: int = Field(ge=0, le=100)
     fund_score: int = Field(ge=0, le=100)
     intermediary_score: int = Field(ge=0, le=100)
+    # F045 — Double score projet/entreprise + divergence
+    project_score: int = Field(ge=0, le=100, default=0)
+    company_score: int = Field(ge=0, le=100, default=0)
+    project_score_breakdown: dict[str, Any] = Field(default_factory=dict)
+    divergence_explanation: str | None = None
     score_breakdown: dict[str, Any] = Field(default_factory=dict)
     bottleneck: MatchBottleneck
     recommended_actions: list[dict[str, Any]] = Field(default_factory=list)
@@ -170,3 +175,129 @@ class MatchAlertSubscriptionUpdate(BaseModel):
 
     min_global_score: int | None = Field(default=None, ge=0, le=100)
     is_active: bool | None = None
+
+
+# =====================================================================
+# F045 - Matching projet-centric : schemas dedicies
+# Reference : data-model.md §3 + §9 de specs/045-matching-projet-centric/
+# =====================================================================
+
+
+SubScoreKey = Literal[
+    "sector",
+    "taxonomy",
+    "gcf_themes",
+    "co2_impact",
+    "beneficiaries",
+    "gender",
+    "vulnerable",
+    "project_esg",
+]
+
+
+FactorStatus = Literal["ok", "sources_pending", "unsourced_fallback"]
+
+
+class ProjectSubScoresSchema(BaseModel):
+    """8 sub-scores projet (cf research.md R5)."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    sector: int = Field(ge=0, le=100)
+    taxonomy: int = Field(ge=0, le=100)
+    gcf_themes: int = Field(ge=0, le=100)
+    co2_impact: int = Field(ge=0, le=100)
+    beneficiaries: int = Field(ge=0, le=100)
+    gender: int = Field(ge=0, le=100)
+    vulnerable: int = Field(ge=0, le=100)
+    project_esg: int = Field(ge=0, le=100)
+
+
+class SourceUsedSchema(BaseModel):
+    """Source F01 mobilisee pour un sub_score."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    sub_score: SubScoreKey
+    source_id: uuid.UUID
+    source_name: str
+    url: str | None = None
+
+
+class MissingCriterionSchema(BaseModel):
+    """Critere projet manquant (top 5 par impact negatif)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    key: str
+    label_fr: str
+    source_id: uuid.UUID | None = None
+    kind: Literal["below_threshold", "missing", "wrong_value"]
+    current_value: float | int | str | None = None
+    target_value: float | int | str | None = None
+
+
+class BoostAppliedSchema(BaseModel):
+    """Trace du boost post-tri (R13 : rouge_entreprise_vert_projet)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    rule_triggered: bool
+    rule_name: str | None = None
+
+
+class ProjectScoreBreakdown(BaseModel):
+    """Breakdown complet du calcul project_score (persiste dans JSONB)."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    weights_version: str = "1.0"
+    sub_scores: ProjectSubScoresSchema
+    sources_used: list[SourceUsedSchema] = Field(default_factory=list)
+    missing_criteria: list[MissingCriterionSchema] = Field(
+        default_factory=list, max_length=5,
+    )
+    boost_applied: BoostAppliedSchema
+    computed_at: datetime
+    factor_status: FactorStatus = "ok"
+
+
+class MatchFundsRequest(BaseModel):
+    """Query params du POST /api/projects/{project_id}/match-funds."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    min_score: int = Field(default=60, ge=0, le=100)
+    limit: int = Field(default=10, ge=1, le=50)
+    force_recompute: bool = False
+
+
+class MatchFundsItem(BaseModel):
+    """Un match projet-centric expose au LLM / frontend."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    offer_id: uuid.UUID
+    fund_id: uuid.UUID
+    fund_name: str
+    intermediary_id: uuid.UUID | None = None
+    intermediary_name: str | None = None
+    project_score: int = Field(ge=0, le=100)
+    company_score: int = Field(ge=0, le=100)
+    project_score_breakdown: dict[str, Any] = Field(default_factory=dict)
+    divergence_explanation: str | None = None
+    computed_at: datetime
+    expires_at: datetime
+
+
+class MatchFundsResponse(BaseModel):
+    """Reponse du POST /api/projects/{project_id}/match-funds."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    project_id: uuid.UUID
+    project_name: str
+    matches_count: int = Field(ge=0)
+    top_matches: list[MatchFundsItem] = Field(default_factory=list)
+    no_match_reason: str | None = None
+    recompute_request_id: uuid.UUID | None = None

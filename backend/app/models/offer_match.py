@@ -76,9 +76,28 @@ class OfferMatch(Auditable, UUIDMixin, TimestampMixin, Base):
     )
 
     # Scores (0..100)
+    # ``global_score``, ``fund_score``, ``intermediary_score`` : DEPRECATED
+    # depuis F045 (mig 046). Conserves en lecture seule 2 sprints pour
+    # retrocompatibilite F14. Plus utilises pour le tri (cf list_matches_for_project
+    # qui bascule sur project_score DESC, company_score DESC).
     global_score: Mapped[int] = mapped_column(Integer, nullable=False)
     fund_score: Mapped[int] = mapped_column(Integer, nullable=False)
     intermediary_score: Mapped[int] = mapped_column(Integer, nullable=False)
+
+    # --- F045 (matching projet-centric) : 4 colonnes ajoutees par mig 046 ---
+    # Voir specs/045-matching-projet-centric/data-model.md §2.1.
+    project_score: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default="0", default=0,
+    )
+    company_score: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default="0", default=0,
+    )
+    project_score_breakdown: Mapped[dict[str, Any]] = mapped_column(
+        JSONType, nullable=False, server_default="{}", default=dict,
+    )
+    divergence_explanation: Mapped[str | None] = mapped_column(
+        String(4000), nullable=True,
+    )
 
     # Détail du calcul
     score_breakdown: Mapped[dict[str, Any]] = mapped_column(
@@ -143,5 +162,18 @@ class OfferMatch(Auditable, UUIDMixin, TimestampMixin, Base):
         Index(
             "idx_offer_matches_account_score",
             "account_id", "global_score",
+        ),
+        # F045 (mig 046) : 2 CHECK pour project_score / company_score.
+        CheckConstraint(
+            "project_score BETWEEN 0 AND 100",
+            name="offer_matches_project_score_chk",
+        ),
+        CheckConstraint(
+            "company_score BETWEEN 0 AND 100",
+            name="offer_matches_company_score_chk",
+        ),
+        Index(
+            "idx_offer_matches_project_company_score",
+            "project_id", "project_score", "company_score",
         ),
     )
