@@ -19,6 +19,8 @@ interface AdminFund {
   publication_status: 'draft' | 'published'
   status: string
   fund_type?: string | null
+  version?: string | null
+  superseded_by?: string | null
 }
 
 const fund = ref<AdminFund | null>(null)
@@ -54,6 +56,16 @@ onMounted(load)
         <StatusBadge :variant="fund.publication_status" />
       </div>
 
+      <!-- F25 — bannière version successeur si le fonds a été remplacé. -->
+      <SuccessorBanner
+        v-if="fund.superseded_by"
+        :successor-id="fund.superseded_by"
+        base-path="/admin/catalog/funds"
+        cta-label="Voir le fonds successeur"
+        :current-version="fund.version ?? null"
+        class="mb-4"
+      />
+
       <div
         class="bg-white dark:bg-dark-card rounded-xl border border-gray-200 dark:border-dark-border p-6 space-y-2 mb-6"
       >
@@ -62,6 +74,9 @@ onMounted(load)
         </p>
         <p class="text-sm text-gray-600 dark:text-gray-400">
           Statut métier : {{ fund.status }}
+        </p>
+        <p v-if="fund.version" class="text-sm text-gray-600 dark:text-gray-400">
+          Version catalogue : {{ fund.version }}
         </p>
       </div>
 

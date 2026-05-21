@@ -1,0 +1,199 @@
+openapi: 3.0.3
+info:
+  title: Admin Catalog — Fund Intermediaries
+  version: 1.0.0
+  description: |
+    Endpoints d'administration pour la consultation des liaisons fonds × intermédiaires
+    (table `fund_intermediaries`, F07). Lecture seule. ADMIN uniquement.
+servers:
+  - url: /api/admin/catalog
+
+paths:
+  /summary:
+    get:
+      summary: Résumé global du catalogue (compteurs par onglet)
+      operationId: getCatalogSummary
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Compteurs par onglet et par statut
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CatalogSummary"
+        "401": { description: Non authentifié }
+        "403": { description: Accès réservé ADMIN }
+
+  /fund-intermediaries:
+    get:
+      summary: Liste paginée des liaisons fonds × intermédiaires
+      operationId: listFundIntermediaries
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: q
+          schema: { type: string }
+          description: Recherche plein-texte sur nom du fonds et nom de l'intermédiaire
+        - in: query
+          name: status
+          schema:
+            type: string
+            enum: [active, expired, all]
+            default: all
+        - in: query
+          name: fund_id
+          schema: { type: string, format: uuid }
+        - in: query
+          name: intermediary_id
+          schema: { type: string, format: uuid }
+        - in: query
+          name: sort
+          schema:
+            type: string
+            enum: [accredited_from_desc, accredited_from_asc, updated_at_desc, updated_at_asc]
+            default: accredited_from_desc
+        - in: query
+          name: page
+          schema: { type: integer, minimum: 1, default: 1 }
+        - in: query
+          name: page_size
+          schema: { type: integer, minimum: 25, maximum: 100, default: 50 }
+      responses:
+        "200":
+          description: Liste paginée (ou liste complète si total < 2000)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaginatedFundIntermediaryRow"
+        "401": { description: Non authentifié }
+        "403": { description: Accès réservé ADMIN }
+
+  /fund-intermediaries/{id}:
+    get:
+      summary: Fiche détaillée d'une liaison
+      operationId: getFundIntermediary
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            pattern: "^[0-9a-f-]{36}:[0-9a-f-]{36}$"
+          description: "Clé composite \"{fund_id}:{intermediary_id}\""
+      responses:
+        "200":
+          description: Détail de la liaison
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FundIntermediaryDetail"
+        "401": { description: Non authentifié }
+        "403": { description: Accès réservé ADMIN }
+        "404": { description: Liaison introuvable }
+        "422": { description: Identifiant composite invalide }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    CatalogTabCounts:
+      type: object
+      required: [total, by_status]
+      properties:
+        total: { type: integer, minimum: 0 }
+        by_status:
+          type: object
+          additionalProperties: { type: integer, minimum: 0 }
+          example: { draft: 3, published: 42, deprecated: 1 }
+
+    CatalogFundIntermediariesCounts:
+      type: object
+      required: [total, active, expired]
+      properties:
+        total: { type: integer, minimum: 0 }
+        active: { type: integer, minimum: 0 }
+        expired: { type: integer, minimum: 0 }
+
+    CatalogSummary:
+      type: object
+      required: [funds, intermediaries, offers, fund_intermediaries]
+      properties:
+        funds: { $ref: "#/components/schemas/CatalogTabCounts" }
+        intermediaries: { $ref: "#/components/schemas/CatalogTabCounts" }
+        offers: { $ref: "#/components/schemas/CatalogTabCounts" }
+        fund_intermediaries: { $ref: "#/components/schemas/CatalogFundIntermediariesCounts" }
+
+    Money:
+      type: object
+      required: [amount, currency]
+      properties:
+        amount: { type: string, description: "Decimal stringifié, >= 0" }
+        currency:
+          type: string
+          enum: [XOF, EUR, USD, GBP, JPY]
+
+    SourceRef:
+      type: object
+      required: [id, status]
+      properties:
+        id: { type: string, format: uuid }
+        title: { type: string, nullable: true }
+        url: { type: string, format: uri, nullable: true }
+        status:
+          type: string
+          enum: [draft, pending, verified, outdated]
+
+    FundIntermediaryRow:
+      type: object
+      required:
+        [id, fund_id, fund_name, intermediary_id, intermediary_name, accredited_from, is_active, has_source, has_incoherence, updated_at]
+      properties:
+        id: { type: string, pattern: "^[0-9a-f-]{36}:[0-9a-f-]{36}$" }
+        fund_id: { type: string, format: uuid }
+        fund_name: { type: string }
+        intermediary_id: { type: string, format: uuid }
+        intermediary_name: { type: string }
+        accredited_from: { type: string, format: date }
+        accredited_to: { type: string, format: date, nullable: true }
+        is_active: { type: boolean }
+        max_amount_per_fund_money:
+          allOf: [{ $ref: "#/components/schemas/Money" }]
+          nullable: true
+        has_source: { type: boolean }
+        has_incoherence: { type: boolean }
+        updated_at: { type: string, format: date-time }
+
+    FundIntermediaryDetail:
+      allOf:
+        - $ref: "#/components/schemas/FundIntermediaryRow"
+        - type: object
+          required: [fund_link, intermediary_link, created_at]
+          properties:
+            accreditation_source:
+              allOf: [{ $ref: "#/components/schemas/SourceRef" }]
+              nullable: true
+            fund_link: { type: string }
+            intermediary_link: { type: string }
+            created_at: { type: string, format: date-time }
+
+    PaginatedFundIntermediaryRow:
+      type: object
+      required: [items, total, page, page_size, paginated]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/FundIntermediaryRow" }
+        total: { type: integer, minimum: 0 }
+        page: { type: integer, minimum: 1 }
+        page_size: { type: integer, minimum: 1 }
+        paginated:
+          type: boolean
+          description: "true si total >= 2000 (mode page-by-page), false si liste complète renvoyée"
