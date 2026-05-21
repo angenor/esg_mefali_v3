@@ -220,7 +220,11 @@ async def get_carbon_summary_chat(
     """
     import uuid
 
-    from app.modules.carbon.service import get_assessment, get_resumable_assessment
+    from app.modules.carbon.service import (
+        get_assessment,
+        get_latest_assessment,
+        get_resumable_assessment,
+    )
 
     try:
         db, user_id = get_db_and_user(config)
@@ -229,7 +233,13 @@ async def get_carbon_summary_chat(
         if assessment_id:
             assessment = await get_assessment(db, uuid.UUID(assessment_id), user_id)
         else:
+            # Chercher d'abord un bilan en cours, sinon le plus recent (completed).
+            # Sans ce fallback, un utilisateur ayant uniquement des bilans finalises
+            # se voit repondre « aucun bilan trouve », ce qui empeche le LLM de
+            # generer le rapport (il ne sait pas qu'un bilan completed existe).
             assessment = await get_resumable_assessment(db, user_id)
+            if assessment is None:
+                assessment = await get_latest_assessment(db, user_id)
 
         if assessment is None:
             return "Aucun bilan carbone trouve pour cet utilisateur."

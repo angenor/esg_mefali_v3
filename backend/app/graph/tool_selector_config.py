@@ -70,6 +70,12 @@ PAGE_TOOL_MAPPING: dict[str, frozenset[str]] = {
         "list_user_documents",
         # F06 — accès lecture aux projets depuis le chat global
         "list_projects",
+        # Génération de rapports accessible depuis le chat global —
+        # l'utilisateur dit fréquemment « génère mon rapport ESG/carbone » sans
+        # naviguer vers la page dédiée. Sans ces entrées le selecteur les
+        # filtre et le LLM hallucine « tool indisponible ».
+        "generate_esg_report",
+        "generate_carbon_report",
     }),
     # Profil entreprise : edition de fiche + lecture profil.
     "profile": frozenset({

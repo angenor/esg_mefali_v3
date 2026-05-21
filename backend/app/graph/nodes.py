@@ -1643,8 +1643,10 @@ async def chat_node(
     pour permettre au LLM de mettre a jour le profil et consulter les donnees
     en temps reel depuis la base.
     """
+    from app.graph.tools.carbon_tools import generate_carbon_report
     from app.graph.tools.chat_tools import CHAT_TOOLS
     from app.graph.tools.document_tools import DOCUMENT_TOOLS
+    from app.graph.tools.esg_tools import generate_esg_report
     from app.graph.tools.guided_tour_tools import GUIDED_TOUR_TOOLS
     from app.graph.tools.interactive_tools import INTERACTIVE_TOOLS
     from app.graph.tools.profiling_tools import PROFILING_TOOLS
@@ -1655,7 +1657,10 @@ async def chat_node(
     llm = get_llm()
 
     # Combiner les tools de profilage, lecture, documents, widgets interactifs, guidage,
-    # projets et visualisation typée (F11). Le filtre par module/page restreint à 14 max.
+    # projets, visualisation typée (F11) et générateurs de rapports ESG/carbone. Le
+    # filtre par module/page restreint la liste exposée au LLM (≤ MAX_TOOLS_PER_TURN).
+    # Sans `generate_*_report` ici, le selector les exclut via `base_names & available_names`
+    # et le LLM hallucine « tool indisponible » quand le routing reste sur chat.
     all_tools = (
         PROFILING_TOOLS
         + CHAT_TOOLS
@@ -1665,6 +1670,7 @@ async def chat_node(
         + SOURCING_TOOLS
         + PROJECT_TOOLS
         + VISUALIZATION_TOOLS
+        + [generate_esg_report, generate_carbon_report]
     )
 
     # Anti-boucle ESG (defense in depth, spec fix-esg-scoring-node-routing) :
