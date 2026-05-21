@@ -167,6 +167,70 @@ export const tourRegistry = {
     },
   },
 
+  show_reports_carbon: {
+    id: 'show_reports_carbon',
+    steps: [
+      {
+        route: '/reports?tab=carbon',
+        selector: '[data-guide-target="reports-tab-carbon"]',
+        popover: {
+          title: 'Onglet Carbone',
+          description: 'Vous êtes sur l\'onglet Carbone. Votre rapport « {{report_filename}} » apparaît ici dès qu\'il est prêt.',
+          side: 'bottom',
+        },
+      },
+      {
+        selector: '[data-guide-target="reports-list-carbon"]',
+        popover: {
+          title: 'Vos rapports carbone',
+          description: 'Téléchargez, prévisualisez ou supprimez vos rapports depuis cette liste.',
+          side: 'top',
+        },
+      },
+    ],
+    entryStep: {
+      selector: '[data-guide-target="sidebar-reports-link"]',
+      popover: {
+        title: 'Mes rapports',
+        description: 'Votre rapport carbone vient d\'être généré. Cliquez ici pour le retrouver.',
+        countdown: DEFAULT_ENTRY_COUNTDOWN,
+      },
+      targetRoute: '/reports?tab=carbon',
+    },
+  },
+
+  show_reports_esg: {
+    id: 'show_reports_esg',
+    steps: [
+      {
+        route: '/reports?tab=esg',
+        selector: '[data-guide-target="reports-tab-esg"]',
+        popover: {
+          title: 'Onglet ESG',
+          description: 'Vous êtes sur l\'onglet ESG. Votre rapport « {{report_filename}} » apparaît ici dès qu\'il est prêt.',
+          side: 'bottom',
+        },
+      },
+      {
+        selector: '[data-guide-target="reports-list-esg"]',
+        popover: {
+          title: 'Vos rapports ESG',
+          description: 'Téléchargez, prévisualisez ou supprimez vos rapports depuis cette liste.',
+          side: 'top',
+        },
+      },
+    ],
+    entryStep: {
+      selector: '[data-guide-target="sidebar-reports-link"]',
+      popover: {
+        title: 'Mes rapports',
+        description: 'Votre rapport ESG vient d\'être généré. Cliquez ici pour le retrouver.',
+        countdown: DEFAULT_ENTRY_COUNTDOWN,
+      },
+      targetRoute: '/reports?tab=esg',
+    },
+  },
+
   show_dashboard_overview: {
     id: 'show_dashboard_overview',
     steps: [

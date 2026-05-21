@@ -17,7 +17,7 @@ const navItems = [
   { label: 'Financement', to: '/financing', icon: 'financing', guideTarget: 'sidebar-financing-link' },
   { label: 'Crédit Vert', to: '/credit-score', icon: 'credit', guideTarget: 'sidebar-credit-link' },
   { label: 'Dossiers', to: '/applications', icon: 'applications' },
-  { label: 'Rapports', to: '/reports', icon: 'reports' },
+  { label: 'Rapports', to: '/reports', icon: 'reports', guideTarget: 'sidebar-reports-link' },
   { label: 'Documents', to: '/documents', icon: 'documents' },
   { label: 'Profil', to: '/profile', icon: 'profile' },
   // F06 — Entité Projet Vert

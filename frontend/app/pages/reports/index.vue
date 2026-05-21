@@ -12,7 +12,11 @@ const { listReports, downloadReport, loading, error } = useReports()
 const carbonReportsApi = useCarbonReports()
 
 // F21 (US5) — Onglets ESG | Carbone.
-const activeTab = ref<'esg' | 'carbon'>('esg')
+// Le query param ?tab=carbon|esg permet au guided_tour show_reports de
+// pré-sélectionner l'onglet sans clic manuel après navigation depuis le chat.
+const route = useRoute()
+const initialTab: 'esg' | 'carbon' = route.query.tab === 'carbon' ? 'carbon' : 'esg'
+const activeTab = ref<'esg' | 'carbon'>(initialTab)
 const carbonReports = ref<CarbonReportListItem[]>([])
 const carbonTotal = ref(0)
 
@@ -124,6 +128,7 @@ import { useAuthStore } from '~/stores/auth'
       role="tablist"
       aria-label="Type de rapport"
       data-testid="reports-tabs"
+      data-guide-target="reports-tabs"
     >
       <button
         type="button"
@@ -136,6 +141,7 @@ import { useAuthStore } from '~/stores/auth'
             : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200',
         ]"
         data-testid="tab-esg"
+        data-guide-target="reports-tab-esg"
         @click="setTab('esg')"
       >
         ESG ({{ total }})
@@ -151,13 +157,14 @@ import { useAuthStore } from '~/stores/auth'
             : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200',
         ]"
         data-testid="tab-carbon"
+        data-guide-target="reports-tab-carbon"
         @click="setTab('carbon')"
       >
         Carbone ({{ carbonTotal }})
       </button>
     </div>
 
-    <div v-show="activeTab === 'esg'" class="flex-1 overflow-y-auto p-6" data-testid="esg-reports-panel">
+    <div v-show="activeTab === 'esg'" class="flex-1 overflow-y-auto p-6" data-testid="esg-reports-panel" data-guide-target="reports-list-esg">
       <!-- Chargement -->
       <div v-if="loading && reports.length === 0" class="flex items-center justify-center py-12">
         <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-green" />
@@ -303,6 +310,7 @@ import { useAuthStore } from '~/stores/auth'
       v-show="activeTab === 'carbon'"
       class="flex-1 overflow-y-auto p-6"
       data-testid="carbon-reports-panel"
+      data-guide-target="reports-list-carbon"
     >
       <div v-if="carbonReportsApi.loading.value && carbonReports.length === 0" class="flex items-center justify-center py-12">
         <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-green" />

@@ -22,6 +22,8 @@ voit alors ses resultats expliques pas a pas sur les ecrans dedies.
 - `show_credit_score` — Score credit vert alternatif (/credit-score)
 - `show_action_plan` — Feuille de route 6-12-24 mois (/action-plan)
 - `show_dashboard_overview` — Vue d'ensemble du tableau de bord (/dashboard)
+- `show_reports_carbon` — Bibliotheque des rapports Word, onglet Carbone (/reports?tab=carbon)
+- `show_reports_esg` — Bibliotheque des rapports Word, onglet ESG (/reports?tab=esg)
 
 ### Quand proposer un guidage
 1. **Apres completion d'un module** : evaluation ESG terminee, bilan carbone
@@ -46,9 +48,18 @@ Quand un module vient d'etre cloture, le `tour_id` a proposer est fixe :
 | Score credit vert calcule | `show_credit_score` |
 | Plan d'action / feuille de route 6-12-24 mois genere | `show_action_plan` |
 | Vue d'ensemble tableau de bord (post-onboarding, chat) | `show_dashboard_overview` |
+| Rapport carbone Word genere (`generate_carbon_report` OK) | `show_reports_carbon` |
+| Rapport ESG Word genere (`generate_esg_report` OK) | `show_reports_esg` |
 
-N'invente jamais un autre `tour_id`. Ces 6 identifiants sont la source unique
+N'invente jamais un autre `tour_id`. Ces 8 identifiants sont la source unique
 de verite — toute autre valeur est rejetee cote serveur.
+
+**Distinction importante** : apres FINALISATION d'un bilan ou d'une evaluation
+(score calcule, plan de reduction genere), utilise `show_*_results` pour montrer
+les graphiques et resultats metier. Apres GENERATION D'UN RAPPORT TELECHARGEABLE
+(`generate_*_report` retourne `ok:true`), utilise `show_reports_*` pour amener
+l'utilisateur vers la bibliotheque /reports ou il pourra telecharger le .docx.
+Ce sont deux moments distincts du parcours, ne les confonds pas.
 
 ### Cles `context` par tour_id (OBLIGATOIRE — remplis toujours)
 
@@ -65,6 +76,8 @@ dernier score, etc.) — ne les invente pas, extrais-les.
 | `show_financing_catalog` | `matched_count` |
 | `show_action_plan` | `active_actions` |
 | `show_dashboard_overview` | `esg_score`, `total_tco2`, `credit_score`, `matched_count` |
+| `show_reports_carbon` | `report_filename` (nom .docx renvoye par generate_carbon_report) |
+| `show_reports_esg` | `report_filename` (nom .docx renvoye par generate_esg_report) |
 
 Exemple concret (user : « Montre-moi mon bilan carbone ») :
 ```
