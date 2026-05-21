@@ -224,7 +224,7 @@ Le coaching sur l'IA responsable nous intéresse particulièrement pour assurer 
 >
 > ESG Mefali est une plateforme d'intelligence artificielle conversationnelle dédiée à la finance verte. Concrètement, c'est un agent IA en français qui aide les petites et moyennes entreprises africaines à comprendre les critères ESG, évaluer leur conformité, et monter leurs dossiers pour accéder aux fonds verts.
 >
-> On s'adresse aux PME de l'Afrique francophone, en priorité la zone UEMOA — Côte d'Ivoire, Sénégal, Mali — des entreprises qui ont la volonté de s'engager dans une démarche durable mais qui sont bloquées par le manque de moyens et d'accompagnement.
+> Nous avons pour premiere cible l'Afrique francophone, en priorité la zone UEMOA — Côte d'Ivoire, Sénégal, Mali — des entreprises qui ont la volonté de s'engager dans une démarche durable mais qui sont bloquées par le manque de moyens et d'accompagnement.
 >
 > La problématique est claire : moins de 10 % des financements climat en Afrique parviennent aux PME. Pourtant elles représentent 80 % de l'emploi. Les référentiels ESG sont complexes et en anglais, les consultants coûtent entre 5 000 et 20 000 dollars, et sans historique bancaire formel, pas de crédit. Des millions d'entrepreneurs sont tout simplement exclus de la transition verte.
 >

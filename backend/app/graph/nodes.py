@@ -1297,6 +1297,7 @@ async def financing_node(
     from app.graph.tools.financing_tools import FINANCING_TOOLS
     from app.graph.tools.guided_tour_tools import GUIDED_TOUR_TOOLS
     from app.graph.tools.interactive_tools import INTERACTIVE_TOOLS
+    from app.graph.tools.project_tools import PROJECT_TOOLS
     from app.graph.tools.simulation_tools import SIMULATION_TOOLS
     from app.graph.tools.sourcing_tools import SOURCING_TOOLS
     from app.graph.tools.visualization_tools import VISUALIZATION_TOOLS
@@ -1310,6 +1311,9 @@ async def financing_node(
     # F15 BUG-003 — create_fund_application (unique source : application_tools)
     # est ré-injecté ici car l'utilisateur peut candidater depuis le module
     # financement.
+    # F045 — PROJECT_TOOLS ré-injectés : depuis /profile/projects/[id] le LLM
+    # doit pouvoir update_project / match_funds_for_project quand le router
+    # bascule sur financing_node.
     full_catalog = (
         (FINANCING_TOOLS or [])
         + [_create_fund_app_tool]
@@ -1318,6 +1322,7 @@ async def financing_node(
         + SOURCING_TOOLS
         + VISUALIZATION_TOOLS
         + SIMULATION_TOOLS
+        + PROJECT_TOOLS
     )
     filtered_tools, debug_info = select_tools_for_node(
         node_name="financing",

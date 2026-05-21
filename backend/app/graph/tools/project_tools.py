@@ -195,6 +195,41 @@ class CreateProjectArgs(BaseModel):
         str | None, Field(default=None, max_length=100)
     ] = None
 
+    # --- F045 : 5 nouveaux champs projet-centric (Matching projet, mig 046) ---
+    taxonomie_verte_uemoa_aligned: bool | None = Field(
+        default=None,
+        description=(
+            "F045 — true si le projet aligne la taxonomie verte UEMOA "
+            "(BCEAO 2024). Citer la source via cite_source obligatoire."
+        ),
+    )
+    gcf_priority_themes: list[str] = Field(
+        default_factory=list,
+        description=(
+            "F045 — Thèmes prioritaires GCF (8 valeurs autorisées) : "
+            "atténuation, adaptation, cross_cutting, REDD+, forêts, eau, "
+            "agriculture, énergie. Accents obligatoires."
+        ),
+    )
+    gender_inclusion: bool | None = Field(
+        default=None,
+        description=(
+            "F045 — true si le projet intègre un volet genre conforme à "
+            "la GCF Updated Gender Policy 2019."
+        ),
+    )
+    vulnerable_populations: list[str] = Field(
+        default_factory=list,
+        description=(
+            "F045 — Populations vulnérables ciblées (5 valeurs ONU/ODD 10) : "
+            "femmes, jeunes, handicapés, réfugiés, déplacés_internes."
+        ),
+    )
+    project_esg_score: Annotated[int | None, Field(default=None, ge=0, le=100)] = Field(
+        default=None,
+        description="F045 — Score ESG propre au projet 0..100 (saisie PME en MVP).",
+    )
+
     @field_validator("objective_env")
     @classmethod
     def _validate_objective_env(cls, v: list[str]) -> list[str]:
@@ -409,6 +444,11 @@ async def create_project(
     expected_hectares_restored: Decimal | None = None,
     location_country: str | None = None,
     location_region: str | None = None,
+    taxonomie_verte_uemoa_aligned: bool | None = None,
+    gcf_priority_themes: list[str] | None = None,
+    gender_inclusion: bool | None = None,
+    vulnerable_populations: list[str] | None = None,
+    project_esg_score: int | None = None,
 ) -> str:
     """Cree un nouveau projet vert pour l'entreprise (audit log = source_of_change='llm').
 
@@ -448,6 +488,11 @@ async def create_project(
             expected_hectares_restored=expected_hectares_restored,
             location_country=location_country,
             location_region=location_region,
+            taxonomie_verte_uemoa_aligned=taxonomie_verte_uemoa_aligned,
+            gcf_priority_themes=gcf_priority_themes or [],
+            gender_inclusion=gender_inclusion,
+            vulnerable_populations=vulnerable_populations or [],
+            project_esg_score=project_esg_score,
         )
 
         with source_of_change_scope("llm"):
