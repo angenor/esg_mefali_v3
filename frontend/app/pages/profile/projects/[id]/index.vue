@@ -132,6 +132,29 @@ onMounted(load)
       <div class="mt-6">
         <ProjectFundsSection :project-id="projectId" />
       </div>
+
+      <!-- F047 — Lien vers l'évaluation ESG-projet -->
+      <div
+        class="mt-6 p-4 rounded-lg ring-1 ring-emerald-200 dark:ring-emerald-800 bg-emerald-50 dark:bg-emerald-900/20"
+      >
+        <div class="flex items-start justify-between gap-3">
+          <div>
+            <h3 class="text-sm font-semibold text-emerald-900 dark:text-emerald-200">
+              Évaluation ESG du projet
+            </h3>
+            <p class="mt-1 text-xs text-emerald-800 dark:text-emerald-300">
+              Évaluez ce projet contre IFC PS / GCF ESS / BOAD ESS pour générer
+              un score 0..100 sourcé et améliorer votre matching.
+            </p>
+          </div>
+          <NuxtLink
+            :to="`/profile/projects/${projectId}/esg`"
+            class="shrink-0 px-3 py-1.5 text-sm font-medium rounded bg-emerald-600 text-white hover:bg-emerald-700"
+          >
+            Évaluer ESG →
+          </NuxtLink>
+        </div>
+      </div>
     </template>
 
     <!-- Modale de blocage suppression -->

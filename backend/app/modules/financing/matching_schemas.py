@@ -246,6 +246,36 @@ class BoostAppliedSchema(BaseModel):
     rule_name: str | None = None
 
 
+# F047 — Référentiel utilisé pour le sub-score project_esg.
+class ReferentialRef(BaseModel):
+    """Référence légère vers un référentiel F13 (id + code + label + version)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: uuid.UUID
+    code: str
+    label: str
+    version: str
+
+
+ProjectEsgSourceKind = Literal["calculated", "manual_f045", "unsourced"]
+
+
+class ProjectEsgSubScore(BaseModel):
+    """Sub-score `project_esg` du breakdown matching projet-centric (F047)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    score: int = Field(ge=0, le=100)
+    weight: float = 0.10  # Inchangé F045 (cf. PROJECT_SCORE_WEIGHTS)
+    is_fallback: bool
+    referential_used: ReferentialRef | None = None
+    assessment_id: uuid.UUID | None = None
+    source_kind: ProjectEsgSourceKind
+    unsourced: bool = False
+    cta_hint: str | None = None
+
+
 class ProjectScoreBreakdown(BaseModel):
     """Breakdown complet du calcul project_score (persiste dans JSONB)."""
 
@@ -260,6 +290,8 @@ class ProjectScoreBreakdown(BaseModel):
     boost_applied: BoostAppliedSchema
     computed_at: datetime
     factor_status: FactorStatus = "ok"
+    # F047 — meta du sub-score project_esg (transparence UI + CTA)
+    project_esg_subscore: ProjectEsgSubScore | None = None
 
 
 class MatchFundsRequest(BaseModel):

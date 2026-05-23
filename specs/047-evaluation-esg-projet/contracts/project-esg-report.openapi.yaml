@@ -1,0 +1,173 @@
+openapi: 3.1.0
+info:
+  title: ESG Mefali — Rapport ESIA-light PDF (047)
+  version: 0.1.0
+  description: |
+    Endpoint de génération du rapport ESIA-light PDF pour une évaluation ESG-projet finalisée.
+    Pipeline WeasyPrint + Jinja2 + matplotlib (réutilise F06). Annexe « Sources et références »
+    F01 obligatoire.
+servers:
+  - url: https://api.mefali.io
+  - url: http://localhost:8000
+
+tags:
+  - name: project-esg-report
+    description: Rapport ESIA-light PDF (047)
+
+security:
+  - bearerAuth: []
+
+paths:
+  /api/projects/{project_id}/esg-assessment/{assessment_id}/report:
+    post:
+      tags: [project-esg-report]
+      summary: Générer le rapport ESIA-light PDF
+      description: |
+        Génère un rapport PDF structuré en 5 à 7 sections (executive summary, description projet,
+        baseline E&S, impacts identifiés, mesures d'atténuation, plan d'engagement parties prenantes,
+        indicateurs de suivi M&E) + annexe « Sources et références » F01 obligatoire + au moins
+        1 graphique (donut critères couverts vs manquants).
+        Refuse si l'évaluation est à l'état `draft` (FR-019).
+        Réponse synchrone ≤ 30 s p95 (SC-003).
+      operationId: generateProjectEsgReport
+      parameters:
+        - in: path
+          name: project_id
+          required: true
+          schema: { type: string, format: uuid }
+        - in: path
+          name: assessment_id
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProjectEsgReportGenerate'
+      responses:
+        '201':
+          description: Rapport généré
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectEsgReportResponse'
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+              description: Si Accept=application/pdf, retourne le binaire directement
+        '404':
+          description: Évaluation introuvable ou tenant tiers (RLS F02 → 404)
+        '422':
+          description: Évaluation à l'état draft — finalisation préalable requise
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DraftStateError'
+        '504':
+          description: Génération WeasyPrint dépassée — relance possible
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReportTimeoutError'
+
+    get:
+      tags: [project-esg-report]
+      summary: Lister les rapports générés pour une évaluation
+      description: Historique des rapports PDF générés (chaque génération crée une ligne immuable F03)
+      operationId: listProjectEsgReports
+      parameters:
+        - in: path
+          name: project_id
+          required: true
+          schema: { type: string, format: uuid }
+        - in: path
+          name: assessment_id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Historique des rapports
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ProjectEsgReportResponse'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    ProjectEsgReportGenerate:
+      type: object
+      additionalProperties: false
+      properties:
+        include_appendix_sources:
+          type: boolean
+          default: true
+          description: Annexe F01 toujours présente en production ; paramétrable à false uniquement pour les previews dev
+
+    ProjectEsgReportResponse:
+      type: object
+      additionalProperties: false
+      required: [id, assessment_id, file_path, generated_at, template_version, section_count, chart_count, sources_cited]
+      properties:
+        id:
+          type: string
+          format: uuid
+        assessment_id:
+          type: string
+          format: uuid
+        file_path:
+          type: string
+          description: Chemin local stocké, ex: /uploads/reports/esia/{tenant}/{project}/{assessment}_{timestamp}.pdf
+        generated_at:
+          type: string
+          format: date-time
+        template_version:
+          type: string
+          example: "esia_v1"
+        section_count:
+          type: integer
+          minimum: 5
+          maximum: 7
+        chart_count:
+          type: integer
+          minimum: 1
+        sources_cited:
+          type: integer
+          description: Nombre de sources F01 distinctes citées dans l'annexe
+
+    DraftStateError:
+      type: object
+      required: [error_code, message]
+      properties:
+        error_code:
+          type: string
+          example: "assessment_not_finalized"
+        message:
+          type: string
+          example: "Le rapport ESIA-light ne peut être généré qu'à partir d'une évaluation finalisée. Veuillez finaliser l'évaluation au préalable."
+
+    ReportTimeoutError:
+      type: object
+      required: [error_code, message]
+      properties:
+        error_code:
+          type: string
+          example: "report_generation_timeout"
+        message:
+          type: string
+          example: "La génération du rapport a dépassé 30 secondes. Veuillez relancer ; si le problème persiste, contactez le support."
+        retry_after_seconds:
+          type: integer
+          example: 60

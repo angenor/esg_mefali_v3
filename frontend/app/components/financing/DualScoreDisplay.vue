@@ -1,19 +1,35 @@
 <script setup lang="ts">
 // F045 — DualScoreDisplay : 2 scores cote a cote (project / company) + badge divergence.
+// F047 (US2) — Badge `is_fallback` amber affiché si le sub-score project_esg
+// repose sur le référentiel IFC PS par défaut (le fonds ne déclare pas d'ESS dédiée).
 //
 // Dark mode complet, ARIA region+labelledby.
 
 import { computed } from 'vue'
 import DivergenceBadge from '~/components/financing/DivergenceBadge.vue'
+import type { ProjectEsgSubScore } from '~/types/projectMatching'
 
 interface Props {
   projectScore: number
   companyScore: number
   /** Paragraphe FR gabarit (R6) issu de backend. */
   divergenceExplanation?: string | null
+  /** F047 — meta du sub-score project_esg (badge fallback + tooltip). */
+  projectEsgSubscore?: ProjectEsgSubScore | null
 }
 
 const props = defineProps<Props>()
+
+const fallbackTooltip = computed<string>(() => {
+  const refLabel = props.projectEsgSubscore?.referential_used?.label
+    ?? 'IFC Performance Standards'
+  return `Référentiel par défaut ${refLabel} — le fonds ne déclare pas d'ESS spécifique.`
+})
+
+const showFallbackBadge = computed<boolean>(() =>
+  props.projectEsgSubscore?.is_fallback === true
+  && props.projectEsgSubscore?.source_kind === 'calculated',
+)
 
 function scoreColorClass(score: number): string {
   if (score >= 75) return 'text-emerald-700 dark:text-emerald-300'
@@ -83,12 +99,24 @@ const companyBg = computed(() => bgColorClass(props.companyScore))
       </div>
     </div>
 
-    <div class="mb-3">
+    <div class="mb-3 flex flex-wrap items-center gap-2">
       <DivergenceBadge
         :project-score="projectScore"
         :company-score="companyScore"
         :tooltip-text="divergenceExplanation ?? undefined"
       />
+      <span
+        v-if="showFallbackBadge"
+        :title="fallbackTooltip"
+        class="inline-flex items-center gap-1 rounded-md border border-amber-300
+               bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-800
+               dark:border-amber-700 dark:bg-amber-900/30 dark:text-amber-200"
+        role="status"
+        :aria-label="fallbackTooltip"
+        data-testid="project-esg-fallback-badge"
+      >
+        Référentiel par défaut
+      </span>
     </div>
 
     <p

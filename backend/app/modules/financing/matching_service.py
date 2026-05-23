@@ -890,18 +890,199 @@ def _compute_project_score_vulnerable(project: Any, fund: Any) -> int:
 
 
 def _compute_project_score_project_esg(project: Any, fund: Any) -> int:
-    """project.project_esg_score si renseigne, 50 (neutre) sinon."""
+    """project.project_esg_score si renseigne, 50 (neutre) sinon.
+
+    Legacy : utilisé uniquement quand le helper async F047
+    :func:`_get_project_esg_subscore` n'est pas disponible (chemins F14 hors
+    flow projet-centric). Le matching projet-centric V045 consomme désormais
+    le helper async qui consulte `project_esg_assessments` finalisées.
+    """
     score = getattr(project, "project_esg_score", None)
     if score is None:
         return 50
     return max(0, min(100, int(score)))
 
 
+# ---------------------------------------------------------------------
+# F047 — Resolver project_esg sub-score depuis project_esg_assessments.
+# ---------------------------------------------------------------------
+
+
+# Mapping fund_name → code référentiel cible (F047 D2/Q4).
+_FUND_NAME_TO_REFERENTIAL: tuple[tuple[tuple[str, ...], str], ...] = (
+    (("green climate fund", "gcf"), "gcf_ess"),
+    (("boad", "banque ouest africaine"), "boad_ess"),
+)
+# Référentiel universel par défaut (Q4 clarification).
+_PROJECT_ESG_FALLBACK_REF_CODE: str = "ifc_ps"
+
+
+def _detect_target_referential_code(fund: Any) -> tuple[str, bool]:
+    """Retourne (ref_code, is_fallback) selon le nom/organisation du fonds.
+
+    Détection case-insensitive. Si aucune ESS dédiée n'est détectée, on
+    retombe sur ``ifc_ps`` avec ``is_fallback=True`` (Q4 clarification).
+    """
+    haystack = " ".join(
+        str(getattr(fund, attr, "") or "")
+        for attr in ("name", "organization")
+    ).lower()
+    for needles, code in _FUND_NAME_TO_REFERENTIAL:
+        if any(n in haystack for n in needles):
+            return code, False
+    return _PROJECT_ESG_FALLBACK_REF_CODE, True
+
+
+async def _load_referential_for_code(
+    db: AsyncSession, code: str,
+) -> dict[str, Any] | None:
+    """Petit lookup sans charger la relation entière — utile pour breakdown."""
+    from app.models.referential import Referential
+    ref = (
+        await db.execute(select(Referential).where(Referential.code == code))
+    ).scalar_one_or_none()
+    if ref is None:
+        return None
+    return {
+        "id": str(ref.id),
+        "code": ref.code,
+        "label": ref.label,
+        "version": str(getattr(ref, "version", "1.0") or "1.0"),
+    }
+
+
+def _cta_hint_for_referential(ref_meta: dict[str, Any] | None) -> str:
+    """Phrase FR courte invitant la PME à démarrer l'évaluation manquante."""
+    if ref_meta is None:
+        return "Démarrer une évaluation ESG-projet pour augmenter votre score."
+    label = ref_meta.get("label") or ref_meta.get("code") or "ESG-projet"
+    return (
+        f"Démarrer l'évaluation {label} sur ce projet pour améliorer "
+        "l'éligibilité auprès de ce fonds."
+    )
+
+
+async def _get_project_esg_subscore(
+    db: AsyncSession,
+    *,
+    account_id: uuid.UUID,
+    project_id: uuid.UUID,
+    fund: Any,
+) -> tuple[int, dict[str, Any]]:
+    """F047 (US2) — Résout le sub-score `project_esg` pour un (projet, fonds).
+
+    Priorité :
+      1. Évaluation ``finalized`` active contre le référentiel ciblé du fonds.
+      2. Évaluation ``finalized`` IFC PS si fonds sans ESS dédié (Q4 fallback).
+      3. ``projects.project_esg_score`` saisi manuellement (legacy F045).
+      4. ``score=0, unsourced=True`` + CTA hint.
+
+    Returns:
+        Tuple ``(score 0..100, meta_dict)`` où ``meta_dict`` contient :
+        ``is_fallback``, ``referential_used`` ({id, code, label, version}),
+        ``assessment_id``, ``source_kind`` (``calculated`` /
+        ``manual_f045`` / ``unsourced``), ``unsourced``, ``cta_hint``.
+    """
+    from app.modules.esg.project_models import ProjectEsgAssessment
+
+    target_code, is_fallback = _detect_target_referential_code(fund)
+    target_ref = await _load_referential_for_code(db, target_code)
+
+    # 1. Lookup évaluation finalisée active contre le ref cible.
+    if target_ref is not None:
+        a = (
+            await db.execute(
+                select(ProjectEsgAssessment).where(
+                    ProjectEsgAssessment.account_id == account_id,
+                    ProjectEsgAssessment.project_id == project_id,
+                    ProjectEsgAssessment.referential_id
+                    == uuid.UUID(target_ref["id"]),
+                    ProjectEsgAssessment.state == "finalized",
+                    ProjectEsgAssessment.superseded_at.is_(None),
+                )
+                .order_by(desc(ProjectEsgAssessment.finalized_at))
+                .limit(1)
+            )
+        ).scalar_one_or_none()
+        if a is not None and a.score is not None:
+            return int(a.score), {
+                "is_fallback": is_fallback,
+                "referential_used": target_ref,
+                "assessment_id": str(a.id),
+                "source_kind": "calculated",
+                "unsourced": False,
+                "cta_hint": None,
+            }
+
+    # 2. Fallback IFC PS si le ref cible n'est pas déjà IFC PS et qu'il y en a une.
+    if target_code != _PROJECT_ESG_FALLBACK_REF_CODE:
+        ifc_ref = await _load_referential_for_code(
+            db, _PROJECT_ESG_FALLBACK_REF_CODE,
+        )
+        if ifc_ref is not None:
+            a = (
+                await db.execute(
+                    select(ProjectEsgAssessment).where(
+                        ProjectEsgAssessment.account_id == account_id,
+                        ProjectEsgAssessment.project_id == project_id,
+                        ProjectEsgAssessment.referential_id
+                        == uuid.UUID(ifc_ref["id"]),
+                        ProjectEsgAssessment.state == "finalized",
+                        ProjectEsgAssessment.superseded_at.is_(None),
+                    )
+                    .order_by(desc(ProjectEsgAssessment.finalized_at))
+                    .limit(1)
+                )
+            ).scalar_one_or_none()
+            if a is not None and a.score is not None:
+                return int(a.score), {
+                    "is_fallback": True,
+                    "referential_used": ifc_ref,
+                    "assessment_id": str(a.id),
+                    "source_kind": "calculated",
+                    "unsourced": False,
+                    "cta_hint": None,
+                }
+
+    # 3. Fallback ``projects.project_esg_score`` (legacy F045).
+    project = (
+        await db.execute(
+            select(Project).where(
+                Project.id == project_id, Project.account_id == account_id,
+            )
+        )
+    ).scalar_one_or_none()
+    legacy_score = getattr(project, "project_esg_score", None) if project else None
+    if legacy_score is not None:
+        return max(0, min(100, int(legacy_score))), {
+            "is_fallback": is_fallback,
+            "referential_used": target_ref,
+            "assessment_id": None,
+            "source_kind": "manual_f045",
+            "unsourced": False,
+            "cta_hint": None,
+        }
+
+    # 4. Aucune source → 0 + unsourced + CTA hint.
+    return 0, {
+        "is_fallback": is_fallback,
+        "referential_used": target_ref,
+        "assessment_id": None,
+        "source_kind": "unsourced",
+        "unsourced": True,
+        "cta_hint": _cta_hint_for_referential(target_ref),
+    }
+
+
 # --- Orchestrateur project_score ---
 
 
 def _compute_project_score(
-    project: Any, fund: Any,
+    project: Any,
+    fund: Any,
+    *,
+    project_esg_subscore_value: int | None = None,
+    project_esg_subscore_meta: dict[str, Any] | None = None,
 ) -> tuple[int, dict[str, Any]]:
     """Calcule project_score 0..100 et retourne (score, breakdown_dict).
 
@@ -911,7 +1092,22 @@ def _compute_project_score(
     - missing_criteria : top 5 critères negatifs (kind/key/label_fr)
     - boost_applied : place-holder (rule_triggered=False initial)
     - weights_version, computed_at, factor_status
+    - project_esg_subscore : F047 meta {is_fallback, referential_used,
+      assessment_id, source_kind, unsourced, cta_hint}
+
+    Args:
+        project_esg_subscore_value: si fourni (F047), remplace l'heuristique
+            legacy `project.project_esg_score` par le score résolu depuis
+            `project_esg_assessments` (voir `_get_project_esg_subscore`).
+        project_esg_subscore_meta: meta F047 associée (référentiel utilisé,
+            is_fallback, source_kind, etc.) injectée telle quelle dans le
+            breakdown sous la clé `project_esg_subscore`.
     """
+    if project_esg_subscore_value is not None:
+        project_esg = max(0, min(100, int(project_esg_subscore_value)))
+    else:
+        project_esg = _compute_project_score_project_esg(project, fund)
+
     sub_scores = {
         "sector": _compute_project_score_sector(project, fund),
         "taxonomy": _compute_project_score_taxonomy(project, fund),
@@ -920,7 +1116,7 @@ def _compute_project_score(
         "beneficiaries": _compute_project_score_beneficiaries(project, fund),
         "gender": _compute_project_score_gender(project, fund),
         "vulnerable": _compute_project_score_vulnerable(project, fund),
-        "project_esg": _compute_project_score_project_esg(project, fund),
+        "project_esg": project_esg,
     }
     weighted = sum(sub_scores[k] * PROJECT_SCORE_WEIGHTS[k] for k in sub_scores)
     score = max(0, min(100, int(round(weighted))))
@@ -943,6 +1139,14 @@ def _compute_project_score(
         "computed_at": datetime.now(timezone.utc).isoformat(),
         "factor_status": "ok",
     }
+    if project_esg_subscore_meta is not None:
+        # F047 — meta exposée à l'UI pour transparence (badge is_fallback,
+        # CTA si unsourced, lien fiche évaluation, etc.)
+        breakdown["project_esg_subscore"] = {
+            "score": project_esg,
+            "weight": PROJECT_SCORE_WEIGHTS["project_esg"],
+            **project_esg_subscore_meta,
+        }
     return score, breakdown
 
 
@@ -1176,8 +1380,27 @@ async def _compute_offer_match_v045(
         project, offer, fund, esg_fund_score=esg_fund_score,
     )
 
-    # project_score (F045)
-    project_score, project_breakdown = _compute_project_score(project, fund)
+    # project_esg sub-score F047 (consomme project_esg_assessments)
+    try:
+        pe_score, pe_meta = await _get_project_esg_subscore(
+            db,
+            account_id=project.account_id,
+            project_id=project.id,
+            fund=fund,
+        )
+    except Exception:  # noqa: BLE001
+        logger.exception(
+            "F047 _get_project_esg_subscore failed (project=%s, offer=%s)",
+            project.id, offer.id,
+        )
+        pe_score, pe_meta = None, None
+
+    # project_score (F045 enrichi F047)
+    project_score, project_breakdown = _compute_project_score(
+        project, fund,
+        project_esg_subscore_value=pe_score,
+        project_esg_subscore_meta=pe_meta,
+    )
 
     # Heritage F14 (fund_score / intermediary_score / bottleneck) :
     # on calcule pour preserver la retrocompat.

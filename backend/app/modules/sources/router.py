@@ -6,11 +6,15 @@ import logging
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_admin, get_current_user
 from app.core.constants import UserRole
 from app.core.database import get_db
+from app.models.indicator import Criterion
+from app.models.referential import Referential
+from app.models.source import PublicationStatus
 from app.models.user import User
 from app.modules.sources.service import (
     FourEyesViolation,
@@ -61,6 +65,77 @@ async def list_sources(
         page=page,
         page_size=page_size,
     )
+
+
+@router.get("/referentials")
+async def list_referentials(
+    publication_status: str | None = Query(default="published"),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> list[dict]:
+    """Lister les référentiels ESG du catalogue F13.
+
+    Lecture publique pour tout utilisateur authentifié. Filtre par
+    `publication_status` (défaut: published). Renvoie le minimum nécessaire
+    pour les sélecteurs UI (id, code, label, description, version,
+    publication_status, source_id).
+
+    **Important** : cette route DOIT précéder ``/{source_id}`` pour éviter
+    que FastAPI tente de parser `referentials` comme UUID.
+    """
+    stmt = select(Referential)
+    if publication_status:
+        stmt = stmt.where(Referential.publication_status == publication_status)
+    stmt = stmt.order_by(Referential.code)
+    rows = (await db.execute(stmt)).scalars().all()
+    return [
+        {
+            "id": str(r.id),
+            "code": r.code,
+            "label": r.label,
+            "description": r.description,
+            "version": getattr(r, "version", None),
+            "publication_status": r.publication_status,
+            "source_id": str(r.source_id) if getattr(r, "source_id", None) else None,
+        }
+        for r in rows
+    ]
+
+
+@router.get("/criteria")
+async def list_criteria(
+    applies_to_project: bool | None = Query(default=None),
+    referential_id: UUID | None = Query(default=None),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> list[dict]:
+    """Lister les critères ESG du catalogue F13 (filtres par projet et référentiel).
+
+    Lecture publique pour tout utilisateur authentifié. Utilisé par le
+    wizard ESG-projet (F047) pour charger les critères applicables au
+    projet selon le référentiel sélectionné.
+
+    **Important** : cette route DOIT précéder ``/{source_id}``.
+    """
+    stmt = select(Criterion)
+    if applies_to_project is not None:
+        stmt = stmt.where(Criterion.applies_to_project.is_(applies_to_project))
+    if referential_id is not None:
+        stmt = stmt.where(Criterion.referential_id == referential_id)
+    stmt = stmt.order_by(Criterion.code)
+    rows = (await db.execute(stmt)).scalars().all()
+    return [
+        {
+            "id": str(c.id),
+            "code": c.code,
+            "label": c.label,
+            "weight": float(c.weight) if c.weight is not None else None,
+            "is_required": c.is_required,
+            "applies_to_project": c.applies_to_project,
+            "referential_id": str(c.referential_id) if c.referential_id else None,
+        }
+        for c in rows
+    ]
 
 
 @router.get("/{source_id}", response_model=Source)

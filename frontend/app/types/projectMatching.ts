@@ -52,6 +52,27 @@ export interface BoostApplied {
   rule_name?: string | null
 }
 
+export type ProjectEsgSourceKind = 'calculated' | 'manual_f045' | 'unsourced'
+
+export interface ReferentialRef {
+  id: string
+  code: string
+  label: string
+  version: string
+}
+
+/** F047 — Sub-score project_esg détaillé (transparence UI + CTA). */
+export interface ProjectEsgSubScore {
+  score: number
+  weight: number
+  is_fallback: boolean
+  referential_used: ReferentialRef | null
+  assessment_id: string | null
+  source_kind: ProjectEsgSourceKind
+  unsourced: boolean
+  cta_hint: string | null
+}
+
 export interface ProjectScoreBreakdown {
   weights_version: string
   sub_scores: SubScores
@@ -60,6 +81,8 @@ export interface ProjectScoreBreakdown {
   boost_applied: BoostApplied
   computed_at: string
   factor_status: FactorStatus
+  /** F047 — meta du sub-score project_esg. Optionnel (rétrocompat). */
+  project_esg_subscore?: ProjectEsgSubScore | null
 }
 
 export interface MatchFundsItem {

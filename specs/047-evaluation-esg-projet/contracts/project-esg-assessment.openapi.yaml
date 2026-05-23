@@ -1,0 +1,440 @@
+openapi: 3.1.0
+info:
+  title: ESG Mefali — Évaluation ESG-projet
+  version: 0.1.0
+  description: |
+    Endpoints CRUD + finalisation pour les évaluations ESG au niveau projet (feature 047).
+    Tous les endpoints respectent RLS F02 (compte tenant), audit log F03 (toutes les mutations
+    sont auditées), F01 sourçage (validator post-LLM retry 1× sur les réponses LLM).
+servers:
+  - url: https://api.mefali.io
+    description: Production
+  - url: http://localhost:8000
+    description: Local dev
+
+tags:
+  - name: project-esg
+    description: Évaluation ESG-projet (047)
+
+security:
+  - bearerAuth: []
+
+paths:
+  /api/projects/{project_id}/esg-assessment:
+    post:
+      tags: [project-esg]
+      summary: Démarrer une évaluation ESG-projet
+      description: |
+        Crée une nouvelle `ProjectEsgAssessment` à l'état `draft` rattachée au projet ciblé
+        et au référentiel choisi. Une seule évaluation par couple (project_id, referential_id)
+        peut être à l'état `draft` simultanément ; un appel sur un couple déjà en draft retourne
+        409 Conflict avec l'ID de l'évaluation existante.
+      operationId: createProjectEsgAssessment
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProjectEsgAssessmentCreate'
+      responses:
+        '201':
+          description: Évaluation créée à l'état draft
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectEsgAssessmentRead'
+        '404':
+          description: Projet introuvable ou tenant tiers (RLS F02 → 404, jamais 403)
+        '409':
+          description: Une évaluation draft existe déjà pour ce couple (project, référentiel)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConflictError'
+        '422':
+          description: Référentiel non applicable au niveau projet ou dépublié
+
+  /api/projects/{project_id}/esg-assessments:
+    get:
+      tags: [project-esg]
+      summary: Lister les évaluations ESG-projet d'un projet
+      description: |
+        Retourne la liste paginée des évaluations rattachées au projet, triée par
+        `state` (finalized en premier) puis `referential_id` puis `created_at DESC`.
+        FR-044.
+      operationId: listProjectEsgAssessments
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+        - in: query
+          name: state
+          schema:
+            type: string
+            enum: [draft, finalized]
+          required: false
+        - in: query
+          name: referential_id
+          schema:
+            type: string
+            format: uuid
+          required: false
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 50
+            maximum: 100
+        - in: query
+          name: offset
+          schema:
+            type: integer
+            default: 0
+      responses:
+        '200':
+          description: Liste paginée
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ProjectEsgAssessmentRead'
+                  total:
+                    type: integer
+                  limit:
+                    type: integer
+                  offset:
+                    type: integer
+
+  /api/projects/{project_id}/esg-assessment/{assessment_id}:
+    get:
+      tags: [project-esg]
+      summary: Détail d'une évaluation ESG-projet
+      operationId: getProjectEsgAssessment
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+        - $ref: '#/components/parameters/AssessmentId'
+      responses:
+        '200':
+          description: Détail de l'évaluation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectEsgAssessmentDetail'
+        '404':
+          description: Évaluation introuvable ou tenant tiers (RLS F02 → 404)
+
+    delete:
+      tags: [project-esg]
+      summary: Supprimer une évaluation (draft ou finalized)
+      description: |
+        Supprime une évaluation. Si `state='finalized'`, déclenche le listener D8 qui
+        recalcule le snapshot `projects.project_esg_score` à partir de l'évaluation suivante
+        active (ou retombe sur la saisie F045 manuelle si elle existe, sinon 0+unsourced).
+      operationId: deleteProjectEsgAssessment
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+        - $ref: '#/components/parameters/AssessmentId'
+      responses:
+        '204':
+          description: Évaluation supprimée
+        '404':
+          description: Évaluation introuvable ou tenant tiers
+
+  /api/projects/{project_id}/esg-assessment/{assessment_id}/criterion:
+    post:
+      tags: [project-esg]
+      summary: Sauvegarder une réponse à un critère
+      description: |
+        Crée ou met à jour la réponse à un critère pour cette évaluation (révision draft
+        autorisée par FR-003a). Refuse si `state='finalized'` (immuabilité FR-005).
+        Validator F01 `source_required.py` exige `source_id` non-null OU `unsourced=true`
+        (XOR strict).
+      operationId: saveProjectEsgCriterionResponse
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+        - $ref: '#/components/parameters/AssessmentId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProjectEsgCriterionResponseSave'
+      responses:
+        '200':
+          description: Réponse enregistrée (création ou mise à jour)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectEsgCriterionResponseRead'
+        '404':
+          description: Évaluation, critère ou source introuvable
+        '409':
+          description: Évaluation finalized — modification refusée
+        '422':
+          description: Validation F01 (source_id requis) ou critère non applicable au référentiel cible
+
+  /api/projects/{project_id}/esg-assessment/{assessment_id}/finalize:
+    post:
+      tags: [project-esg]
+      summary: Finaliser une évaluation
+      description: |
+        Bascule l'évaluation de `draft` à `finalized`, calcule le score 0..100 avec pondération
+        `criterion.weight` F13, identifie les critères manquants. Refuse si critères obligatoires
+        non répondus (FR-006, 422 avec liste explicite). Déclenche le listener D8 (snapshot
+        `projects.project_esg_score`) en post-commit, debounce 30s.
+      operationId: finalizeProjectEsgAssessment
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+        - $ref: '#/components/parameters/AssessmentId'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProjectEsgAssessmentFinalize'
+      responses:
+        '200':
+          description: Évaluation finalisée
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectEsgAssessmentFinalizeResult'
+        '404':
+          description: Évaluation introuvable
+        '409':
+          description: Déjà finalisée (immuable)
+        '422':
+          description: Critères obligatoires manquants (liste retournée)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MissingRequiredCriteriaError'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    ProjectId:
+      in: path
+      name: project_id
+      required: true
+      schema:
+        type: string
+        format: uuid
+    AssessmentId:
+      in: path
+      name: assessment_id
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+  schemas:
+    ProjectEsgAssessmentCreate:
+      type: object
+      additionalProperties: false
+      required: [referential_id]
+      properties:
+        referential_id:
+          type: string
+          format: uuid
+          description: ID du référentiel cible (doit être applicable au niveau projet)
+
+    ProjectEsgAssessmentRead:
+      type: object
+      additionalProperties: false
+      required: [id, project_id, referential_id, referential_version, state, pillar_scores, covered_criteria, missing_criteria, created_at, updated_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        project_id:
+          type: string
+          format: uuid
+        referential_id:
+          type: string
+          format: uuid
+        referential_version:
+          type: string
+          example: "1.2"
+        state:
+          type: string
+          enum: [draft, finalized]
+        score:
+          type: integer
+          minimum: 0
+          maximum: 100
+          nullable: true
+        pillar_scores:
+          type: object
+          additionalProperties:
+            type: integer
+          example: { "PS1": 75, "PS2": 60 }
+        covered_criteria:
+          type: array
+          items:
+            type: string
+            format: uuid
+        missing_criteria:
+          type: array
+          items:
+            type: string
+            format: uuid
+        coverage_rate:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 1
+          nullable: true
+        finalized_at:
+          type: string
+          format: date-time
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    ProjectEsgAssessmentDetail:
+      allOf:
+        - $ref: '#/components/schemas/ProjectEsgAssessmentRead'
+        - type: object
+          properties:
+            responses:
+              type: array
+              items:
+                $ref: '#/components/schemas/ProjectEsgCriterionResponseRead'
+            referential:
+              type: object
+              properties:
+                id: { type: string, format: uuid }
+                name: { type: string }
+                version: { type: string }
+
+    ProjectEsgCriterionResponseSave:
+      type: object
+      additionalProperties: false
+      required: [criterion_id, response_type, response_value]
+      properties:
+        criterion_id:
+          type: string
+          format: uuid
+        response_type:
+          type: string
+          enum: [qcu, qcm, qcu_justification, qcm_justification, numeric, money, free_text]
+        response_value:
+          type: object
+          description: Payload typé selon response_type (validation Pydantic discriminée côté backend)
+        source_id:
+          type: string
+          format: uuid
+          nullable: true
+        unsourced:
+          type: boolean
+          default: false
+
+    ProjectEsgCriterionResponseRead:
+      type: object
+      additionalProperties: false
+      required: [id, criterion_id, response_type, response_value, normalized_score, unsourced, created_at, updated_at]
+      properties:
+        id: { type: string, format: uuid }
+        criterion_id: { type: string, format: uuid }
+        response_type:
+          type: string
+          enum: [qcu, qcm, qcu_justification, qcm_justification, numeric, money, free_text]
+        response_value:
+          type: object
+        normalized_score:
+          type: number
+          minimum: 0
+          maximum: 1
+        source_id:
+          type: string
+          format: uuid
+          nullable: true
+        unsourced:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    ProjectEsgAssessmentFinalize:
+      type: object
+      additionalProperties: false
+      properties: {}
+
+    ProjectEsgAssessmentFinalizeResult:
+      type: object
+      additionalProperties: false
+      required: [assessment, score, pillar_scores, missing_criteria, coverage_rate]
+      properties:
+        assessment:
+          $ref: '#/components/schemas/ProjectEsgAssessmentRead'
+        score:
+          type: integer
+          minimum: 0
+          maximum: 100
+        pillar_scores:
+          type: object
+          additionalProperties: { type: integer }
+        missing_criteria:
+          type: array
+          items:
+            type: object
+            properties:
+              criterion_id: { type: string, format: uuid }
+              criterion_code: { type: string }
+              standard: { type: string, example: "PS1" }
+        coverage_rate:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 1
+
+    ConflictError:
+      type: object
+      required: [error_code, message]
+      properties:
+        error_code:
+          type: string
+          example: "draft_assessment_already_exists"
+        message:
+          type: string
+          example: "Une évaluation à l'état draft existe déjà pour ce projet et ce référentiel."
+        existing_assessment_id:
+          type: string
+          format: uuid
+
+    MissingRequiredCriteriaError:
+      type: object
+      required: [error_code, message, missing_criteria]
+      properties:
+        error_code:
+          type: string
+          example: "missing_required_criteria"
+        message:
+          type: string
+          example: "Impossible de finaliser : 3 critères obligatoires non répondus."
+        missing_criteria:
+          type: array
+          items:
+            type: object
+            properties:
+              criterion_id: { type: string, format: uuid }
+              criterion_code: { type: string }
+              standard: { type: string }
+              label: { type: string }

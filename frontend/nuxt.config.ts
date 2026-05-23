@@ -24,6 +24,12 @@ export default defineNuxtConfig({
       // F07 — Feature flag : true = afficher les Cards Offres ; false = vue Cards Fonds legacy.
       // Default false en MVP F07 ; bascule effective post-F14 (matching offre).
       useOfferView: process.env.NUXT_PUBLIC_USE_OFFER_VIEW === 'true',
+      // F047 — Feature flag : active/cache l'UI évaluation ESG-projet
+      // (wizard + page /profile/projects/[id]/esg). Default true ; passer
+      // à 'false' en cas de rollback critique post-déploiement (cf.
+      // docs/feature-flags.md et specs/047-evaluation-esg-projet/quickstart.md).
+      enableProjectEsgAssessment:
+        (process.env.NUXT_PUBLIC_ENABLE_PROJECT_ESG_ASSESSMENT ?? 'true') !== 'false',
     },
   },
 

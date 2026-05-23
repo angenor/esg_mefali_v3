@@ -94,6 +94,9 @@ AUDITABLE_MODELS: frozenset[str] = frozenset(
         # F14 — Matching Projet ↔ Offre
         "OfferMatch",
         "MatchAlertSubscription",
+        # F047 — Évaluation ESG-projet
+        "ProjectEsgAssessment",
+        "ProjectEsgCriterionResponse",
         # F18 — Crédit alternatif (Mobile Money + Photos IA + Données publiques)
         "MobileMoneyImport",
         "MobileMoneyTransaction",

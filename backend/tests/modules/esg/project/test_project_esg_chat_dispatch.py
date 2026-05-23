@@ -325,3 +325,64 @@ class TestChatNodePromptOnProjectPage:
 async def _bypass_skills(*, base_prompt, base_tools, **_kwargs):  # noqa: ANN001
     """Stub `apply_skills_to_node` qui renvoie l'identité (pas de BDD)."""
     return base_prompt, list(base_tools), None
+
+
+@pytest.mark.unit
+class TestSaveCriterionAcceptsJsonString:
+    """`SaveCriterionArgs.response_value` tolère les chaînes JSON sérialisées
+    en plus du dict natif. Certains LLMs envoient `response_value="{\\"choice\\":\\"yes\\"}"`
+    (string) plutôt que l'objet JSON, ce qui faisait échouer le tool avec
+    « Input should be a valid dictionary ».
+    """
+
+    def test_native_dict_accepted(self):
+        import uuid as _uuid
+        from app.graph.tools.project_esg_tools import SaveCriterionArgs
+
+        args = SaveCriterionArgs(
+            assessment_id=_uuid.uuid4(),
+            criterion_id=_uuid.uuid4(),
+            response_type="qcu",
+            response_value={"choice": "yes"},
+        )
+        assert args.response_value == {"choice": "yes"}
+
+    def test_json_string_auto_parsed(self):
+        import uuid as _uuid
+        from app.graph.tools.project_esg_tools import SaveCriterionArgs
+
+        args = SaveCriterionArgs(
+            assessment_id=_uuid.uuid4(),
+            criterion_id=_uuid.uuid4(),
+            response_type="qcu",
+            response_value='{"choice": "yes"}',
+        )
+        assert args.response_value == {"choice": "yes"}
+        assert isinstance(args.response_value, dict)
+
+    def test_non_json_string_rejected(self):
+        import uuid as _uuid
+        from pydantic import ValidationError
+        from app.graph.tools.project_esg_tools import SaveCriterionArgs
+
+        with pytest.raises(ValidationError):
+            SaveCriterionArgs(
+                assessment_id=_uuid.uuid4(),
+                criterion_id=_uuid.uuid4(),
+                response_type="qcu",
+                response_value="not a json string",
+            )
+
+    def test_json_string_with_array_rejected(self):
+        """response_value doit toujours être un dict, pas un array JSON."""
+        import uuid as _uuid
+        from pydantic import ValidationError
+        from app.graph.tools.project_esg_tools import SaveCriterionArgs
+
+        with pytest.raises(ValidationError):
+            SaveCriterionArgs(
+                assessment_id=_uuid.uuid4(),
+                criterion_id=_uuid.uuid4(),
+                response_type="qcm",
+                response_value='["choice1", "choice2"]',
+            )

@@ -212,7 +212,13 @@ def _build_project_esg_directive(project_id: str | None) -> str:
         "ou `flag_unsourced(reason='user_input')`).\n"
         "4. Finalise via `finalize_project_esg_assessment` quand tous les "
         "obligatoires sont couverts, puis restitue via `show_kpi_card` "
-        "(score) + `show_comparison_table` (couverts vs manquants).\n\n"
+        "(score) + `show_comparison_table` (couverts vs manquants).\n"
+        "5. RAPPORT — si l'utilisateur demande un rapport ESIA-light, un "
+        "dossier bailleur, ou un rapport ESG-projet apres finalisation, "
+        "TU DOIS appeler `generate_project_esg_report(assessment_id=...)` "
+        "(rapport F047). NE PAS appeler `generate_esg_report` (qui est le "
+        "rapport ESG ENTREPRISE F05, totalement different — il porte sur "
+        "l'entreprise dans son ensemble, pas sur le projet vert).\n\n"
         "ANTI-PATTERN A REJETER : « Avez-vous un projet existant ? Creer / "
         "Choisir ». Le projet est deja dans l'URL, AUCUNE question de ce "
         "type n'est legitime au tour 1.\n"
@@ -981,15 +987,25 @@ def _route_esg_target(state: ConversationState) -> str:
     """F047 (D1) — Dispatch entre évaluation entreprise (F05) et projet (047).
 
     Le routage se fait sur la base de ``current_page`` (URL active) :
-    - Si l'URL matche ``^/profile/projects/[^/]+/esg(?:/|$)`` → ``project``.
+    - Si l'URL matche ``^/profile/projects/[^/]+(?:/[^/]*)?/?$`` (fiche
+      projet avec ou sans suffixe ``/esg``) → ``project``.
     - Sinon → ``company`` (comportement F05 historique inchangé).
 
-    Helper ≤ 30 lignes, aucune mutation F05. Test conformity :
+    Mise à jour bugfix F047 (mai 2026) : avant ce changement, seule la page
+    dédiée ``/profile/projects/{id}/esg`` était routée vers la branche
+    projet. Mais quand le LLM bascule depuis ``chat_node`` (sur la fiche
+    projet ``/profile/projects/{id}``) vers ``esg_scoring_node`` pour
+    finaliser, on retombait sur la branche entreprise F05 et le LLM
+    appelait ``finalize_esg_assessment`` au lieu de
+    ``finalize_project_esg_assessment``. Désormais, toute fiche projet
+    pilote la branche F047.
+
+    Helper ≤ 30 lignes, aucune mutation F05. Tests conformity :
     ``test_esg_scoring_node_dispatch.py``.
     """
     current_page = state.get("current_page") or ""
     if isinstance(current_page, str) and re.match(
-        r"^/profile/projects/[^/]+/esg(?:/|$)", current_page,
+        r"^/profile/projects/[^/]+(?:/[^/]*)?/?$", current_page,
     ):
         return "project"
     return "company"

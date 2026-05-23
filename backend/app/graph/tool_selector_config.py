@@ -27,7 +27,10 @@ import re
 # F045 ajoute match_funds_for_project sur 4 mappings (financing/application
 # modules + profile_projects/chat pages) → portee a 31 pour respecter la
 # borne MAX_TOOLS_PER_TURN sans casser les pages existantes.
-MAX_TOOLS_PER_TURN: int = 31
+# F047 ajoute 6 tools ESG-projet (5 + show_comparison_table) sur le slug
+# `profile_projects` → portee a 36 pour permettre au LLM de piloter
+# l'évaluation depuis la fiche projet sans navigation manuelle.
+MAX_TOOLS_PER_TURN: int = 36
 
 # Whitelist transverse : tools toujours disponibles, ajoutes a chaque selection.
 # Source de verite : seuls les tools EFFECTIVEMENT exposes par le code peuvent
@@ -112,6 +115,17 @@ PAGE_TOOL_MAPPING: dict[str, frozenset[str]] = {
         "get_match_details",
         # F045 — Matching projet-centric depuis la page projets
         "match_funds_for_project",
+        # F047 — Tools ESG-projet exposés aussi sur la fiche projet pour
+        # permettre au LLM de démarrer l'évaluation depuis /profile/projects/[id]
+        # (sans obliger l'utilisateur à naviguer vers /profile/projects/[id]/esg).
+        "create_project_esg_assessment",
+        "save_project_esg_criterion",
+        "finalize_project_esg_assessment",
+        "get_project_esg_assessment",
+        "list_project_esg_assessments",
+        "generate_project_esg_report",
+        # F11 — table comparative critères couverts vs manquants
+        "show_comparison_table",
     }),
     # Evaluation ESG (pages /esg, /esg/results).
     "esg": frozenset({
@@ -126,6 +140,32 @@ PAGE_TOOL_MAPPING: dict[str, frozenset[str]] = {
         # F11 — KPICard pour synthèses ESG (score global, scores par pilier)
         "show_kpi_card",
         # F10 — summary card pour valider extractions critères ESG
+        "show_summary_card",
+        # F047 — Tools ESG-projet exposés aussi sur le slug `esg` pour les
+        # conversations qui démarrent depuis le slug catalogue.
+        "create_project_esg_assessment",
+        "save_project_esg_criterion",
+        "finalize_project_esg_assessment",
+        "get_project_esg_assessment",
+        "list_project_esg_assessments",
+        "generate_project_esg_report",
+    }),
+    # F047 — Page dédiée évaluation ESG-projet : tools projet exclusifs.
+    "profile_projects_esg": frozenset({
+        # ESG-projet (US4)
+        "create_project_esg_assessment",
+        "save_project_esg_criterion",
+        "finalize_project_esg_assessment",
+        "get_project_esg_assessment",
+        "list_project_esg_assessments",
+        "generate_project_esg_report",
+        # Projets contextuels en lecture (rappel du projet courant)
+        "list_projects",
+        "get_project",
+        # F11 — visualisations (KPI score, table critères couverts vs manquants)
+        "show_kpi_card",
+        "show_comparison_table",
+        # F10 — summary card pour récap finalisation
         "show_summary_card",
     }),
     # Bilan carbone (pages /carbon, /carbon/results).
@@ -276,6 +316,16 @@ MODULE_TOOL_MAPPING: dict[str, frozenset[str]] = {
         "show_kpi_card",
         # F10 — summary card pour valider extractions critères ESG
         "show_summary_card",
+        # F047 — Évaluation ESG-projet (US4). Le dispatch nodes._route_esg_target
+        # arbitre entre entreprise (F05) et projet selon current_page.
+        "create_project_esg_assessment",
+        "save_project_esg_criterion",
+        "finalize_project_esg_assessment",
+        "get_project_esg_assessment",
+        "list_project_esg_assessments",
+        "generate_project_esg_report",
+        # F047 — table comparative critères couverts vs manquants
+        "show_comparison_table",
     }),
     "carbon": frozenset({
         "create_carbon_assessment",
@@ -361,6 +411,9 @@ MODULE_TOOL_MAPPING: dict[str, frozenset[str]] = {
 _PATH_TO_SLUG_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
     (re.compile(r"^/$"), "chat_global"),
     (re.compile(r"^/chat(?:/|$)"), "chat_global"),
+    # F047 — `/profile/projects/{id}/esg` doit matcher AVANT
+    # `/profile/projects` (l'ordre compte).
+    (re.compile(r"^/profile/projects/[^/]+/esg(?:/|$)"), "profile_projects_esg"),
     # F06 — `/profile/projects` doit matcher AVANT `/profile` (l'ordre compte).
     (re.compile(r"^/profile/projects(?:/|$)"), "profile_projects"),
     (re.compile(r"^/profile(?:/|$)"), "profile"),

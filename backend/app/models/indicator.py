@@ -6,6 +6,7 @@ Entites factuelles du catalogue, chacune liee a une Source via FK NOT NULL.
 import uuid
 
 from sqlalchemy import (
+    Boolean,
     CheckConstraint,
     ForeignKey,
     Index,
@@ -96,6 +97,22 @@ class Criterion(UUIDMixin, TimestampMixin, VersioningMixin, Base):
         UUID(as_uuid=True),
         ForeignKey("users.id", ondelete="RESTRICT"),
         nullable=False,
+    )
+
+    # F047 — extension pour évaluation ESG-projet
+    weight: Mapped[float] = mapped_column(
+        Numeric(4, 2), nullable=False, default=1.00, server_default="1.00",
+    )
+    is_required: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false",
+    )
+    applies_to_project: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false",
+    )
+    referential_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("referentials.id", ondelete="RESTRICT"),
+        nullable=True,
     )
 
     __table_args__ = (

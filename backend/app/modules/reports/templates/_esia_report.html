@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>Rapport ESIA-light — {{ project_name }}</title>
+  <style>
+    body { font-family: 'Helvetica', 'Arial', sans-serif; color: #1f2937; font-size: 11pt; line-height: 1.55; }
+    h1 { font-size: 28pt; color: #047857; margin: 0 0 6pt 0; }
+    h2 { font-size: 16pt; color: #065f46; margin-top: 28pt; border-bottom: 1pt solid #d1d5db; padding-bottom: 4pt; }
+    h3 { font-size: 12pt; color: #047857; margin-top: 18pt; }
+    section { page-break-inside: avoid; }
+    .cover { text-align: center; padding: 80pt 0; }
+    .cover-subtitle { font-size: 14pt; color: #4b5563; margin-bottom: 18pt; }
+    .cover-meta { font-size: 11pt; color: #6b7280; }
+    .badge-score { display: inline-block; background: #ecfdf5; border: 2pt solid #047857; color: #047857; font-weight: 700; padding: 12pt 22pt; border-radius: 10pt; font-size: 22pt; }
+    .kpi { display: inline-block; margin: 0 8pt; padding: 8pt 12pt; background: #f3f4f6; border-radius: 6pt; }
+    .kpi-value { font-weight: 700; font-size: 14pt; color: #047857; }
+    .kpi-label { font-size: 9pt; color: #4b5563; display: block; }
+    .chart-container { text-align: center; margin: 16pt 0; }
+    table { width: 100%; border-collapse: collapse; margin: 10pt 0; }
+    th, td { border: 0.5pt solid #d1d5db; padding: 6pt 8pt; text-align: left; font-size: 10pt; }
+    th { background: #f0fdf4; color: #065f46; }
+    .source-cite { color: #047857; font-size: 9pt; }
+    .empty { font-style: italic; color: #6b7280; }
+  </style>
+</head>
+<body>
+
+<!-- Couverture -->
+<div class="cover">
+  <h1>Rapport ESIA-light</h1>
+  <div class="cover-subtitle">Évaluation Environnementale & Sociale du projet</div>
+  <div class="badge-score">{{ overall_score }}/100</div>
+  <div class="cover-meta" style="margin-top: 16pt;">
+    Projet : <strong>{{ project_name }}</strong><br>
+    Référentiel cible : <strong>{{ referential_label }} (v{{ referential_version }})</strong><br>
+    Généré le {{ generation_date }}
+  </div>
+</div>
+
+<!-- Section 1 — Résumé exécutif -->
+<section>
+  <h2>1. Résumé exécutif</h2>
+  <p>{{ executive_summary }}</p>
+  <div class="chart-container">
+    <span class="kpi"><span class="kpi-value">{{ overall_score }}/100</span><span class="kpi-label">Score global</span></span>
+    <span class="kpi"><span class="kpi-value">{{ covered_count }}</span><span class="kpi-label">Critères couverts</span></span>
+    <span class="kpi"><span class="kpi-value">{{ missing_count }}</span><span class="kpi-label">Critères restants</span></span>
+    <span class="kpi"><span class="kpi-value">{{ (coverage_rate * 100) | round(1) }}%</span><span class="kpi-label">Couverture</span></span>
+  </div>
+</section>
+
+<!-- Section 2 — Description du projet -->
+<section>
+  <h2>2. Description du projet</h2>
+  <table>
+    <tr><th>Nom du projet</th><td>{{ project_name }}</td></tr>
+    <tr><th>Description</th><td>{{ project_description or "—" }}</td></tr>
+    <tr><th>Pays / région</th><td>{{ project_country or "—" }} / {{ project_region or "—" }}</td></tr>
+    <tr><th>Maturité</th><td>{{ project_maturity or "—" }}</td></tr>
+    <tr><th>Objectifs environnementaux</th><td>{{ project_objectives | join(", ") if project_objectives else "—" }}</td></tr>
+  </table>
+</section>
+
+<!-- Section 3 — Diagnostic E&S (baseline) -->
+<section>
+  <h2>3. Diagnostic E&amp;S (baseline)</h2>
+  <div class="chart-container">{{ donut_svg | safe }}</div>
+  <h3>Scores par standard</h3>
+  {% if pillar_scores %}
+    <table>
+      <thead><tr><th>Standard</th><th>Score (0-100)</th></tr></thead>
+      <tbody>
+        {% for k, v in pillar_scores.items() %}
+          <tr><td>{{ k }}</td><td><strong>{{ v }}</strong></td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p class="empty">Aucun score par standard disponible.</p>
+  {% endif %}
+</section>
+
+<!-- Section 4 — Impacts identifiés -->
+<section>
+  <h2>4. Impacts identifiés</h2>
+  {% if covered_responses %}
+    <table>
+      <thead><tr><th>Critère</th><th>Réponse</th><th>Source</th></tr></thead>
+      <tbody>
+        {% for r in covered_responses %}
+          <tr>
+            <td><strong>{{ r.code }}</strong> — {{ r.label }}</td>
+            <td>{{ r.value_human }}</td>
+            <td>{% if r.source_title %}<span class="source-cite">[{{ r.source_title }}]</span>{% else %}<em>Non sourcée</em>{% endif %}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p class="empty">Aucune réponse persistée pour cette évaluation.</p>
+  {% endif %}
+</section>
+
+<!-- Section 5 — Mesures d'atténuation -->
+<section>
+  <h2>5. Mesures d'atténuation</h2>
+  {% if missing_required %}
+    <p>Critères obligatoires restants nécessitant des mesures correctives ou d'atténuation :</p>
+    <ul>
+      {% for c in missing_required %}
+        <li><strong>{{ c.code }}</strong> — {{ c.label }}</li>
+      {% endfor %}
+    </ul>
+  {% else %}
+    <p>L'ensemble des critères obligatoires du référentiel ont été couverts. Les mesures d'atténuation détaillées seront définies dans le Plan de Gestion E&amp;S (PGES) du projet, en cohérence avec le standard {{ referential_label }}.</p>
+  {% endif %}
+</section>
+
+<!-- Section 6 — Engagement des parties prenantes -->
+<section>
+  <h2>6. Engagement des parties prenantes</h2>
+  <p>Le projet s'inscrit dans une démarche de dialogue continu avec les communautés locales, les autorités et les bénéficiaires. Les mécanismes formels (cartographie, consultations publiques, mécanisme de plaintes) seront détaillés dans le Plan d'Engagement des Parties Prenantes (PEPP) joint au dossier de financement.</p>
+</section>
+
+<!-- Section 7 — Indicateurs de suivi M&E -->
+<section>
+  <h2>7. Indicateurs de suivi (M&amp;E)</h2>
+  <p>Les indicateurs clés du dispositif de suivi-évaluation incluent (a minima) :</p>
+  <ul>
+    <li>Score ESG-projet recalculé annuellement contre le référentiel {{ referential_label }}.</li>
+    <li>Nombre de bénéficiaires directs et indirects (désagrégés par genre).</li>
+    <li>Émissions GES évitées / séquestrées (tCO2e) si applicable.</li>
+    <li>Couverture des standards prioritaires identifiés à la baseline (% critères couverts).</li>
+    <li>Avancement des mesures d'atténuation du PGES (jalons trimestriels).</li>
+  </ul>
+</section>
+
+{% if include_appendix_sources %}
+  {% include "_appendix_sources.html" %}
+{% endif %}
+
+</body>
+</html>

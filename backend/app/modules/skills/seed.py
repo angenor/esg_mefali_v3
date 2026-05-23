@@ -371,16 +371,19 @@ def _build_seeds(creator_id: uuid.UUID) -> list[dict]:
                 "obligatoires sont couverts.\n"
                 "5) Restituer le résultat via `show_kpi_card` (score) + "
                 "`show_comparison_table` (critères couverts vs manquants).\n"
-                "6) Si l'utilisateur veut un dossier bailleur, suggérer la génération "
-                "du rapport ESIA-light (lien `/profile/projects/{id}/esg`)."
+                "6) Si l'utilisateur demande le rapport ESIA-light / dossier "
+                "bailleur, appeler `generate_project_esg_report(assessment_id=...)` "
+                "— NE PAS appeler `generate_esg_report` qui est le rapport ESG "
+                "ENTREPRISE F05 (différent et inadapté ici)."
             ),
             "tool_whitelist": [
-                # Tools ESG-projet F047 (5)
+                # Tools ESG-projet F047 (6)
                 "create_project_esg_assessment",
                 "save_project_esg_criterion",
                 "finalize_project_esg_assessment",
                 "get_project_esg_assessment",
                 "list_project_esg_assessments",
+                "generate_project_esg_report",
                 # Tools sourçage F01 globaux (3)
                 "cite_source",
                 "search_source",

@@ -7,6 +7,7 @@ import MissingProjectCriteriaList from '~/components/financing/MissingProjectCri
 import type { Offer } from '~/types/financing'
 import type {
   MissingCriterion,
+  ProjectEsgSubScore,
   ProjectScoreBreakdown,
 } from '~/types/projectMatching'
 
@@ -28,6 +29,7 @@ const matchProjectScore = ref<number | null>(null)
 const matchCompanyScore = ref<number | null>(null)
 const matchDivergenceExplanation = ref<string | null>(null)
 const matchMissingCriteria = ref<MissingCriterion[]>([])
+const matchProjectEsgSubScore = ref<ProjectEsgSubScore | null>(null)
 
 const activeProjectId = computed<string | null>(() => {
   const qp = route.query.project_id
@@ -68,6 +70,9 @@ async function loadOffer(): Promise<void> {
         if (bd && Array.isArray((bd as ProjectScoreBreakdown).missing_criteria)) {
           matchMissingCriteria.value = (bd as ProjectScoreBreakdown).missing_criteria
         }
+        // F047 — meta sub-score project_esg (badge fallback + CTA si unsourced)
+        const peSub = (bd as ProjectScoreBreakdown)?.project_esg_subscore ?? null
+        matchProjectEsgSubScore.value = peSub ?? null
       }
     }
   } catch (err) {
@@ -107,7 +112,32 @@ onMounted(loadOffer)
           :project-score="matchProjectScore"
           :company-score="matchCompanyScore"
           :divergence-explanation="matchDivergenceExplanation"
+          :project-esg-subscore="matchProjectEsgSubScore"
         />
+        <!-- F047 — CTA si project_esg unsourced -->
+        <div
+          v-if="matchProjectEsgSubScore?.unsourced && activeProjectId"
+          class="rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm
+                 text-amber-900 dark:border-amber-700 dark:bg-amber-900/20
+                 dark:text-amber-200"
+          role="status"
+          data-testid="project-esg-cta-start"
+        >
+          <p class="mb-2 font-medium">
+            {{ matchProjectEsgSubScore.cta_hint ?? "Démarrer une évaluation ESG-projet." }}
+          </p>
+          <NuxtLink
+            :to="`/profile/projects/${activeProjectId}/esg`"
+            class="inline-flex items-center gap-1 rounded-md bg-amber-700 px-3
+                   py-1.5 text-xs font-semibold text-white shadow-sm
+                   hover:bg-amber-800 focus:outline-none focus:ring-2
+                   focus:ring-amber-500 focus:ring-offset-1
+                   dark:bg-amber-600 dark:hover:bg-amber-500"
+          >
+            Démarrer l'évaluation
+            <span aria-hidden="true">→</span>
+          </NuxtLink>
+        </div>
         <MissingProjectCriteriaList
           v-if="matchMissingCriteria.length > 0"
           :criteria="matchMissingCriteria"

@@ -34,8 +34,19 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     F12 — Initialise un ``AsyncPostgresSaver`` dans un async context manager
     pour la persistance des conversations LangGraph (survit aux redémarrages
     du backend). Le graphe est compilé avec ce checkpointer.
+
+    F047 (US5) — Branche les listeners SQLAlchemy synchronisant
+    ``projects.project_esg_score`` depuis l'évaluation finalisée la plus
+    récente.
     """
     global compiled_graph
+
+    # F047 — listeners ESG-projet (idempotent, no-op si déjà branchés).
+    try:
+        from app.modules.esg.project_listener import attach_listeners
+        attach_listeners()
+    except Exception:  # noqa: BLE001
+        logger.warning("F047 : impossible de brancher les listeners ESG-projet")
 
     # Démarrage : initialiser le graphe LangGraph
     if settings.openrouter_api_key:
@@ -117,6 +128,10 @@ from app.api.health import router as health_router  # noqa: E402
 from app.modules.company.router import router as company_router  # noqa: E402
 from app.modules.documents.router import router as documents_router  # noqa: E402
 from app.modules.esg.router import router as esg_router  # noqa: E402
+# F047 — Évaluation ESG-projet (extension F05 au niveau projet)
+from app.modules.esg.project_router import (  # noqa: E402
+    router as esg_project_router,
+)
 from app.modules.reports.router import router as reports_router  # noqa: E402
 from app.modules.carbon.router import router as carbon_router  # noqa: E402
 from app.modules.financing.router import router as financing_router  # noqa: E402
@@ -176,6 +191,8 @@ app.include_router(chat_router, prefix="/api/chat", tags=["chat"])
 app.include_router(company_router, prefix="/api/company", tags=["company"])
 app.include_router(documents_router, prefix="/api/documents", tags=["documents"])
 app.include_router(esg_router, prefix="/api/esg", tags=["esg"])
+# F047 — Évaluation ESG-projet (routes /api/projects/{id}/esg-assessment[s]/...)
+app.include_router(esg_project_router, prefix="/api", tags=["esg-project"])
 app.include_router(reports_router, prefix="/api/reports", tags=["reports"])
 app.include_router(carbon_router, prefix="/api/carbon", tags=["carbon"])
 app.include_router(financing_router, prefix="/api/financing", tags=["financing"])

@@ -103,6 +103,18 @@ def _project_to_detail(
         updated_at=project.updated_at,
         project_documents=docs,
         applications_count=applications_count,
+        # F045/F047 — propagation des 5 champs projet-centric
+        taxonomie_verte_uemoa_aligned=getattr(
+            project, "taxonomie_verte_uemoa_aligned", None,
+        ),
+        gcf_priority_themes=list(
+            getattr(project, "gcf_priority_themes", None) or [],
+        ),
+        gender_inclusion=getattr(project, "gender_inclusion", None),
+        vulnerable_populations=list(
+            getattr(project, "vulnerable_populations", None) or [],
+        ),
+        project_esg_score=getattr(project, "project_esg_score", None),
     )
 
 
@@ -274,7 +286,13 @@ async def update_project(
     project_id: uuid.UUID,
     payload: ProjectUpdate,
 ) -> ProjectDetail | None:
-    """Mise à jour partielle d'un projet."""
+    """Mise à jour partielle d'un projet.
+
+    F047 (US5, FR-033) : si ``project_esg_score`` est présent dans le payload
+    ET qu'une ``ProjectEsgAssessment`` finalisée existe pour ce projet, on
+    refuse avec HTTP 409 — le champ legacy F045 est désormais un cache
+    lecture-seule alimenté par le listener.
+    """
     query = (
         select(Project)
         .where(Project.id == project_id)
@@ -285,6 +303,36 @@ async def update_project(
     project = result.scalar_one_or_none()
     if project is None:
         return None
+
+    # F047 US5 — enforcement read-only sur `project_esg_score`.
+    if payload.project_esg_score is not None:
+        from fastapi import HTTPException, status as http_status
+        from app.modules.esg.project_models import ProjectEsgAssessment
+
+        finalized_exists = (
+            await db.execute(
+                select(ProjectEsgAssessment.id).where(
+                    ProjectEsgAssessment.project_id == project_id,
+                    ProjectEsgAssessment.account_id == account_id,
+                    ProjectEsgAssessment.state == "finalized",
+                    ProjectEsgAssessment.superseded_at.is_(None),
+                )
+                .limit(1)
+            )
+        ).scalar_one_or_none()
+        if finalized_exists is not None:
+            raise HTTPException(
+                status_code=http_status.HTTP_409_CONFLICT,
+                detail={
+                    "error_code": "project_esg_score_readonly",
+                    "message": (
+                        "Le champ `project_esg_score` est désormais un cache "
+                        "alimenté par l'évaluation ESG-projet finalisée. "
+                        "Pour modifier ce score, supprimez l'évaluation "
+                        "existante ou créez-en une nouvelle."
+                    ),
+                },
+            )
 
     # Snapshot des documents AVANT flush (pour éviter lazy-load post-flush).
     documents_snapshot = list(project.project_documents or [])
