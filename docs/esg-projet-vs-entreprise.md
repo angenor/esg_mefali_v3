@@ -81,10 +81,23 @@ recyclage, etc.), pas l'entreprise.
   « ESG Projet » avec bouton « Démarrer l'évaluation ».
 
 **Rapport PDF** : généré via `POST /api/projects/{id}/esg-assessment/{aid}/report`
-— modèle ESIA-light 7 sections (executive summary, description projet, baseline
+ou — côté chat LLM — via le tool LangChain `generate_project_esg_report(assessment_id=…)`.
+Modèle ESIA-light 7 sections (executive summary, description projet, baseline
 E&S, impacts, mesures d'atténuation, plan d'engagement, M&E) + annexe sources F01
 + donut « critères couverts vs manquants ». p95 < 30 s pour 20 critères + 3
 graphiques.
+
+**Format du fichier** : **PDF** (`.pdf`) — volontaire. Les bailleurs verts
+(GCF, BOAD, AFD, etc.) imposent quasi-systématiquement le PDF pour leurs
+dossiers de candidature. Le rapport **ESG entreprise** F05 est lui en
+`.docx` (Word) car destiné à un usage interne / bancaire où l'édition reste
+nécessaire. **Ne pas confondre les deux** : si l'utilisateur demande
+« rapport ESIA-light / dossier bailleur / rapport ESG-projet », le LLM doit
+appeler `generate_project_esg_report` (PDF F047), pas `generate_esg_report`
+(.docx F05).
+
+Le fichier est écrit dans
+`backend/uploads/reports/esia/{account_id}/{project_id}/esia_{assessment_id}_{timestamp}.pdf`.
 
 ---
 
@@ -170,6 +183,24 @@ tours utilisateur (SC-006).
 > Cf. `backend/app/graph/nodes.py` (helpers `_detect_project_esg_intent`,
 > `_is_project_page`, constante `_PROJECT_ESG_DIRECTIVE`) et
 > `tests/modules/esg/project/test_project_esg_chat_dispatch.py`.
+
+> **Note technique (bugfix 2026-05-23 — US3 hallucination)** : avant ce
+> correctif, le LLM affirmait « le rapport ESIA-light est généré » sans
+> appeler `generate_project_esg_report` (aucune ligne dans `tool_call_logs`,
+> aucun PDF sur disque). Cause racine : (a) le LLM n'avait aucun moyen
+> simple d'obtenir des `criterion_id` valides → il hallucinait des UUIDs
+> qui étaient silencieusement rejetés par `save_project_esg_criterion` ;
+> (b) la docstring de `generate_project_esg_report` n'interdisait pas
+> explicitement l'auto-déclaration sans tool call. Trois mesures :
+> (1) `create_project_esg_assessment` et `get_project_esg_assessment`
+> retournent désormais `applicable_criteria` (id+code+label+is_required+
+> weight) en plus du `assessment` — le LLM n'a plus à deviner ; (2) la
+> docstring de `generate_project_esg_report` contient une clause
+> ANTI-HALLUCINATION explicite ; (3) `_PROJECT_ESG_DIRECTIVE` inclut
+> désormais une **séquence complète typique** (a→f) et un rappel
+> « N'AFFIRME JAMAIS que le rapport est généré sans tool call ». Script
+> de synchronisation : `python -m app.scripts.sync_skill_project_esg`
+> pour aligner la BDD avec la nouvelle procedure du skill F23.
 
 ### « Score différent selon le référentiel pour le même projet, c'est normal ? »
 

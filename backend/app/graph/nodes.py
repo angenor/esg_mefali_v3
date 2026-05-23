@@ -123,6 +123,16 @@ _PROJECT_ESG_INTENT_KEYWORDS = [
     # serait deja capture par _ESG_PATTERNS et router-e vers esg_scoring_node).
     r"\b(?:[ée]valu|scorer?|noter?|analyser?)\w*\b.{0,40}\bprojet\b",
     r"\bprojet\b.{0,40}\b(?:[ée]valu|scorer?|noter?|analyser?)\w*\b",
+    # F047 bugfix US3 (2026-05-23) : capter aussi les demandes de rapport
+    # ESG-projet hors fiche projet (chat flottant). Le LLM doit alors
+    # utiliser list_projects pour retrouver le project_id par nom.
+    r"\brapport\s+(?:ESG|ESIA|ESG[-\s]projet|ESS|bailleur)\b.{0,40}\bprojet\b",
+    r"\bprojet\b.{0,40}\brapport\s+(?:ESG|ESIA|ESG[-\s]projet|ESS|bailleur)\b",
+    r"\bg[ée]n[ée]r(?:er?|e)\b.{0,40}\brapport\b.{0,60}\bprojet\b",
+    r"\bg[ée]n[ée]r(?:er?|e)\b.{0,40}\bprojet\b.{0,60}\brapport\b",
+    r"\bfinalis(?:er?|e)\b.{0,40}\b(?:[ée]valuation|score)\b.{0,40}\bprojet\b",
+    r"\bdossier\s+(?:bailleur|GCF|BOAD|IFC|AFD|FEM)\b",
+    r"\brapport\s+ESIA\b",
 ]
 _PROJECT_ESG_INTENT_PATTERNS = [
     re.compile(p, re.IGNORECASE) for p in _PROJECT_ESG_INTENT_KEYWORDS
@@ -198,35 +208,120 @@ def _build_project_esg_directive(project_id: str | None) -> str:
         "   - GCF → referentiel `gcf_ess` ;\n"
         "   - BOAD → referentiel `boad_ess` ;\n"
         "   - AFD / bilateral / inconnu / 'IFC PS' → referentiel `ifc_ps`.\n"
-        "   Appelle `search_source(query='IFC Performance Standards 2012')` "
-        "(ou GCF/BOAD selon le cas) pour recuperer le `referential_id` UUID. "
-        "Alternative : `list_project_esg_assessments(project_id=\""
-        f"{pid}\")` pour voir s'il existe deja un draft a reprendre.\n"
+        "   Appelle `list_project_esg_assessments(project_id=\""
+        f"{pid}\")` — ce tool retourne `available_referentials` (id + code) "
+        "et te donne le `referential_id` UUID a passer a "
+        "`create_project_esg_assessment`. N'utilise PAS `search_source` "
+        "pour cela (search_source retourne `source.id`, different de "
+        "`referential.id`).\n"
         "2. DEUXIEME APPEL OBLIGATOIRE — appelle IMMEDIATEMENT "
         f"`create_project_esg_assessment(project_id=\"{pid}\", "
         "referential_id=<UUID du referentiel>)`. AUCUNE question utilisateur "
-        "entre les etapes 1 et 2.\n"
+        "entre les etapes 1 et 2. CE TOOL RETOURNE `applicable_criteria` "
+        "(liste id+code+label+is_required+weight) — c'est de la que "
+        "viennent les `criterion_id` valides, ne les invente jamais.\n"
         "3. Une fois l'evaluation `draft` creee, pour chaque critere "
-        "obligatoire pose la question via `ask_interactive_question` puis "
-        "persiste via `save_project_esg_criterion` (avec `source_id` F01 "
-        "ou `flag_unsourced(reason='user_input')`).\n"
-        "4. Finalise via `finalize_project_esg_assessment` quand tous les "
-        "obligatoires sont couverts, puis restitue via `show_kpi_card` "
-        "(score) + `show_comparison_table` (couverts vs manquants).\n"
+        "`is_required=true` de `applicable_criteria`, pose la question via "
+        "`ask_interactive_question` puis persiste via "
+        "`save_project_esg_criterion(assessment_id=<id retourne>, "
+        "criterion_id=<id pris dans applicable_criteria>, response_type=..., "
+        "response_value={...}, source_id=<UUID F01 ou null+unsourced=true>)`. "
+        "Si tu reprends un draft existant, rappelle `get_project_esg_assessment` "
+        "pour re-recuperer `applicable_criteria` et l'etat des reponses.\n"
+        "4. Finalise via `finalize_project_esg_assessment(assessment_id=<id>)` "
+        "quand tous les obligatoires sont couverts, puis restitue via "
+        "`show_kpi_card` (score) + `show_comparison_table` (couverts vs "
+        "manquants).\n"
         "5. RAPPORT — si l'utilisateur demande un rapport ESIA-light, un "
         "dossier bailleur, ou un rapport ESG-projet apres finalisation, "
-        "TU DOIS appeler `generate_project_esg_report(assessment_id=...)` "
-        "(rapport F047). NE PAS appeler `generate_esg_report` (qui est le "
-        "rapport ESG ENTREPRISE F05, totalement different — il porte sur "
-        "l'entreprise dans son ensemble, pas sur le projet vert).\n\n"
+        "TU DOIS APPELER `generate_project_esg_report(assessment_id=<id>)` "
+        "(rapport F047, PDF). N'AFFIRME JAMAIS « le rapport est genere » "
+        "dans une reponse texte tant que ce tool n'a pas retourne "
+        "`ok=true` avec un `file_path`. Ne tente PAS `generate_esg_report` "
+        "qui est le rapport ESG ENTREPRISE F05 (totalement different).\n\n"
+        "SEQUENCE COMPLETE TYPIQUE — APPELS A EFFECTUER (sans message "
+        "utilisateur intermediaire) quand l'utilisateur dit 'Genere le "
+        "rapport ESIA-light contre BOAD ESS pour mon projet' :\n"
+        "   a. `list_project_esg_assessments(project_id=\""
+        f"{pid}\", state=\"finalized\")` — si un finalized BOAD ESS existe, "
+        "saute directement a l'etape e.\n"
+        "   b. `search_source(query='BOAD ESS procedures 2023')` pour "
+        "obtenir `referential_id`.\n"
+        "   c. `create_project_esg_assessment(project_id=\""
+        f"{pid}\", referential_id=<UUID>)` → recupere `assessment.id` + "
+        "`applicable_criteria`.\n"
+        "   d. Pour chaque critere is_required : "
+        "`ask_interactive_question(...)` + `save_project_esg_criterion(...)` "
+        "+ `cite_source(...)` ou `flag_unsourced(reason='user_input')`.\n"
+        "   e. `finalize_project_esg_assessment(assessment_id=<id>)`.\n"
+        "   f. `generate_project_esg_report(assessment_id=<id>)` ← "
+        "OBLIGATOIRE pour produire le PDF.\n\n"
         "ANTI-PATTERN A REJETER : « Avez-vous un projet existant ? Creer / "
         "Choisir ». Le projet est deja dans l'URL, AUCUNE question de ce "
         "type n'est legitime au tour 1.\n"
+        "ANTI-HALLUCINATION : ne DECLARE PAS qu'un rapport est genere si "
+        "`generate_project_esg_report` n'a pas ete appele dans la meme "
+        "reponse. L'utilisateur attend un fichier PDF reel.\n"
     )
 
 
 # Conservee pour compatibilite tests existants : valeur sans project_id concret.
 _PROJECT_ESG_DIRECTIVE = _build_project_esg_directive(None)
+
+
+def _build_project_esg_directive_no_page() -> str:
+    """F047 bugfix US3 (2026-05-23) — Variante de la directive ESG-projet
+    pour le **chat flottant** (URL hors fiche projet).
+
+    Le chat est accessible depuis toutes les pages : si l'utilisateur dit
+    « génère le rapport ESG de mon projet [nom] » depuis ``/dashboard`` ou
+    ``/`` (chat_global), le LLM doit retrouver le projet par son nom via
+    ``list_projects`` puis enchaîner la sequence F047, AU LIEU de basculer
+    sur F05 entreprise (Mefali 30 critères + batch_save_esg_criteria).
+    """
+    return (
+        "\n\n## EVALUATION / RAPPORT ESG-PROJET (F047) — REGLE TRANSVERSE\n"
+        "L'utilisateur demande une action ESG-PROJET (rapport ESIA-light, "
+        "dossier bailleur, finalisation d'évaluation projet) mais l'URL "
+        "active n'est PAS une fiche projet. Tu DOIS utiliser les tools F047, "
+        "JAMAIS les tools F05 entreprise (`batch_save_esg_criteria`, "
+        "`finalize_esg_assessment`, `generate_esg_report` sont POUR "
+        "L'ENTREPRISE, pas pour un projet vert spécifique).\n\n"
+        "SEQUENCE OBLIGATOIRE :\n"
+        "1. `list_projects()` pour retrouver le projet par son nom mentionné "
+        "par l'utilisateur. Si plusieurs projets matchent, demande "
+        "confirmation via `ask_interactive_question`. Si aucun ne matche, "
+        "propose à l'utilisateur d'en créer un via `create_project`.\n"
+        "2. `list_project_esg_assessments(project_id=<id trouvé>)` pour "
+        "détecter un draft ou finalized existant. Ce tool retourne aussi "
+        "`available_referentials` (id + code) — c'est ICI que tu obtiens "
+        "le `referential_id` UUID, JAMAIS via `search_source` (qui retourne "
+        "des `source.id`, pas des `referential.id`). Si un finalized existe "
+        "ET l'utilisateur demande le rapport → saute directement à l'étape 6.\n"
+        "3. Sinon, à partir de `available_referentials` choisis le bon "
+        "selon le bailleur (`ifc_ps`/`gcf_ess`/`boad_ess`) puis appelle "
+        "`create_project_esg_assessment(project_id=<id>, referential_id=<id "
+        "récupéré dans available_referentials>)`. Ce tool retourne "
+        "`applicable_criteria` (UUIDs valides). Ne les invente JAMAIS.\n"
+        "4. Pour chaque critère `is_required=true` de `applicable_criteria`, "
+        "appelle `ask_interactive_question` (ou réutilise les réponses de "
+        "tours précédents) puis `save_project_esg_criterion(...)` avec un "
+        "`source_id` (F01) ou `unsourced=true`.\n"
+        "5. `finalize_project_esg_assessment(assessment_id)` quand tous les "
+        "obligatoires sont couverts.\n"
+        "6. `generate_project_esg_report(assessment_id=<id du finalized>)` "
+        "pour produire le PDF ESIA-light. N'AFFIRME JAMAIS que le rapport "
+        "est généré tant que ce tool n'a pas retourné `ok=true` avec un "
+        "`file_path` non vide.\n\n"
+        "ANTI-PATTERN A REJETER (très important) :\n"
+        "- NE PAS lancer une évaluation ESG entreprise (Mefali, 30 critères "
+        "E/S/G génériques) quand l'utilisateur parle de SON PROJET. Le "
+        "score Mefali entreprise n'est PAS adapté à un projet vert.\n"
+        "- NE PAS appeler `batch_save_esg_criteria` ni `finalize_esg_assessment` "
+        "ni `generate_esg_report` (ces tools sont POUR L'ENTREPRISE F05).\n"
+        "- NE PAS rediriger l'utilisateur vers la page /profile/projects/[id]/esg "
+        "alors que tu peux tout exécuter ici (le chat est flottant).\n"
+    )
 
 
 # Heuristiques pour détecter une CONSULTATION ESG (lecture seule → chat_node)
@@ -1959,13 +2054,17 @@ async def chat_node(
     # `create_project_esg_assessment` AVANT tout widget interactif. Sans
     # cette instruction, le LLM bifurque vers `ask_interactive_question`
     # pour clarifier le referentiel et ne persiste jamais l'evaluation.
-    if (
-        _is_project_page(state.get("current_page"))
-        and _detect_project_esg_intent(last_user_msg_chat)
-    ):
-        full_prompt += _build_project_esg_directive(
-            _extract_project_id_from_page(state.get("current_page"))
-        )
+    # F047 bugfix US3 (2026-05-23) : injecter aussi la directive (variante
+    # `_no_page`) quand l'utilisateur est sur le chat flottant (chat_global,
+    # dashboard, etc.) mais demande explicitement un rapport / une action
+    # ESG-projet. Le LLM doit alors retrouver le projet via list_projects.
+    if _detect_project_esg_intent(last_user_msg_chat):
+        if _is_project_page(state.get("current_page")):
+            full_prompt += _build_project_esg_directive(
+                _extract_project_id_from_page(state.get("current_page"))
+            )
+        else:
+            full_prompt += _build_project_esg_directive_no_page()
 
     active_skills_snapshot: list[dict] | None = None
     if all_tools:

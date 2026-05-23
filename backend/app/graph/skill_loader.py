@@ -119,10 +119,20 @@ def _specificity_score(skill: Any, ctx: dict[str, Any]) -> float:
                 break
 
     # Niveau 0.5 — intent_keywords (au moins 1 keyword présent).
+    # F047 bugfix US3 (2026-05-23) : on pondère par nombre de keywords
+    # matchés (cap +1.5 supplémentaire) pour départager les skills qui
+    # auraient autrement le même score. Exemple : sur « rapport ESG de
+    # mon projet », ``skill_project_esg_assessment`` matche 2-3 keywords
+    # spécifiques ("mon projet", "rapport ESG de mon projet", "rapport
+    # projet") alors que ``skill_esg_diagnostic`` n'en matche aucun (ses
+    # keywords sont "ESG entreprise"/"ESG global"/...).
     intent = (ctx.get("intent") or "").lower()
     keywords = rules.get("intent_keywords") or []
-    if intent and any(kw.lower() in intent for kw in keywords):
-        score += 0.5
+    if intent and keywords:
+        matched = sum(1 for kw in keywords if kw.lower() in intent)
+        if matched > 0:
+            # 0.5 base + 0.3 par keyword supplémentaire, capé à 0.5 + 1.5 = 2.0
+            score += 0.5 + min(1.5, 0.3 * (matched - 1))
 
     return score
 

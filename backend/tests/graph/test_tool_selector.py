@@ -308,6 +308,11 @@ def test_global_whitelist_is_frozenset() -> None:
     # F12 ajoute recall_history en GLOBAL_WHITELIST (mémoire transverse).
     # F10 ajoute 7 widgets transverses (yes_no/select/number/date/date_range/
     # rating/file_upload). show_form / show_summary_card sont contextuels.
+    # F20 ajoute 3 tools resources globaux.
+    # F047 (bugfix US3 2026-05-23) : 6 tools ESG-projet transverses
+    # — le chat est flottant et accessible depuis toutes les pages, donc
+    # le LLM doit pouvoir piloter une évaluation ESG-projet (création,
+    # save, finalisation, rapport) depuis n'importe quelle URL.
     assert GLOBAL_WHITELIST == frozenset({
         "ask_interactive_question",
         "trigger_guided_tour",
@@ -327,6 +332,13 @@ def test_global_whitelist_is_frozenset() -> None:
         "search_resources",
         "get_resource_content",
         "recommend_resources_for_user",
+        # F047 — Évaluation ESG-projet transverse.
+        "create_project_esg_assessment",
+        "save_project_esg_criterion",
+        "finalize_project_esg_assessment",
+        "get_project_esg_assessment",
+        "list_project_esg_assessments",
+        "generate_project_esg_report",
     })
 
 

@@ -1,5 +1,19 @@
 """Point d'entrée FastAPI avec lifespan, CORS et routers."""
 
+# F047 bugfix US3 (2026-05-23) — Sur macOS Apple Silicon, brew installe
+# pango/cairo/gdk-pixbuf dans /opt/homebrew/lib alors que le dynamic linker
+# Python ne le cherche pas par défaut, ce qui fait échouer ``from weasyprint
+# import HTML`` et fait basculer la génération de rapports ESIA-light sur un
+# fallback PDF illisible. On configure ``DYLD_FALLBACK_LIBRARY_PATH`` AVANT
+# tout import susceptible de charger weasyprint pour rétablir la génération
+# d'un PDF correctement formaté (7 sections + annexe F01).
+import os
+import sys
+if sys.platform == "darwin" and "DYLD_FALLBACK_LIBRARY_PATH" not in os.environ:
+    _candidates = [p for p in ("/opt/homebrew/lib", "/usr/local/lib") if os.path.isdir(p)]
+    if _candidates:
+        os.environ["DYLD_FALLBACK_LIBRARY_PATH"] = ":".join(_candidates)
+
 import logging
 from contextlib import asynccontextmanager
 from collections.abc import AsyncGenerator

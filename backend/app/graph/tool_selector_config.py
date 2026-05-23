@@ -30,6 +30,10 @@ import re
 # F047 ajoute 6 tools ESG-projet (5 + show_comparison_table) sur le slug
 # `profile_projects` → portee a 36 pour permettre au LLM de piloter
 # l'évaluation depuis la fiche projet sans navigation manuelle.
+# F047 (bugfix 2026-05-23, US3) : les 6 tools ESG-projet sont DEPLACES dans
+# GLOBAL_WHITELIST (le chat est flottant, accessible depuis toute page) et
+# RETIRES des PAGE_TOOL_MAPPING explicites pour respecter la borne 36.
+# Compte transverse : 16 widgets/sourcing/memory/resources + 6 F047 = 22.
 MAX_TOOLS_PER_TURN: int = 36
 
 # Whitelist transverse : tools toujours disponibles, ajoutes a chaque selection.
@@ -59,6 +63,21 @@ GLOBAL_WHITELIST: frozenset[str] = frozenset({
     "search_resources",
     "get_resource_content",
     "recommend_resources_for_user",
+    # F047 — Évaluation ESG-projet : 6 tools transverses pour permettre au LLM
+    # de piloter l'évaluation/finalisation/rapport ESG-projet depuis n'importe
+    # quelle page du chat flottant. Le LLM doit appeler `list_projects` pour
+    # retrouver le projet par nom AVANT toute action si l'URL n'est pas une
+    # fiche projet. La directive _PROJECT_ESG_DIRECTIVE (nodes.py) guide la
+    # séquence d'appels. F05 (skill_esg_diagnostic) reste isolé via son
+    # tool_whitelist, mais le fallback prompt_fusion expose tout de même ces
+    # 6 tools quand l'intersection est vide → l'utilisateur peut demander un
+    # rapport projet depuis n'importe quel contexte.
+    "create_project_esg_assessment",
+    "save_project_esg_criterion",
+    "finalize_project_esg_assessment",
+    "get_project_esg_assessment",
+    "list_project_esg_assessments",
+    "generate_project_esg_report",
 })
 
 
@@ -96,7 +115,8 @@ PAGE_TOOL_MAPPING: dict[str, frozenset[str]] = {
         # F10 — formulaire pour création/édition profil rapide
         "show_form",
     }),
-    # F06 — Page projets : 7 tools projet exclusifs.
+    # F06 — Page projets : tools projet exclusifs (F047 tools désormais dans
+    # GLOBAL_WHITELIST, plus besoin de les lister ici).
     "profile_projects": frozenset({
         "list_projects",
         "get_project",
@@ -115,19 +135,12 @@ PAGE_TOOL_MAPPING: dict[str, frozenset[str]] = {
         "get_match_details",
         # F045 — Matching projet-centric depuis la page projets
         "match_funds_for_project",
-        # F047 — Tools ESG-projet exposés aussi sur la fiche projet pour
-        # permettre au LLM de démarrer l'évaluation depuis /profile/projects/[id]
-        # (sans obliger l'utilisateur à naviguer vers /profile/projects/[id]/esg).
-        "create_project_esg_assessment",
-        "save_project_esg_criterion",
-        "finalize_project_esg_assessment",
-        "get_project_esg_assessment",
-        "list_project_esg_assessments",
-        "generate_project_esg_report",
-        # F11 — table comparative critères couverts vs manquants
+        # F11 — table comparative critères couverts vs manquants (utilisée
+        # par F047 et autres modules)
         "show_comparison_table",
     }),
-    # Evaluation ESG (pages /esg, /esg/results).
+    # Evaluation ESG entreprise (pages /esg, /esg/results). F047 tools
+    # désormais transverses via GLOBAL_WHITELIST.
     "esg": frozenset({
         "create_esg_assessment",
         "save_esg_criterion_score",
@@ -141,24 +154,10 @@ PAGE_TOOL_MAPPING: dict[str, frozenset[str]] = {
         "show_kpi_card",
         # F10 — summary card pour valider extractions critères ESG
         "show_summary_card",
-        # F047 — Tools ESG-projet exposés aussi sur le slug `esg` pour les
-        # conversations qui démarrent depuis le slug catalogue.
-        "create_project_esg_assessment",
-        "save_project_esg_criterion",
-        "finalize_project_esg_assessment",
-        "get_project_esg_assessment",
-        "list_project_esg_assessments",
-        "generate_project_esg_report",
     }),
-    # F047 — Page dédiée évaluation ESG-projet : tools projet exclusifs.
+    # F047 — Page dédiée évaluation ESG-projet : tools de contexte projet
+    # uniquement (F047 tools désormais dans GLOBAL_WHITELIST).
     "profile_projects_esg": frozenset({
-        # ESG-projet (US4)
-        "create_project_esg_assessment",
-        "save_project_esg_criterion",
-        "finalize_project_esg_assessment",
-        "get_project_esg_assessment",
-        "list_project_esg_assessments",
-        "generate_project_esg_report",
         # Projets contextuels en lecture (rappel du projet courant)
         "list_projects",
         "get_project",
@@ -316,14 +315,10 @@ MODULE_TOOL_MAPPING: dict[str, frozenset[str]] = {
         "show_kpi_card",
         # F10 — summary card pour valider extractions critères ESG
         "show_summary_card",
-        # F047 — Évaluation ESG-projet (US4). Le dispatch nodes._route_esg_target
-        # arbitre entre entreprise (F05) et projet selon current_page.
-        "create_project_esg_assessment",
-        "save_project_esg_criterion",
-        "finalize_project_esg_assessment",
-        "get_project_esg_assessment",
-        "list_project_esg_assessments",
-        "generate_project_esg_report",
+        # F047 — Tools ESG-projet désormais transverses via GLOBAL_WHITELIST,
+        # plus besoin de les lister ici. La branche projet (_score_project)
+        # appelée par _route_esg_target reste fonctionnelle car les tools
+        # sont injectés par le bind_tools final.
         # F047 — table comparative critères couverts vs manquants
         "show_comparison_table",
     }),

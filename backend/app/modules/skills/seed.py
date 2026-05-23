@@ -63,7 +63,23 @@ def _build_seeds(creator_id: uuid.UUID) -> list[dict]:
             "sources": [],
             "activation_rules": {
                 "page_slugs": ["/esg"],
-                "intent_keywords": ["ESG", "diagnostic", "score"],
+                # F047 bugfix US3 (2026-05-23) : keywords plus spécifiques
+                # pour éviter d'activer ce skill F05 (entreprise) quand
+                # l'utilisateur demande un rapport projet (F047). « ESG »
+                # seul activait trop largement (overlap avec « rapport ESG
+                # de mon projet »). On précise « ESG entreprise », « ESG
+                # global », etc.
+                "intent_keywords": [
+                    "ESG entreprise",
+                    "ESG global",
+                    "ESG de l'entreprise",
+                    "diagnostic ESG",
+                    "diagnostic entreprise",
+                    "score ESG entreprise",
+                    "score ESG global",
+                    "évaluation ESG entreprise",
+                    "rapport ESG entreprise",
+                ],
                 "active_module": ["esg_scoring"],
             },
             "golden_examples": [
@@ -359,22 +375,39 @@ def _build_seeds(creator_id: uuid.UUID) -> list[dict]:
                 "UNIQUEMENT à collecter les réponses aux critères, jamais à "
                 "orienter l'utilisateur en début d'évaluation.\n\n"
                 "1) OBLIGATOIRE — Appeler `list_project_esg_assessments(project_id=...)` "
-                "pour vérifier si un `draft` couvre déjà le référentiel cible.\n"
+                "pour vérifier si un `draft` (ou `finalized`) couvre déjà le "
+                "référentiel cible. Si un finalized existe et l'utilisateur demande "
+                "le rapport, saute directement à l'étape 6.\n"
                 "2) OBLIGATOIRE — Si aucun draft ne couvre le référentiel cible, "
                 "appeler `create_project_esg_assessment(project_id, referential_id)` "
-                "AVANT TOUTE AUTRE ACTION (notamment AVANT `ask_interactive_question`).\n"
-                "3) Pour chaque critère obligatoire restant, poser une question via "
+                "AVANT TOUTE AUTRE ACTION (notamment AVANT `ask_interactive_question`). "
+                "Ce tool retourne `applicable_criteria` (liste des critères avec "
+                "leurs UUIDs valides) — utilise-la pour l'étape 3, n'invente JAMAIS "
+                "un `criterion_id`.\n"
+                "3) Pour chaque critère `is_required=true` issu de "
+                "`applicable_criteria`, poser une question via "
                 "`ask_interactive_question` (qcu/qcm/justification) et persister la "
-                "réponse via `save_project_esg_criterion` avec `source_id` ou "
-                "`flag_unsourced(reason='user_input')`.\n"
-                "4) Finaliser via `finalize_project_esg_assessment` quand tous les "
-                "obligatoires sont couverts.\n"
+                "réponse via `save_project_esg_criterion(assessment_id, "
+                "criterion_id, response_type, response_value, source_id|unsourced)`. "
+                "Chaque réponse DOIT être sourcée (F01) : `source_id` issu de "
+                "`cite_source`/`search_source`, ou `flag_unsourced(reason='user_input')`.\n"
+                "4) Finaliser via `finalize_project_esg_assessment(assessment_id)` "
+                "quand tous les obligatoires sont couverts. Si un 422 « critères "
+                "manquants » est retourné, reprends l'étape 3 sur la liste fournie.\n"
                 "5) Restituer le résultat via `show_kpi_card` (score) + "
                 "`show_comparison_table` (critères couverts vs manquants).\n"
-                "6) Si l'utilisateur demande le rapport ESIA-light / dossier "
-                "bailleur, appeler `generate_project_esg_report(assessment_id=...)` "
-                "— NE PAS appeler `generate_esg_report` qui est le rapport ESG "
-                "ENTREPRISE F05 (différent et inadapté ici)."
+                "6) RAPPORT — Si l'utilisateur demande le rapport ESIA-light, le "
+                "dossier bailleur ou le rapport ESG-projet, APPELLE "
+                "`generate_project_esg_report(assessment_id=<id du finalized>)`. "
+                "Le format de sortie est PDF (volontaire — les bailleurs préfèrent "
+                "ce format au .docx). NE PAS appeler `generate_esg_report` qui est "
+                "le rapport ESG ENTREPRISE F05 (différent et inadapté ici).\n\n"
+                "ANTI-HALLUCINATION — N'AFFIRME JAMAIS « le rapport ESIA-light a "
+                "été généré » dans une réponse texte tant que "
+                "`generate_project_esg_report` n'a pas été APPELÉ et n'a pas "
+                "retourné `ok=true` avec un `file_path` non vide. Si tu doutes du "
+                "`assessment_id`, rappelle `list_project_esg_assessments(project_id, "
+                "state='finalized')` pour le retrouver, puis appelle le rapport."
             ),
             "tool_whitelist": [
                 # Tools ESG-projet F047 (6)
@@ -410,19 +443,40 @@ def _build_seeds(creator_id: uuid.UUID) -> list[dict]:
                     "/profile/projects/[id]",
                 ],
                 "intent_keywords": [
+                    # Référentiels et concepts F047
                     "ESG projet",
+                    "ESG-projet",
                     "IFC PS",
                     "IFC Performance Standards",
                     "GCF ESS",
                     "BOAD ESS",
                     "ESIA",
+                    "ESIA-light",
+                    "Performance Standards",
+                    # Phrases utilisateur courantes (bugfix US3 2026-05-23)
                     "évaluation projet",
                     "evaluation projet",
-                    "performance standards",
+                    "rapport projet",
+                    "rapport ESG projet",
+                    "rapport ESG de mon projet",
+                    "rapport ESG du projet",
+                    "rapport ESG pour mon projet",
+                    "rapport pour mon projet",
+                    "score de mon projet",
+                    "scorer mon projet",
+                    "évaluer mon projet",
+                    "evaluer mon projet",
+                    "finaliser mon projet",
+                    "dossier bailleur",
+                    "dossier GCF",
+                    "dossier BOAD",
+                    "dossier IFC",
+                    "dossier AFD",
+                    "mon projet",  # ancre faible pour matcher fréquemment
                 ],
                 "min_keyword_matches": 1,
                 "requires_active_project": True,
-                "active_module": ["esg_scoring", "profile_projects"],
+                "active_module": ["esg_scoring", "profile_projects", "chat"],
                 "priority": 85,
             },
             "golden_examples": [
@@ -442,7 +496,7 @@ def _build_seeds(creator_id: uuid.UUID) -> list[dict]:
                     "project-esg-us3",
                     SkillDomain.SCORING_REFERENTIEL.value,
                     "Génère le rapport ESIA-light de mon projet pour la BOAD.",
-                    "get_project_esg_assessment",
+                    "generate_project_esg_report",
                 ),
                 _golden_example(
                     "project-esg-us4",
