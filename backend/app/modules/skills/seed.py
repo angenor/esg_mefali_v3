@@ -33,6 +33,7 @@ SEED_SKILL_NAMES: list[str] = [
     "skill_score_gcf",
     "skill_dossier_gcf_via_boad",
     "skill_match_project_funds",
+    "skill_project_esg_assessment",
 ]
 
 
@@ -336,6 +337,118 @@ def _build_seeds(creator_id: uuid.UUID) -> list[dict]:
                 ),
             ],
         },
+        # ---- F047 : skill_project_esg_assessment (US1-US4) ----
+        {
+            "name": "skill_project_esg_assessment",
+            "domain": SkillDomain.SCORING_REFERENTIEL.value,
+            "prompt_expert": (
+                "Tu es un expert ESG-projet pour bailleurs verts (GCF, FEM, BOAD, "
+                "AFD). Ton rôle est d'évaluer un projet vert contre un référentiel "
+                "officiel (IFC PS / GCF ESS / BOAD ESS), pas d'évaluer l'entreprise "
+                "(ce dernier est traité par `skill_esg_diagnostic`). Tu choisis le "
+                "référentiel cible en fonction du bailleur visé : GCF→GCF ESS, "
+                "BOAD→BOAD ESS, fonds bilateral ou inconnu→IFC PS (universel). "
+                "Cite systématiquement les sources F01 (ifc-performance-standards-2012, "
+                "gcf-environmental-social-policy-2018, boad-ess-procedures-2023). "
+                "Distingue clairement « évaluation ESG entreprise » (F05, /esg) et "
+                "« évaluation ESG-projet » (F047, /profile/projects/{id}/esg)."
+            ),
+            "procedure": (
+                "REGLE ABSOLUE — TU DOIS appeler `create_project_esg_assessment` "
+                "AVANT tout `ask_interactive_question`. Les widgets F18 servent "
+                "UNIQUEMENT à collecter les réponses aux critères, jamais à "
+                "orienter l'utilisateur en début d'évaluation.\n\n"
+                "1) OBLIGATOIRE — Appeler `list_project_esg_assessments(project_id=...)` "
+                "pour vérifier si un `draft` couvre déjà le référentiel cible.\n"
+                "2) OBLIGATOIRE — Si aucun draft ne couvre le référentiel cible, "
+                "appeler `create_project_esg_assessment(project_id, referential_id)` "
+                "AVANT TOUTE AUTRE ACTION (notamment AVANT `ask_interactive_question`).\n"
+                "3) Pour chaque critère obligatoire restant, poser une question via "
+                "`ask_interactive_question` (qcu/qcm/justification) et persister la "
+                "réponse via `save_project_esg_criterion` avec `source_id` ou "
+                "`flag_unsourced(reason='user_input')`.\n"
+                "4) Finaliser via `finalize_project_esg_assessment` quand tous les "
+                "obligatoires sont couverts.\n"
+                "5) Restituer le résultat via `show_kpi_card` (score) + "
+                "`show_comparison_table` (critères couverts vs manquants).\n"
+                "6) Si l'utilisateur veut un dossier bailleur, suggérer la génération "
+                "du rapport ESIA-light (lien `/profile/projects/{id}/esg`)."
+            ),
+            "tool_whitelist": [
+                # Tools ESG-projet F047 (5)
+                "create_project_esg_assessment",
+                "save_project_esg_criterion",
+                "finalize_project_esg_assessment",
+                "get_project_esg_assessment",
+                "list_project_esg_assessments",
+                # Tools sourçage F01 globaux (3)
+                "cite_source",
+                "search_source",
+                "flag_unsourced",
+                # Tools visualisation F11 (3)
+                "show_kpi_card",
+                "show_comparison_table",
+                "show_summary_card",
+                # Widget F18 (1)
+                "ask_interactive_question",
+                # Contexte projets (2)
+                "list_projects",
+                "get_project",
+            ],
+            "sources": [],
+            "activation_rules": {
+                # Fiche projet (avec ou sans suffixe `/esg`) : le LLM doit
+                # piloter l'évaluation ESG-projet F047 dès que l'utilisateur
+                # est sur la fiche d'un projet. Les gabarits `[id]` sont
+                # interprétés par `_slug_matches_page` (skill_loader) qui
+                # convertit `[id]` en regex `[^/]+`.
+                "page_slugs": [
+                    "/profile/projects/[id]/esg",
+                    "/profile/projects/[id]",
+                ],
+                "intent_keywords": [
+                    "ESG projet",
+                    "IFC PS",
+                    "IFC Performance Standards",
+                    "GCF ESS",
+                    "BOAD ESS",
+                    "ESIA",
+                    "évaluation projet",
+                    "evaluation projet",
+                    "performance standards",
+                ],
+                "min_keyword_matches": 1,
+                "requires_active_project": True,
+                "active_module": ["esg_scoring", "profile_projects"],
+                "priority": 85,
+            },
+            "golden_examples": [
+                _golden_example(
+                    "project-esg-us1",
+                    SkillDomain.SCORING_REFERENTIEL.value,
+                    "Je veux évaluer mon projet d'agroforesterie contre IFC PS.",
+                    "create_project_esg_assessment",
+                ),
+                _golden_example(
+                    "project-esg-us2",
+                    SkillDomain.SCORING_REFERENTIEL.value,
+                    "Mon score ESG-projet contre GCF ESS, pour postuler au GCF.",
+                    "create_project_esg_assessment",
+                ),
+                _golden_example(
+                    "project-esg-us3",
+                    SkillDomain.SCORING_REFERENTIEL.value,
+                    "Génère le rapport ESIA-light de mon projet pour la BOAD.",
+                    "get_project_esg_assessment",
+                ),
+                _golden_example(
+                    "project-esg-us4",
+                    SkillDomain.SCORING_REFERENTIEL.value,
+                    "Continue l'évaluation projet que j'avais commencée hier.",
+                    "list_project_esg_assessments",
+                ),
+            ],
+        },
     ]
 
 
@@ -395,9 +508,11 @@ async def seed_skills(
             )
         creator_id = admin.id
 
-    # F045 : skill_match_project_funds reste en draft initial (gating eval >= 90%
-    # avant publication).
-    DRAFT_ONLY: set[str] = {"skill_match_project_funds"}
+    # F045 / F047 : skills draft initial (gating eval >= 90% avant publication).
+    DRAFT_ONLY: set[str] = {
+        "skill_match_project_funds",
+        "skill_project_esg_assessment",
+    }
 
     inserted = 0
     for seed in _build_seeds(creator_id):

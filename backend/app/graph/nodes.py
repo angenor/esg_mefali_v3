@@ -105,6 +105,124 @@ _APPLICATION_KEYWORDS = [
 ]
 _APPLICATION_PATTERNS = [re.compile(p, re.IGNORECASE) for p in _APPLICATION_KEYWORDS]
 
+# Heuristiques pour detecter une intention ESG-PROJET (F047, distincte F05).
+# Sert exclusivement a injecter une instruction page-contextuelle dans
+# `chat_node` quand l'utilisateur consulte la fiche projet (URL matchant
+# /profile/projects/{id}, avec ou sans /esg). Ne route PAS vers
+# esg_scoring_node : la PME peut rester sur chat_node qui possede les
+# 5 tools F047 via PAGE_TOOL_MAPPING['profile_projects'].
+_PROJECT_ESG_INTENT_KEYWORDS = [
+    r"\bIFC\s*PS\b",
+    r"\bIFC\s+Performance\s+Standards?\b",
+    r"\bPerformance\s+Standards?\b",
+    r"\bGCF\s+ESS\b",
+    r"\bBOAD\s+ESS\b",
+    r"\bESS\s+(?:GCF|BOAD)\b",
+    r"\bESIA(?:[-\s]?light)?\b",
+    # Verbes d'intention + "projet" (sans le mot "ESG" explicite, qui sinon
+    # serait deja capture par _ESG_PATTERNS et router-e vers esg_scoring_node).
+    r"\b(?:[ée]valu|scorer?|noter?|analyser?)\w*\b.{0,40}\bprojet\b",
+    r"\bprojet\b.{0,40}\b(?:[ée]valu|scorer?|noter?|analyser?)\w*\b",
+]
+_PROJECT_ESG_INTENT_PATTERNS = [
+    re.compile(p, re.IGNORECASE) for p in _PROJECT_ESG_INTENT_KEYWORDS
+]
+
+
+def _detect_project_esg_intent(text: str | None) -> bool:
+    """Detecter une intention ESG-projet F047 (IFC PS / GCF ESS / BOAD ESS / ESIA / "evalue mon projet")."""
+    if not text:
+        return False
+    return any(p.search(text) for p in _PROJECT_ESG_INTENT_PATTERNS)
+
+
+_PROJECT_PAGE_PATTERN = re.compile(r"^/profile/projects/[^/]+(?:/[^/]*)?/?$")
+
+
+def _is_project_page(current_page: str | None) -> bool:
+    """Vrai si l'URL active est une fiche projet (avec ou sans suffixe `/esg`)."""
+    if not current_page or not isinstance(current_page, str):
+        return False
+    return bool(_PROJECT_PAGE_PATTERN.match(current_page))
+
+
+_PROJECT_ID_FROM_PATH = re.compile(r"^/profile/projects/([^/]+)(?:/[^/]*)?/?$")
+
+
+def _extract_project_id_from_page(current_page: str | None) -> str | None:
+    """Extrait l'UUID du projet depuis ``/profile/projects/{id}[/esg]``.
+
+    Retourne None si l'URL ne matche pas ou si l'ID extrait n'est pas un
+    UUID valide. Cette fonction est utilisee uniquement pour enrichir le
+    prompt LLM ; aucune autorisation n'est verifiee ici (le RLS et le
+    tool F047 valident l'access cote BDD).
+    """
+    if not current_page or not isinstance(current_page, str):
+        return None
+    match = _PROJECT_ID_FROM_PATH.match(current_page)
+    if not match:
+        return None
+    candidate = match.group(1)
+    try:
+        import uuid as _uuid
+
+        _uuid.UUID(candidate)
+    except (ValueError, AttributeError, TypeError):
+        return None
+    return candidate
+
+
+def _build_project_esg_directive(project_id: str | None) -> str:
+    """Construit la directive page-contextuelle ESG-projet.
+
+    Le ``project_id`` (UUID extrait de l'URL) est injecte dans la directive
+    pour eviter que le LLM pose une question d'orientation par manque de
+    contexte — il a ainsi tout pour appeler ``create_project_esg_assessment``
+    directement sans passer par ``ask_interactive_question``.
+    """
+    pid = project_id or "<UUID du projet courant — extrait de l'URL>"
+    return (
+        "\n\n## EVALUATION ESG-PROJET (F047) — REGLE ABSOLUE\n"
+        "L'utilisateur consulte la fiche d'un projet vert deja existant "
+        f"(`project_id={pid}` — UUID extrait de l'URL active) et demande une "
+        "evaluation ESG-projet contre un referentiel officiel (IFC PS, GCF "
+        "ESS, BOAD ESS). Cette evaluation est DISTINCTE de l'evaluation ESG "
+        "entreprise (F05, /esg).\n\n"
+        f"LE PROJET EST DEJA IDENTIFIE (id={pid}). NE DEMANDE PAS A "
+        "L'UTILISATEUR DE LE CHOISIR OU LE CONFIRMER. NE POSE AUCUNE "
+        "QUESTION D'ORIENTATION via `ask_interactive_question` AVANT "
+        "d'avoir cree l'evaluation.\n\n"
+        "TU DOIS imperativement :\n\n"
+        "1. PREMIER TOUR — choisir le referentiel cible selon le bailleur "
+        "evoque par l'utilisateur :\n"
+        "   - GCF → referentiel `gcf_ess` ;\n"
+        "   - BOAD → referentiel `boad_ess` ;\n"
+        "   - AFD / bilateral / inconnu / 'IFC PS' → referentiel `ifc_ps`.\n"
+        "   Appelle `search_source(query='IFC Performance Standards 2012')` "
+        "(ou GCF/BOAD selon le cas) pour recuperer le `referential_id` UUID. "
+        "Alternative : `list_project_esg_assessments(project_id=\""
+        f"{pid}\")` pour voir s'il existe deja un draft a reprendre.\n"
+        "2. DEUXIEME APPEL OBLIGATOIRE — appelle IMMEDIATEMENT "
+        f"`create_project_esg_assessment(project_id=\"{pid}\", "
+        "referential_id=<UUID du referentiel>)`. AUCUNE question utilisateur "
+        "entre les etapes 1 et 2.\n"
+        "3. Une fois l'evaluation `draft` creee, pour chaque critere "
+        "obligatoire pose la question via `ask_interactive_question` puis "
+        "persiste via `save_project_esg_criterion` (avec `source_id` F01 "
+        "ou `flag_unsourced(reason='user_input')`).\n"
+        "4. Finalise via `finalize_project_esg_assessment` quand tous les "
+        "obligatoires sont couverts, puis restitue via `show_kpi_card` "
+        "(score) + `show_comparison_table` (couverts vs manquants).\n\n"
+        "ANTI-PATTERN A REJETER : « Avez-vous un projet existant ? Creer / "
+        "Choisir ». Le projet est deja dans l'URL, AUCUNE question de ce "
+        "type n'est legitime au tour 1.\n"
+    )
+
+
+# Conservee pour compatibilite tests existants : valeur sans project_id concret.
+_PROJECT_ESG_DIRECTIVE = _build_project_esg_directive(None)
+
+
 # Heuristiques pour détecter une CONSULTATION ESG (lecture seule → chat_node)
 # Ces patterns ne doivent PAS router vers esg_scoring_node
 _ESG_QUERY_KEYWORDS = [
@@ -271,7 +389,16 @@ def _detect_credit_request(text: str) -> bool:
 
 
 def _detect_financing_request(text: str) -> bool:
-    """Detecter si un message est une demande de financement vert."""
+    """Detecter si un message est une demande de financement vert.
+
+    F047 — Exclusion : les referentiels ESG-projet (IFC PS, GCF ESS, BOAD
+    ESS, ESIA, Performance Standards) doivent etre routes vers `chat_node`
+    qui possede les tools F047 et la directive `_PROJECT_ESG_DIRECTIVE`.
+    Sans cette exclusion, ``\\bIFC\\b`` matche « IFC PS » et envoie a tort
+    vers ``financing_node`` qui n'a aucun des tools projet.
+    """
+    if _detect_project_esg_intent(text):
+        return False
     return any(pattern.search(text) for pattern in _FINANCING_PATTERNS)
 
 
@@ -850,18 +977,96 @@ async def _fetch_rag_context_for_esg(
         return ""
 
 
+def _route_esg_target(state: ConversationState) -> str:
+    """F047 (D1) — Dispatch entre évaluation entreprise (F05) et projet (047).
+
+    Le routage se fait sur la base de ``current_page`` (URL active) :
+    - Si l'URL matche ``^/profile/projects/[^/]+/esg(?:/|$)`` → ``project``.
+    - Sinon → ``company`` (comportement F05 historique inchangé).
+
+    Helper ≤ 30 lignes, aucune mutation F05. Test conformity :
+    ``test_esg_scoring_node_dispatch.py``.
+    """
+    current_page = state.get("current_page") or ""
+    if isinstance(current_page, str) and re.match(
+        r"^/profile/projects/[^/]+/esg(?:/|$)", current_page,
+    ):
+        return "project"
+    return "company"
+
+
+async def _score_project(
+    state: ConversationState,
+    config: RunnableConfig | None = None,
+) -> ConversationState:
+    """F047 (US4) — Branche projet : LLM avec PROJECT_ESG_TOOLS + F18 + F11.
+
+    Implémentation minimale ≤ 50 lignes (constitution VII) : on délègue au
+    chat LLM en bindant les 5 tools projet + les widgets F18 + viz F11 +
+    sourcing F01. Le prompt rappelle le contexte (projet, référentiel à
+    choisir, budget tools).
+    """
+    from app.graph.tools.guided_tour_tools import GUIDED_TOUR_TOOLS
+    from app.graph.tools.interactive_tools import INTERACTIVE_TOOLS
+    from app.graph.tools.project_esg_tools import PROJECT_ESG_TOOLS
+    from app.graph.tools.sourcing_tools import SOURCING_TOOLS
+    from app.graph.tools.visualization_tools import VISUALIZATION_TOOLS
+
+    llm = get_llm()
+    messages = state["messages"]
+    catalog = (
+        PROJECT_ESG_TOOLS
+        + INTERACTIVE_TOOLS
+        + GUIDED_TOUR_TOOLS
+        + SOURCING_TOOLS
+        + VISUALIZATION_TOOLS
+    )
+    filtered_tools, debug_info = select_tools_for_node(
+        node_name="esg_scoring",
+        current_page=state.get("current_page"),
+        all_tools=catalog,
+        active_entities=state.get("active_entities"),
+    )
+    _propagate_tools_offered(config, debug_info["tools_offered"])
+    system_prompt = (
+        "Tu accompagnes la PME dans l'évaluation ESG **de son projet** "
+        "(distincte de l'évaluation entreprise). Référentiels disponibles : "
+        "IFC PS, GCF ESS, BOAD ESS. Démarre par `create_project_esg_assessment`, "
+        "puis pose les questions via les widgets interactifs (`ask_*`). Chaque "
+        "réponse doit être sourcée (F01) : `cite_source` ou `flag_unsourced`. "
+        "À la fin, appelle `finalize_project_esg_assessment` puis "
+        "`show_kpi_card` (score) + `show_comparison_table` (couverts vs "
+        "manquants). Budget : ≤ 12 widgets et ≤ 3 tours utilisateur."
+    )
+    chat_messages = [SystemMessage(content=system_prompt), *[
+        m for m in messages if not isinstance(m, SystemMessage)
+    ]]
+    response = await llm.bind_tools(filtered_tools).ainvoke(chat_messages)
+    tool_call_count = state.get("tool_call_count", 0)
+    if hasattr(response, "tool_calls") and response.tool_calls:
+        tool_call_count += 1
+    return {
+        "messages": [response],
+        "tool_call_count": tool_call_count,
+        "active_module": "project_esg_scoring",
+        "active_module_data": state.get("active_module_data"),
+    }
+
+
 @_with_llm_source
 async def esg_scoring_node(
     state: ConversationState,
     config: RunnableConfig | None = None,
 ) -> ConversationState:
-    """Noeud d'evaluation ESG : conduit l'evaluation conversationnelle avec tool calling.
+    """Noeud d'evaluation ESG : dispatcher entreprise (F05) vs projet (F047).
 
-    Gere l'etat de l'evaluation (creation, progression, finalisation)
-    et utilise un prompt specialise ESG pour interagir avec l'utilisateur.
-    Enrichit le contexte avec les documents de l'utilisateur via RAG.
-    Le LLM dispose de tools pour creer, sauvegarder et finaliser les evaluations.
+    Le helper :func:`_route_esg_target` choisit la branche selon l'URL active.
+    La branche entreprise (logique historique F05) reste strictement inchangée.
+    Nouvelle branche projet : :func:`_score_project` (≤ 50 lignes).
     """
+    if _route_esg_target(state) == "project":
+        return await _score_project(state, config)
+
     from app.graph.tools.esg_tools import ESG_TOOLS
     from app.prompts.esg_scoring import build_esg_prompt
 
@@ -1650,6 +1855,7 @@ async def chat_node(
     from app.graph.tools.guided_tour_tools import GUIDED_TOUR_TOOLS
     from app.graph.tools.interactive_tools import INTERACTIVE_TOOLS
     from app.graph.tools.profiling_tools import PROFILING_TOOLS
+    from app.graph.tools.project_esg_tools import PROJECT_ESG_TOOLS
     from app.graph.tools.project_tools import PROJECT_TOOLS
     from app.graph.tools.sourcing_tools import SOURCING_TOOLS
     from app.graph.tools.visualization_tools import VISUALIZATION_TOOLS
@@ -1661,6 +1867,8 @@ async def chat_node(
     # filtre par module/page restreint la liste exposée au LLM (≤ MAX_TOOLS_PER_TURN).
     # Sans `generate_*_report` ici, le selector les exclut via `base_names & available_names`
     # et le LLM hallucine « tool indisponible » quand le routing reste sur chat.
+    # F047 — PROJECT_ESG_TOOLS ajoutés au catalogue pour que le selecteur puisse
+    # les inclure quand current_page=`profile_projects` ou `profile_projects_esg`.
     all_tools = (
         PROFILING_TOOLS
         + CHAT_TOOLS
@@ -1669,6 +1877,7 @@ async def chat_node(
         + GUIDED_TOUR_TOOLS
         + SOURCING_TOOLS
         + PROJECT_TOOLS
+        + PROJECT_ESG_TOOLS
         + VISUALIZATION_TOOLS
         + [generate_esg_report, generate_carbon_report]
     )
@@ -1727,6 +1936,20 @@ async def chat_node(
     page_context = build_page_context_instruction(state.get("current_page"))
     if page_context:
         full_prompt += "\n\n" + page_context
+
+    # F047 — Directive page-contextuelle pour l'evaluation ESG-projet.
+    # Quand l'utilisateur consulte une fiche projet ET demande une evaluation
+    # contre IFC PS / GCF ESS / BOAD ESS, on force le LLM a appeler
+    # `create_project_esg_assessment` AVANT tout widget interactif. Sans
+    # cette instruction, le LLM bifurque vers `ask_interactive_question`
+    # pour clarifier le referentiel et ne persiste jamais l'evaluation.
+    if (
+        _is_project_page(state.get("current_page"))
+        and _detect_project_esg_intent(last_user_msg_chat)
+    ):
+        full_prompt += _build_project_esg_directive(
+            _extract_project_id_from_page(state.get("current_page"))
+        )
 
     active_skills_snapshot: list[dict] | None = None
     if all_tools:

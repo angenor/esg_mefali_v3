@@ -17,6 +17,7 @@ Notes performance :
 from __future__ import annotations
 
 import logging
+import re
 from datetime import date
 from typing import Any
 
@@ -30,6 +31,28 @@ logger = logging.getLogger(__name__)
 
 # Cap maximum de skills chargées par tour (cf. plan.md "Performance Goals").
 MAX_SKILLS_LOADED: int = 2
+
+
+def _slug_matches_page(slug_pattern: str, page_slug: str) -> bool:
+    """Vrai si ``page_slug`` matche ``slug_pattern`` (gabarit ``[id]`` accepté).
+
+    Supporte les gabarits dynamiques type ``/profile/projects/[id]`` ou
+    ``/profile/projects/[id]/esg`` — chaque ``[id]`` est traité comme un
+    placeholder regex ``[^/]+`` (un segment de chemin sans slash).
+
+    Avant ce helper, la comparaison ``in list`` exigeait une égalité stricte,
+    si bien que ``/profile/projects/abc-123`` ne matchait JAMAIS le slug
+    déclaré ``/profile/projects/[id]/esg`` (cf. bug F047 US4).
+    """
+    if "[" not in slug_pattern:
+        return slug_pattern == page_slug
+    # Escape, puis remplace les placeholders \[id\] → [^/]+ (segment unique).
+    regex_body = re.sub(
+        r"\\\[\w+\\\]",  # ex: \[id\] ou \[project_id\]
+        r"[^/]+",
+        re.escape(slug_pattern),
+    )
+    return re.match(f"^{regex_body}/?$", page_slug) is not None
 
 
 def _specificity_score(skill: Any, ctx: dict[str, Any]) -> float:
@@ -85,10 +108,15 @@ def _specificity_score(skill: Any, ctx: dict[str, Any]) -> float:
     if active_module and active_module in (rules.get("active_module") or []):
         score += 1.5
 
-    # Niveau 1 — page_slug.
+    # Niveau 1 — page_slug. Supporte les gabarits ``[id]`` pour matcher les
+    # URLs dynamiques type ``/profile/projects/{uuid}`` ↔ déclaration
+    # ``/profile/projects/[id]``.
     page_slug = ctx.get("page_slug")
-    if page_slug and page_slug in (rules.get("page_slugs") or []):
-        score += 1.0
+    if page_slug:
+        for slug_pattern in rules.get("page_slugs") or []:
+            if _slug_matches_page(slug_pattern, page_slug):
+                score += 1.0
+                break
 
     # Niveau 0.5 — intent_keywords (au moins 1 keyword présent).
     intent = (ctx.get("intent") or "").lower()

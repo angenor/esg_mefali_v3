@@ -167,7 +167,12 @@ def build_graph() -> StateGraph:
     from app.graph.tools.carbon_tools import generate_carbon_report
     REPORT_TOOLS = [generate_esg_report, generate_carbon_report]
 
-    create_tool_loop(graph, "chat", chat_node, tools=PROFILING_TOOLS + CHAT_TOOLS + DOCUMENT_TOOLS + INTERACTIVE_TOOLS + GUIDED_TOUR_TOOLS + MEMORY_TOOLS + PROJECT_TOOLS + RESOURCE_TOOLS + REPORT_TOOLS)
+    # F047 — PROJECT_ESG_TOOLS doivent figurer AUSSI dans le ToolNode du loop
+    # `chat`, sinon le LLM voit les tools (via bind_tools) mais ne peut pas
+    # les exécuter (cf. commentaire ci-dessus). Sans cela, le LLM hallucine
+    # « tool indisponible » et retombe sur ask_interactive_question.
+    from app.graph.tools.project_esg_tools import PROJECT_ESG_TOOLS as _PROJECT_ESG_TOOLS
+    create_tool_loop(graph, "chat", chat_node, tools=PROFILING_TOOLS + CHAT_TOOLS + DOCUMENT_TOOLS + INTERACTIVE_TOOLS + GUIDED_TOUR_TOOLS + MEMORY_TOOLS + PROJECT_TOOLS + _PROJECT_ESG_TOOLS + RESOURCE_TOOLS + REPORT_TOOLS)
     create_tool_loop(graph, "esg_scoring", esg_scoring_node, tools=ESG_TOOLS + INTERACTIVE_TOOLS + GUIDED_TOUR_TOOLS + MEMORY_TOOLS + RESOURCE_TOOLS)
     create_tool_loop(graph, "carbon", carbon_node, tools=CARBON_TOOLS + INTERACTIVE_TOOLS + GUIDED_TOUR_TOOLS + MEMORY_TOOLS + RESOURCE_TOOLS)
     create_tool_loop(graph, "financing", financing_node, tools=FINANCING_TOOLS + INTERACTIVE_TOOLS + GUIDED_TOUR_TOOLS + MEMORY_TOOLS + RESOURCE_TOOLS)
