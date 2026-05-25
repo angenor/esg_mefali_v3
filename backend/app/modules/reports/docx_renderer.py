@@ -1,11 +1,11 @@
-"""Generation de rapports ESG au format Word (.docx) via python-docx.
+"""[DEPRECATED] Generation de rapports ESG au format Word (.docx).
 
-Remplace l'approche WeasyPrint (HTML -> PDF) qui requiert des libs natives
-lourdes (Pango/Cairo/GTK) difficiles a deployer. python-docx est pur Python
-et n'a aucune dependance systeme.
+Conservé pour rétro-compatibilité et tests legacy. La génération de
+rapports passe désormais par :mod:`app.modules.reports.pdf_renderer`
+(pipeline Jinja2 + WeasyPrint partagé avec F047/F21).
 
-Les graphiques sont insérés en PNG (rendu matplotlib) car .docx ne supporte
-pas SVG inline de maniere fiable.
+À supprimer dans une prochaine release une fois la confiance dans le
+pipeline PDF acquise en production.
 """
 
 from __future__ import annotations

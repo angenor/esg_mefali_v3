@@ -482,7 +482,7 @@ async def generate_esg_report(
     config: RunnableConfig,
     assessment_id: str | None = None,
 ) -> str:
-    """Génère et sauvegarde le rapport ESG Word (.docx) d'une évaluation finalisée.
+    """Génère et sauvegarde le rapport ESG PDF d'une évaluation finalisée.
 
     Use when:
     - l'utilisateur demande « génère mon rapport ESG », « télécharge mon

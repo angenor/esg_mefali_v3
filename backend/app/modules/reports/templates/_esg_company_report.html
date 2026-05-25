@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>Rapport ESG — {{ company_name }}</title>
+  <style>
+    @page {
+      size: A4;
+      margin: 20mm 18mm 22mm 18mm;
+      @bottom-center {
+        content: "Rapport ESG — " counter(page) " / " counter(pages);
+        font-size: 8pt;
+        color: #64748b;
+        font-family: 'Helvetica', 'Arial', sans-serif;
+      }
+    }
+    body { font-family: 'Helvetica', 'Arial', sans-serif; color: #1e293b; font-size: 10.5pt; line-height: 1.55; }
+    h1 { font-size: 26pt; color: #1e40af; margin: 0 0 6pt 0; }
+    h2 { font-size: 16pt; color: #0f172a; margin-top: 24pt; border-bottom: 1.5pt solid #22c55e; padding-bottom: 4pt; }
+    h3 { font-size: 12pt; color: #1e40af; margin-top: 16pt; }
+    section { page-break-inside: avoid; }
+    .cover { text-align: center; padding: 70pt 0; border-bottom: 2pt solid #1e40af; margin-bottom: 24pt; }
+    .cover-subtitle { font-size: 14pt; color: #4b5563; margin: 4pt 0 16pt 0; }
+    .cover-company { font-size: 20pt; font-weight: 700; color: #1e40af; margin-bottom: 4pt; }
+    .cover-sector { font-size: 12pt; color: #64748b; margin-bottom: 18pt; }
+    .badge-score { display: inline-block; background: #fef3c7; border: 2pt solid #f59e0b; color: #92400e; font-weight: 700; padding: 10pt 22pt; border-radius: 10pt; font-size: 22pt; }
+    .cover-meta { font-size: 10pt; color: #6b7280; margin-top: 12pt; }
+    .score-overview { margin: 14pt 0; }
+    .score-card { display: inline-block; margin: 0 6pt; padding: 8pt 14pt; background: #f8fafc; border: 1pt solid #e2e8f0; border-radius: 6pt; text-align: center; min-width: 90pt; }
+    .score-card .v { display: block; font-weight: 700; font-size: 18pt; }
+    .score-card .l { display: block; font-size: 9pt; color: #4b5563; margin-top: 2pt; }
+    .score-env { color: #22c55e; }
+    .score-soc { color: #3b82f6; }
+    .score-gov { color: #a855f7; }
+    .score-overall { color: #f59e0b; }
+    .chart-container { text-align: center; margin: 14pt 0; }
+    table { width: 100%; border-collapse: collapse; margin: 10pt 0; }
+    th, td { border: 0.5pt solid #d1d5db; padding: 6pt 8pt; text-align: left; font-size: 9.5pt; }
+    th { background: #f1f5f9; color: #0f172a; font-weight: 700; }
+    .strengths-list, .gaps-list, .recommendations-list { list-style: none; padding: 0; }
+    .strengths-list li, .gaps-list li, .recommendations-list li { padding: 6pt 8pt; margin-bottom: 4pt; border-radius: 5pt; font-size: 10pt; }
+    .strengths-list li { background: #f0fdf4; border-left: 3pt solid #22c55e; }
+    .gaps-list li { background: #fef2f2; border-left: 3pt solid #ef4444; }
+    .recommendations-list li { background: #eff6ff; border-left: 3pt solid #3b82f6; }
+    .item-title { font-weight: 700; }
+    .item-meta { font-size: 9pt; color: #64748b; }
+    .compliance-pass { color: #15803d; font-weight: 700; }
+    .compliance-partial { color: #b45309; font-weight: 700; }
+    .compliance-fail { color: #dc2626; font-weight: 700; }
+    .methodology-note { background: #f1f5f9; border-radius: 6pt; padding: 8pt; font-size: 9.5pt; color: #475569; margin-top: 8pt; }
+    .legal-block { font-size: 9pt; color: #4b5563; margin-bottom: 6pt; line-height: 1.45; }
+    .legal-title { font-weight: 700; color: #0f172a; }
+    .sources-table { font-size: 9pt; }
+    .source-status { font-size: 8.5pt; color: #15803d; font-weight: 700; }
+    .empty { font-style: italic; color: #6b7280; }
+  </style>
+</head>
+<body>
+
+<!-- Couverture -->
+<div class="cover">
+  <h1>Rapport d'Évaluation ESG</h1>
+  <div class="cover-subtitle">Conformité &amp; Performance Durable</div>
+  <div class="cover-company">{{ company_name }}</div>
+  <div class="cover-sector">Secteur : {{ sector_label }}</div>
+  <div class="badge-score">{{ overall_score | round(1) }} / 100</div>
+  <div class="cover-meta">Score ESG global · Généré le {{ generation_date }}</div>
+</div>
+
+<!-- Section 1 — Résumé exécutif -->
+<section>
+  <h2>1. Résumé exécutif</h2>
+  {% if executive_summary_paragraphs %}
+    {% for para in executive_summary_paragraphs %}
+      {% if para.kind == 'bullet' %}
+        <ul><li>{{ para.text }}</li></ul>
+      {% else %}
+        <p>{{ para.text }}</p>
+      {% endif %}
+    {% endfor %}
+  {% else %}
+    <p class="empty">Aucun résumé exécutif disponible.</p>
+  {% endif %}
+
+  <div class="score-overview">
+    <div class="score-card"><span class="v score-env">{{ environment_score | round(1) }}</span><span class="l">Environnement</span></div>
+    <div class="score-card"><span class="v score-soc">{{ social_score | round(1) }}</span><span class="l">Social</span></div>
+    <div class="score-card"><span class="v score-gov">{{ governance_score | round(1) }}</span><span class="l">Gouvernance</span></div>
+    <div class="score-card"><span class="v score-overall">{{ overall_score | round(1) }}</span><span class="l">Global</span></div>
+  </div>
+</section>
+
+<!-- Section 2 — Scores détaillés par pilier -->
+<section>
+  <h2>2. Scores détaillés par pilier</h2>
+  {% if radar_chart_svg %}
+    <div class="chart-container">{{ radar_chart_svg | safe }}</div>
+  {% endif %}
+
+  {% for pillar_key, pillar_label in [("environment", "Environnement"), ("social", "Social"), ("governance", "Gouvernance")] %}
+    {% if pillar_criteria[pillar_key] %}
+      <h3>{{ pillar_label }} — {{ pillar_scores[pillar_key] | round(1) }} / 100</h3>
+      {% if pillar_bar_charts and pillar_bar_charts.get(pillar_key) %}
+        <div class="chart-container">{{ pillar_bar_charts[pillar_key] | safe }}</div>
+      {% endif %}
+      <table>
+        <thead><tr><th>Code</th><th>Score</th><th>Justification</th></tr></thead>
+        <tbody>
+          {% for c in pillar_criteria[pillar_key] %}
+            <tr>
+              <td><strong>{{ c.code }}</strong></td>
+              <td>{{ c.score }} / 10</td>
+              <td>{{ c.justification or "—" }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% endif %}
+  {% endfor %}
+</section>
+
+<!-- Section 3 — Points forts -->
+<section>
+  <h2>3. Points forts identifiés</h2>
+  {% if strengths %}
+    <ul class="strengths-list">
+      {% for s in strengths %}
+        <li>
+          <span class="item-title">{{ s.title or s.name or "—" }}</span>
+          {% if s.description %} — {{ s.description }}{% endif %}
+          <span class="item-meta">
+            {% if s.score is not none %}(score : {{ s.score }}/10){% endif %}
+            {% if s.criteria_code or s.code %} · critère {{ s.criteria_code or s.code }}{% endif %}
+          </span>
+        </li>
+      {% endfor %}
+    </ul>
+  {% else %}
+    <p class="empty">Aucun point fort identifié pour le moment.</p>
+  {% endif %}
+</section>
+
+<!-- Section 4 — Axes d'amélioration -->
+<section>
+  <h2>4. Axes d'amélioration</h2>
+  {% if gaps %}
+    <ul class="gaps-list">
+      {% for g in gaps %}
+        <li>
+          <span class="item-title">{{ g.title or g.name or "—" }}</span>
+          {% if g.description %} — {{ g.description }}{% endif %}
+          <span class="item-meta">
+            {% if g.score is not none %}(score : {{ g.score }}/10){% endif %}
+            {% if g.pillar %} · pilier {{ g.pillar }}{% endif %}
+          </span>
+        </li>
+      {% endfor %}
+    </ul>
+  {% else %}
+    <p class="empty">Aucun axe d'amélioration identifié.</p>
+  {% endif %}
+</section>
+
+<!-- Section 5 — Benchmarking sectoriel -->
+<section>
+  <h2>5. Benchmarking sectoriel</h2>
+  {% if benchmark_chart_svg %}
+    <p>Comparaison avec la moyenne du secteur <strong>{{ sector_label }}</strong>.</p>
+    <div class="chart-container">{{ benchmark_chart_svg | safe }}</div>
+    {% if benchmark_position %}
+      <p><strong>Position</strong> : {{ benchmark_position_label }}</p>
+    {% endif %}
+  {% else %}
+    <p class="empty">Les données de benchmarking ne sont pas disponibles pour votre secteur.</p>
+  {% endif %}
+</section>
+
+<!-- Section 6 — Conformité réglementaire UEMOA/BCEAO -->
+<section>
+  <h2>6. Conformité réglementaire UEMOA / BCEAO</h2>
+  <p>Alignement de votre entreprise avec les principales taxonomies et réglementations en vigueur dans l'espace UEMOA et CEDEAO.</p>
+
+  <h3>6.1 Alignement réglementaire</h3>
+  <table>
+    <thead>
+      <tr><th>Référentiel</th><th>Domaine</th><th>Pilier</th><th>Alignement</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Taxonomie verte UEMOA</td>
+        <td>Finance durable</td>
+        <td>Environnement</td>
+        <td class="{% if environment_score >= 60 %}compliance-pass{% elif environment_score >= 40 %}compliance-partial{% else %}compliance-fail{% endif %}">
+          {% if environment_score >= 60 %}Aligné{% elif environment_score >= 40 %}Partiellement aligné{% else %}Non aligné{% endif %}
+        </td>
+      </tr>
+      <tr>
+        <td>Circulaire BCEAO n°002-2024</td>
+        <td>Reporting ESG</td>
+        <td>Gouvernance</td>
+        <td class="{% if governance_score >= 60 %}compliance-pass{% elif governance_score >= 40 %}compliance-partial{% else %}compliance-fail{% endif %}">
+          {% if governance_score >= 60 %}Conforme{% elif governance_score >= 40 %}Partiellement conforme{% else %}Non conforme{% endif %}
+        </td>
+      </tr>
+      <tr>
+        <td>Directive CEDEAO RSE</td>
+        <td>Responsabilité sociale</td>
+        <td>Social</td>
+        <td class="{% if social_score >= 60 %}compliance-pass{% elif social_score >= 40 %}compliance-partial{% else %}compliance-fail{% endif %}">
+          {% if social_score >= 60 %}Conforme{% elif social_score >= 40 %}Partiellement conforme{% else %}Non conforme{% endif %}
+        </td>
+      </tr>
+      <tr>
+        <td>Gold Standard / Verra</td>
+        <td>Crédits carbone</td>
+        <td>Global</td>
+        <td class="{% if overall_score >= 70 %}compliance-pass{% elif overall_score >= 50 %}compliance-partial{% else %}compliance-fail{% endif %}">
+          {% if overall_score >= 70 %}Éligible{% elif overall_score >= 50 %}Sous conditions{% else %}Non éligible{% endif %}
+        </td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>6.2 Objectifs de Développement Durable (ODD)</h3>
+  <table>
+    <thead>
+      <tr><th>ODD</th><th>Intitulé</th><th>Pilier(s)</th><th>Contribution</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>ODD 8</strong></td>
+        <td>Travail décent et croissance économique</td>
+        <td>Social / Gouvernance</td>
+        <td>{% if (social_score + governance_score) / 2 >= 60 %}Forte{% elif (social_score + governance_score) / 2 >= 40 %}Modérée{% else %}Faible{% endif %}</td>
+      </tr>
+      <tr>
+        <td><strong>ODD 9</strong></td>
+        <td>Industrie, innovation et infrastructure</td>
+        <td>Gouvernance</td>
+        <td>{% if governance_score >= 60 %}Forte{% elif governance_score >= 40 %}Modérée{% else %}Faible{% endif %}</td>
+      </tr>
+      <tr>
+        <td><strong>ODD 13</strong></td>
+        <td>Lutte contre le changement climatique</td>
+        <td>Environnement</td>
+        <td>{% if environment_score >= 60 %}Forte{% elif environment_score >= 40 %}Modérée{% else %}Faible{% endif %}</td>
+      </tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- Section 7 — Plan d'action -->
+<section>
+  <h2>7. Plan d'action stratégique</h2>
+  {% if recommendations %}
+    <ul class="recommendations-list">
+      {% for r in recommendations %}
+        <li>
+          <span class="item-title">{{ r.title or "—" }}</span>
+          {% if r.description %} — {{ r.description }}{% endif %}
+          <span class="item-meta">
+            {% if r.priority is not none %}(priorité P{{ r.priority }}){% endif %}
+            {% if r.timeline %} · horizon {{ r.timeline }}{% endif %}
+            {% if r.impact %} · impact {{ r.impact }}{% endif %}
+          </span>
+        </li>
+      {% endfor %}
+    </ul>
+  {% else %}
+    <p class="empty">Aucune recommandation pour le moment.</p>
+  {% endif %}
+</section>
+
+<!-- Section 8 — Méthodologie -->
+<section>
+  <h2>8. Méthodologie d'évaluation</h2>
+  <p>La présente évaluation repose sur la grille ESG Mefali déclinée en 30 critères répartis sur trois piliers — Environnement, Social et Gouvernance — adaptée au contexte des PME africaines francophones (zones UEMOA et CEDEAO).</p>
+  <p>Chaque critère est noté sur une échelle de 0 à 10, puis pondéré selon le secteur d'activité de l'entreprise. Le score par pilier (/100) résulte d'une moyenne pondérée des critères du pilier ; le score global est la moyenne arithmétique des trois piliers.</p>
+  <p>Les référentiels mobilisés incluent : Mefali (interne), GCF (Green Climate Fund), IFC Performance Standards, BOAD ESS, GRI 2021, ainsi que la taxonomie verte UEMOA/BCEAO et les réglementations CEDEAO en vigueur. Les Objectifs de Développement Durable visés sont les ODD 8, 9, 10, 12, 13 et 17.</p>
+  <div class="methodology-note">
+    <strong>Note :</strong> Ce rapport constitue une évaluation indicative. Il ne remplace pas un audit ESG formel réalisé par un cabinet certifié. Les scores et recommandations sont basés sur les informations déclaratives fournies par l'entreprise.
+  </div>
+</section>
+
+<!-- Section 9 — Sources et références (F01) -->
+<section>
+  <h2>9. Sources et références</h2>
+  {% if mobilized_sources %}
+    <p>Cette annexe liste les sources officielles mobilisées pour la génération de ce rapport (workflow 4-yeux F01).</p>
+    <ol>
+      {% for src in mobilized_sources %}
+        <li>
+          <strong>[{{ src.index }}]</strong>
+          {{ src.title }} — <em>{{ src.publisher }}</em>{% if src.version %}, version {{ src.version }}{% endif %}{% if src.date_publi %} (publié le {{ src.date_publi }}){% endif %}.{% if src.page %} Page {{ src.page }}.{% endif %}{% if src.section %} Section : {{ src.section }}.{% endif %}
+          <br>
+          <a href="{{ src.url }}">{{ src.url }}</a>
+          <span class="source-status">— Vérifiée</span>
+        </li>
+      {% endfor %}
+    </ol>
+  {% else %}
+    <p class="empty">Aucune source mobilisée pour ce rapport. Les chiffres et évaluations sont issus de la grille ESG interne Mefali (référentiel propriétaire).</p>
+  {% endif %}
+</section>
+
+<!-- Mentions légales -->
+<section>
+  <h2>Mentions légales et avertissement</h2>
+  <p class="legal-block">
+    <span class="legal-title">Confidentialité.</span>
+    Le présent rapport contient des informations confidentielles relatives à l'entreprise évaluée. Sa diffusion est strictement réservée à son destinataire et aux tiers autorisés.
+  </p>
+  <p class="legal-block">
+    <span class="legal-title">Portée de l'évaluation.</span>
+    Les scores et constats reflètent les déclarations de l'entreprise au moment de l'évaluation. Ils ne constituent pas un audit certifié ni une attestation de conformité réglementaire.
+  </p>
+  <p class="legal-block">
+    <span class="legal-title">Limites méthodologiques.</span>
+    La grille Mefali est un outil d'auto-diagnostic. Les pondérations sectorielles sont calibrées sur les standards internationaux mais peuvent différer des exigences spécifiques d'un bailleur de fonds donné.
+  </p>
+  <p class="legal-block">
+    <span class="legal-title">Propriété intellectuelle.</span>
+    © ESG Mefali — Tous droits réservés. La grille d'évaluation, les algorithmes de scoring et le contenu du présent rapport sont protégés par le droit d'auteur.
+  </p>
+</section>
+
+</body>
+</html>

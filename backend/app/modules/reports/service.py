@@ -127,6 +127,7 @@ def _extract_criteria_by_pillar(assessment_data: dict) -> dict[str, list[dict]]:
                 "label": code,
                 "score": detail.get("score", 0),
                 "max": 10,
+                "justification": detail.get("justification", "") or "",
             })
 
     # Trier par code
@@ -326,9 +327,10 @@ async def generate_report(
             f"{user_id}. Toute INSERT sur reports requiert F02."
         )
 
-    # F02 fix : extension .docx (python-docx remplace WeasyPrint pour
-    # eviter la dependance native Pango/Cairo en prod).
-    file_name = f"rapport-esg-{user.company_name.replace(' ', '-').lower()}-{datetime.now(timezone.utc).strftime('%Y-%m-%d')}-{uuid.uuid4().hex[:8]}.docx"
+    # Rapport au format PDF via pipeline WeasyPrint partagé (cohérent
+    # avec F047 ESIA-light et F21 Carbone). Le pipeline gère le fallback
+    # reportlab → PDF minimal si WeasyPrint n'est pas disponible.
+    file_name = f"rapport-esg-{user.company_name.replace(' ', '-').lower()}-{datetime.now(timezone.utc).strftime('%Y-%m-%d')}-{uuid.uuid4().hex[:8]}.pdf"
     report = Report(
         user_id=user_id,
         account_id=user.account_id,
@@ -396,15 +398,56 @@ async def generate_report(
         # 6. F01 - collecter les sources mobilisees
         mobilized_sources = await _collect_mobilized_sources(db, assessment)
 
-        # 7. Rendre le rapport au format .docx via python-docx
-        # (remplace WeasyPrint/HTML -> PDF pour eviter les dependances
-        # natives Pango/Cairo en prod).
-        from app.modules.reports.docx_renderer import render_esg_report_docx
+        # 7. Rendre le rapport au format PDF via le pipeline partagé
+        # (WeasyPrint + fallback reportlab → PDF minimal).
+        from app.modules.reports.pdf_renderer import render_esg_report_pdf
 
         UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
         output_path = UPLOADS_DIR / file_name
 
-        render_esg_report_docx(
+        # Génération des graphiques SVG (best-effort : ignorés en cas
+        # d'erreur matplotlib pour ne pas bloquer la génération).
+        try:
+            radar_svg = generate_radar_chart_svg(pillar_scores)
+        except Exception:  # noqa: BLE001
+            logger.debug("Radar chart SVG ignoré", exc_info=True)
+            radar_svg = ""
+        pillar_bar_charts: dict[str, str] = {}
+        pillar_labels_fr = {
+            "environment": "Environnement",
+            "social": "Social",
+            "governance": "Gouvernance",
+        }
+        for pillar_key, pillar_label in pillar_labels_fr.items():
+            crit = pillar_criteria.get(pillar_key) or []
+            if not crit:
+                pillar_bar_charts[pillar_key] = ""
+                continue
+            try:
+                pillar_bar_charts[pillar_key] = generate_bar_chart_svg(
+                    crit, pillar_label,
+                )
+            except Exception:  # noqa: BLE001
+                logger.debug(
+                    "Bar chart pilier %s ignoré", pillar_key, exc_info=True,
+                )
+                pillar_bar_charts[pillar_key] = ""
+        sector_label_for_chart = SECTOR_LABELS.get(
+            assessment.sector, assessment.sector or "Secteur"
+        )
+        averages = (benchmark or {}).get("averages") or {}
+        try:
+            benchmark_svg = (
+                generate_benchmark_chart_svg(
+                    pillar_scores, averages, sector_label_for_chart,
+                )
+                if averages else ""
+            )
+        except Exception:  # noqa: BLE001
+            logger.debug("Benchmark chart SVG ignoré", exc_info=True)
+            benchmark_svg = ""
+
+        render_esg_report_pdf(
             output_path=output_path,
             assessment=assessment,
             user=user,
@@ -415,6 +458,13 @@ async def generate_report(
                 assessment.sector, assessment.sector or "Secteur"
             ),
             mobilized_sources=mobilized_sources,
+            radar_chart_svg=radar_svg,
+            pillar_bar_charts=pillar_bar_charts,
+            benchmark_chart_svg=benchmark_svg,
+            benchmark_position=(benchmark or {}).get("position"),
+            benchmark_position_label=BENCHMARK_POSITION_LABELS.get(
+                (benchmark or {}).get("position", ""), ""
+            ),
         )
 
         # 8. Mettre a jour le rapport
@@ -425,7 +475,7 @@ async def generate_report(
         await db.flush()
 
     except Exception:
-        logger.exception("Erreur lors de la generation du rapport DOCX")
+        logger.exception("Erreur lors de la generation du rapport PDF")
         report.status = ReportStatusEnum.failed
         await db.flush()
         raise

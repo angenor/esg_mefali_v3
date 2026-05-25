@@ -108,8 +108,8 @@ async def download_report(
 ) -> FileResponse:
     """Telecharger le fichier d'un rapport.
 
-    Le type MIME est deduit de l'extension du fichier (.docx ou .pdf
-    pour retro-compat avec les anciens rapports WeasyPrint).
+    Le type MIME est deduit de l'extension du fichier (.pdf cible, ou .docx
+    pour rétro-compatibilité avec les anciens rapports python-docx).
     """
     from app.modules.reports.service import get_report, get_report_any_user
 

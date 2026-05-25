@@ -1,7 +1,8 @@
-"""Génération du rapport carbone au format Word (.docx).
+"""[DEPRECATED] Génération du rapport carbone au format Word (.docx).
 
-Remplace WeasyPrint pour éviter les dépendances natives Pango/Cairo
-(cohérence avec docx_renderer ESG).
+Conservé pour rétro-compatibilité. La génération passe désormais par
+:mod:`app.modules.reports.carbon.pdf_renderer` (pipeline Jinja2 +
+WeasyPrint partagé avec F047/F05).
 """
 
 from __future__ import annotations
