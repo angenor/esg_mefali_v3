@@ -55,3 +55,9 @@ tiktoken>=0.5.0
 
 # F23 — versioning semver des Skills
 semver>=3.0.0
+
+# F05 — signature des URLs temporaires (export RGPD "Mes Données")
+itsdangerous>=2.2.0
+
+# F12 — SDK embeddings Voyage AI (mémoire contextuelle pgvector)
+voyageai>=0.2.4
