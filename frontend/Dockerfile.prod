@@ -5,9 +5,11 @@ FROM node:22-slim AS builder
 
 WORKDIR /app
 
-# Installer les dépendances (via lockfile pour builds reproductibles)
+# Installer les dépendances. `npm ci` (reproductible via lockfile) en priorité,
+# avec repli sur `npm install` si le lockfile est désynchronisé (ex. divergence
+# de résolution des dépendances optionnelles entre versions de npm).
 COPY package.json package-lock.json* ./
-RUN npm ci
+RUN npm ci || npm install
 
 # Copier le code source
 COPY . .
