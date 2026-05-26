@@ -47,9 +47,23 @@ services:
       REFRESH_TOKEN_EXPIRE_DAYS: ${REFRESH_TOKEN_EXPIRE_DAYS:-30}
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
       OPENROUTER_BASE_URL: ${OPENROUTER_BASE_URL:-https://openrouter.ai/api/v1}
-      OPENROUTER_MODEL: ${OPENROUTER_MODEL:-anthropic/claude-sonnet-4-20250514}
+      OPENROUTER_MODEL: ${OPENROUTER_MODEL:-anthropic/claude-sonnet-4.6}
+      # Embeddings Voyage (F12 / mig. 043) — REQUIS : sans VOYAGE_API_KEY la
+      # mémoire contextuelle (message_chunks) est désactivée. Le schéma est en
+      # vector(1024) → utiliser un modèle 1024 dims (voyage-3.5), surtout pas
+      # voyage-large-2 (1536) qui provoquerait un mismatch de dimension.
+      VOYAGE_API_KEY: ${VOYAGE_API_KEY:-}
+      VOYAGE_MODEL: ${VOYAGE_MODEL:-voyage-3.5}
       APP_VERSION: ${APP_VERSION:-0.1.0}
       DEBUG: "false"
+    # Historique Alembic à deux têtes (047 principal + 043_embeddings_voyage_dim
+    # orpheline). On cible explicitement la tête principale pour éviter l'échec
+    # « multiple heads » de `alembic upgrade head`. La base restaurée étant déjà
+    # en 047, cette commande est un no-op au démarrage.
+    command:
+      - sh
+      - -c
+      - alembic upgrade 047_project_esg_assessments && uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 2 --proxy-headers --forwarded-allow-ips='*'
     # Expose uniquement sur localhost : le reverse proxy (nginx UAfricas)
     # route le trafic via 127.0.0.1:BACKEND_PORT
     ports:

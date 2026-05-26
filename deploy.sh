@@ -21,7 +21,9 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REMOTE_USER="root"
 REMOTE_HOST="161.97.92.63"
 REMOTE_DIR="/opt/esg_mefali"
-REPO_URL="https://github.com/angenor/esg_mefali.git"
+REPO_URL="https://github.com/angenor/esg_mefali_v3.git"
+# Branche deployee (la "version actuelle" preferee). Surclassable : BRANCH=main ./deploy.sh deploy
+BRANCH="${BRANCH:-048-fix-chatbot-application-flow}"
 DOMAIN="esg.mefali.com"
 ADMIN_EMAIL="admin@mefali.com"
 
@@ -89,14 +91,15 @@ ENDSSH
         cd ${REMOTE_DIR}
 
         if [ ! -d ".git" ]; then
-            echo "Clonage du repository..."
+            echo "Clonage du repository (branche ${BRANCH})..."
             cd /opt
             rm -rf esg_mefali
-            git clone ${REPO_URL} esg_mefali
+            git clone -b ${BRANCH} ${REPO_URL} esg_mefali
         else
-            echo "Repository deja present, mise a jour..."
+            echo "Repository deja present, mise a jour (branche ${BRANCH})..."
             git fetch origin
-            git reset --hard origin/main || git reset --hard origin/master
+            git checkout ${BRANCH} 2>/dev/null || true
+            git reset --hard origin/${BRANCH}
         fi
 ENDSSH
 
@@ -141,7 +144,13 @@ REFRESH_TOKEN_EXPIRE_DAYS=30
 # IMPORTANT : remplacer CHANGEZ_MOI par votre cle OpenRouter
 OPENROUTER_API_KEY=CHANGEZ_MOI
 OPENROUTER_BASE_URL=https://openrouter.ai/api/v1
-OPENROUTER_MODEL=anthropic/claude-sonnet-4-20250514
+OPENROUTER_MODEL=anthropic/claude-sonnet-4.6
+
+# --- Embeddings Voyage (F12 / mig. 043) ---
+# REQUIS : sans cle, la memoire contextuelle (message_chunks) est desactivee.
+# Schema en vector(1024) -> modele 1024 dims (voyage-3.5), PAS voyage-large-2.
+VOYAGE_API_KEY=CHANGEZ_MOI
+VOYAGE_MODEL=voyage-3.5
 
 # --- Application ---
 APP_VERSION=0.1.0
@@ -181,7 +190,8 @@ deploy() {
     ssh_heredoc << ENDSSH
         cd ${REMOTE_DIR}
         git fetch origin
-        git reset --hard origin/main || git reset --hard origin/master
+        git checkout ${BRANCH} 2>/dev/null || true
+        git reset --hard origin/${BRANCH}
 ENDSSH
 
     echo -e "${GREEN}[2/4] Upload du virtual host d'exemple...${NC}"
@@ -250,7 +260,7 @@ update() {
     echo -e "${GREEN}Mise a jour rapide...${NC}"
     ssh_heredoc << ENDSSH
         cd ${REMOTE_DIR}
-        git pull origin main || git pull origin master
+        git pull origin ${BRANCH}
 
         docker compose -f docker-compose.prod.yml build
         docker compose -f docker-compose.prod.yml up -d
