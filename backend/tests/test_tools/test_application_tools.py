@@ -147,10 +147,20 @@ class TestExportApplication:
     @patch("app.graph.tools.application_tools._export_application", new_callable=AsyncMock)
     @patch("app.modules.applications.service.get_application_by_id", new_callable=AsyncMock)
     async def test_export_pdf(self, mock_get_app, mock_export, mock_config):
-        """Export PDF retourne l'URL."""
+        """Export PDF retourne l'URL (gating ignoré : ni projet ni offre liés)."""
         app = _make_application()
+        # F048 — pas de gating sans project_id/offer_id ; user_id = celui du config.
+        app.user_id = mock_config["configurable"]["user_id"]
+        app.project_id = None
+        app.offer_id = None
+        app.account_id = None
         mock_get_app.return_value = app
-        mock_export.return_value = "/uploads/applications/dossier.pdf"
+        # F048 — _export_application retourne désormais un dict (D3).
+        mock_export.return_value = {
+            "storage_path": "uploads/applications/dossier.pdf",
+            "filename": "dossier.pdf",
+            "document_id": str(uuid.uuid4()),
+        }
 
         result = await export_application.ainvoke(
             {"application_id": str(app.id), "format": "pdf"},
@@ -158,6 +168,7 @@ class TestExportApplication:
         )
 
         assert "pdf" in result.lower() or "export" in result.lower()
+        mock_export.assert_awaited_once()
 
 
 class TestApplicationToolsExport:

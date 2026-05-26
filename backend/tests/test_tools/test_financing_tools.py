@@ -170,6 +170,12 @@ class TestGetFundDetails:
         """Fonds trouve retourne les details."""
         fund = _make_fund()
         mock_get_fund.return_value = fund
+        # F048 fix — get_fund_details interroge désormais explicitement les
+        # intermédiaires liés (plus de lazy-load async fragile). On mocke
+        # db.execute pour renvoyer une liste vide dans ce test unitaire.
+        _rows = MagicMock()
+        _rows.all.return_value = []
+        mock_config["configurable"]["db"].execute = AsyncMock(return_value=_rows)
 
         result = await get_fund_details.ainvoke(
             {"fund_id": str(fund.id)},

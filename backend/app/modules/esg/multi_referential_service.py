@@ -509,6 +509,45 @@ async def compute_all_referential_scores(
 # --- Service Offer (dual view) ---
 
 
+async def resolve_offer_referential_id(
+    db: AsyncSession,
+    *,
+    offer_id: uuid.UUID,
+) -> uuid.UUID | None:
+    """F048 (D4) — Résoudre le référentiel applicable à une offre (sans score).
+
+    Réutilise la logique de résolution de :func:`compute_referential_score_for_offer`
+    (fallback Mefali ; aucun FK ``offer.referential_id`` en MVP, cf. research U1)
+    SANS calculer ni persister de score — utilisé par le gating ESG amont du
+    parcours candidature.
+
+    Priorité : ``fund.referential_id`` → sinon référentiel Mefali (fallback).
+    Retourne ``None`` si l'offre est introuvable ou si Mefali est absent.
+    """
+    from app.models.financing import Fund
+    from app.models.offer import Offer
+
+    offer = (
+        await db.execute(select(Offer).where(Offer.id == offer_id))
+    ).scalar_one_or_none()
+    if offer is None:
+        return None
+
+    fund = (
+        await db.execute(select(Fund).where(Fund.id == offer.fund_id))
+    ).scalar_one_or_none()
+    fund_referential_id = getattr(fund, "referential_id", None)
+    if fund_referential_id is not None:
+        return fund_referential_id
+
+    mefali = (
+        await db.execute(
+            select(Referential).where(Referential.code == MEFALI_REFERENTIAL_CODE)
+        )
+    ).scalar_one_or_none()
+    return mefali.id if mefali is not None else None
+
+
 async def compute_referential_score_for_offer(
     db: AsyncSession,
     *,

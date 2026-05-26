@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 from enum import Enum
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from app.models.application import STATUS_LABELS
 
@@ -43,11 +43,29 @@ class SectionStatusEnum(str, Enum):
 
 
 class ApplicationCreate(BaseModel):
-    """Creation d'un dossier de candidature."""
+    """Creation d'un dossier de candidature.
 
-    fund_id: uuid.UUID
+    F048 (D5) — parité chat/UI : ``offer_id`` et ``project_id`` permettent au
+    bouton « Candidater » (UI) et au tool chat de passer par le même service de
+    création. Si ``offer_id`` est fourni, il est prioritaire : ``fund_id`` et
+    ``intermediary_id`` sont dérivés de l'offre côté service. ``fund_id`` reste
+    requis pour la compatibilité descendante (legacy direct fonds).
+    """
+
+    fund_id: uuid.UUID | None = None
+    offer_id: uuid.UUID | None = None
+    project_id: uuid.UUID | None = None
     match_id: uuid.UUID | None = None
     intermediary_id: uuid.UUID | None = None
+
+    @model_validator(mode="after")
+    def _require_offer_or_fund(self) -> "ApplicationCreate":
+        """Au moins une cible doit être fournie (offre prioritaire, sinon fonds)."""
+        if self.offer_id is None and self.fund_id is None:
+            raise ValueError(
+                "Un identifiant d'offre (offer_id) ou de fonds (fund_id) est requis."
+            )
+        return self
 
 
 # --- Schemas de mise a jour ---

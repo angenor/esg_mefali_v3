@@ -102,6 +102,12 @@ _APPLICATION_KEYWORDS = [
     r"\bsoumission\s+(?:du|de\s+mon)\s+dossier\b",
     r"\bfiche\s+de\s+preparation\b",
     r"\bsimul(?:er|ation)\s+(?:de\s+)?financement\b",
+    # F048 (T010) — intention « créer/générer/préparer un dossier » exprimée
+    # depuis n'importe quelle page (le slug ne doit plus écraser l'intention).
+    r"\bcandidater\b",
+    r"\b(?:cr[ée]er?|g[ée]n[ée]r\w*|pr[ée]par\w*|monter|constituer)\s+"
+    r"(?:un\s+|le\s+|mon\s+|ce\s+)?dossier\b",
+    r"\bdossier\s+(?:de\s+)?financement\b",
 ]
 _APPLICATION_PATTERNS = [re.compile(p, re.IGNORECASE) for p in _APPLICATION_KEYWORDS]
 
@@ -267,6 +273,69 @@ def _build_project_esg_directive(project_id: str | None) -> str:
 
 # Conservee pour compatibilite tests existants : valeur sans project_id concret.
 _PROJECT_ESG_DIRECTIVE = _build_project_esg_directive(None)
+
+
+# F048 (T014) — Directive transverse « création de dossier via chat ».
+# Injectee dans les nœuds financing/application : rend l'action faisable depuis
+# n'importe quelle page (le tool create_fund_application survit grace au
+# selecteur pilote par l'intention, D1) et interdit d'affirmer une generation
+# non effectuee (C1).
+_APPLICATION_FLOW_DIRECTIVE = (
+    "\n\n## CRÉATION DE DOSSIER DE CANDIDATURE VIA LE CHAT — RÈGLE ABSOLUE\n"
+    "Quand l'utilisateur demande de créer / préparer / candidater à une "
+    "offre ou un fonds (depuis N'IMPORTE QUELLE page) :\n"
+    "1. Appelle `create_fund_application(offer_id=<uuid>, project_id=<uuid>, "
+    "fund_id=<uuid>)`. Ce tool est DISPONIBLE quelle que soit la page courante "
+    "— ne réponds JAMAIS « outil indisponible » ni « je ne peux pas créer le "
+    "dossier ici ». Si l'offre/le projet n'est pas identifié, retrouve-les via "
+    "`list_projects` / les tools financement, ou demande confirmation.\n"
+    "2. Si des sections clés du dossier manquent, génère-les via "
+    "`generate_application_section` AVANT l'export (ne jamais exporter un "
+    "dossier vide).\n"
+    "3. Pour produire le document, appelle "
+    "`export_application(application_id=<uuid>, format='docx')`. N'AFFIRME "
+    "JAMAIS qu'un dossier ou document est « généré / prêt / téléchargeable » "
+    "tant que `export_application` n'a pas retourné un chemin de fichier réel "
+    "dans la même réponse.\n"
+    "4. Si `export_application` retourne `blocked:true` (gating ESG), NE "
+    "prétends PAS avoir généré le document : explique les critères ESG requis "
+    "manquants (`missing_criteria`) et guide l'utilisateur pour compléter "
+    "l'évaluation ESG-projet avant de réessayer.\n"
+)
+
+
+def _build_esg_memory_directive(state: "ConversationState") -> str:
+    """F048 (T020) — Directive « mémoire ESG-projet » construite depuis le state.
+
+    Liste les évaluations ESG-projet déjà connues (résumé proactif D2) pour que
+    le LLM ne présente pas comme « manquants » des critères déjà renseignés et
+    ne recrée pas un assessment quand un draft existe. Retourne une chaîne vide
+    si aucune évaluation n'est connue (pas de bruit prompt).
+    """
+    assessments = state.get("user_project_esg_assessments") or []
+    if not assessments:
+        return ""
+    lines = []
+    for a in assessments[:10]:
+        score = a.get("score")
+        lines.append(
+            f"- Projet « {a.get('project_name') or a.get('project_id')} » : "
+            f"évaluation `{a.get('assessment_id')}` "
+            f"(référentiel {a.get('referential_code')}, état {a.get('state')}, "
+            f"{a.get('covered_count', 0)} critère(s) déjà renseigné(s), "
+            f"score {score if score is not None else 'n/a'})."
+        )
+    return (
+        "\n\n## MÉMOIRE ESG-PROJET (F048) — RÈGLE ABSOLUE\n"
+        "Des évaluations ESG-projet EXISTENT déjà pour ce compte :\n"
+        + "\n".join(lines)
+        + "\n\nAvant d'affirmer qu'un critère est « manquant » ou qu'aucune "
+        "évaluation n'existe, TU DOIS appeler "
+        "`get_project_esg_assessment(assessment_id=…)` pour lire l'état réel des "
+        "réponses. Ne crée PAS un second assessment si un draft existe déjà pour "
+        "le couple (projet, référentiel) — reprends l'existant. Pour retrouver un "
+        "projet par son nom, utilise le contexte ci-dessus ou `list_projects`.\n"
+    )
 
 
 def _build_project_esg_directive_no_page() -> str:
@@ -1281,7 +1350,12 @@ async def esg_scoring_node(
         f"- Criteres evalues : {esg_assessment.get('evaluated_criteria', [])}\n"
         f"- Scores partiels : {esg_assessment.get('partial_scores', {})}\n"
     )
-    full_prompt = system_prompt + tool_instructions + esg_state_context
+    full_prompt = (
+        system_prompt
+        + tool_instructions
+        + esg_state_context
+        + _build_esg_memory_directive(state)
+    )
 
     # Envoyer au LLM avec les tools ESG
     chat_messages = [SystemMessage(content=full_prompt), *[
@@ -1691,7 +1765,12 @@ async def financing_node(
         "- Si le tool echoue, informe l'utilisateur et reessaie.\n"
     )
 
-    full_prompt = system_prompt + tool_instructions
+    full_prompt = (
+        system_prompt
+        + tool_instructions
+        + _APPLICATION_FLOW_DIRECTIVE
+        + _build_esg_memory_directive(state)
+    )
 
     # F23 — Skill loader contextuel + fusion prompt + intersection tools.
     active_skills_snapshot_fin: list[dict] | None = None
@@ -2214,7 +2293,9 @@ async def application_node(
     )
 
     # Les instructions tool calling sont dans le template prompt
-    full_prompt = system_prompt
+    full_prompt = (
+        system_prompt + _APPLICATION_FLOW_DIRECTIVE + _build_esg_memory_directive(state)
+    )
 
     # F23 — Skill loader contextuel + fusion prompt + intersection tools.
     active_skills_snapshot_app: list[dict] | None = None

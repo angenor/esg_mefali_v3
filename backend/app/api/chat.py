@@ -157,6 +157,7 @@ async def stream_graph_events(
     active_entities: dict | None = None,
     account_id: uuid.UUID | None = None,
     user_projects: list[dict] | None = None,
+    user_project_esg_assessments: list[dict] | None = None,
 ) -> AsyncGenerator[dict, None]:
     """Streamer les événements du graphe LangGraph via astream_events().
 
@@ -201,6 +202,8 @@ async def stream_graph_events(
         "active_entities": active_entities,
         # F06 — Projets actifs (statut ≠ cancelled/closed) injectés dans le state
         "user_projects": user_projects or [],
+        # F048 (D2) — Résumé ESG-projet proactif injecté dans le state.
+        "user_project_esg_assessments": user_project_esg_assessments or [],
     }
 
     config = {
@@ -395,15 +398,84 @@ async def _load_profile_for_state(
     return profile_dict if profile_dict else None
 
 
+async def _load_project_esg_assessments_summary(
+    db: AsyncSession,
+    account_id: uuid.UUID,
+    projects: list[dict],
+) -> list[dict]:
+    """F048 (D2) — Résumé léger des évaluations ESG-projet (FR-008a).
+
+    Une seule requête groupée (assessments ↔ référentiel + nombre de réponses
+    persistées). Scoping ``account_id`` (RLS F02). ``covered_count`` reflète le
+    nombre de réponses saisies — significatif pour les évaluations ``draft``
+    comme ``finalized`` (évite l'hallucination « critères manquants »). Les noms
+    de projets sont réutilisés depuis ``projects`` (déjà chargés en amont) pour
+    éviter toute requête supplémentaire.
+    """
+    project_ids = [uuid.UUID(str(p["id"])) for p in projects if p.get("id")]
+    if not project_ids:
+        return []
+
+    from sqlalchemy import func as _func
+
+    from app.models.referential import Referential
+    from app.modules.esg.project_models import (
+        ProjectEsgAssessment,
+        ProjectEsgCriterionResponse,
+    )
+
+    name_by_id = {str(p["id"]): p.get("name") for p in projects if p.get("id")}
+
+    stmt = (
+        select(
+            ProjectEsgAssessment,
+            Referential.code,
+            _func.count(ProjectEsgCriterionResponse.id),
+        )
+        .join(Referential, Referential.id == ProjectEsgAssessment.referential_id)
+        .outerjoin(
+            ProjectEsgCriterionResponse,
+            ProjectEsgCriterionResponse.assessment_id == ProjectEsgAssessment.id,
+        )
+        .where(
+            ProjectEsgAssessment.account_id == account_id,
+            ProjectEsgAssessment.project_id.in_(project_ids),
+        )
+        .group_by(ProjectEsgAssessment.id, Referential.code)
+        .order_by(ProjectEsgAssessment.created_at.desc())
+    )
+    rows = (await db.execute(stmt)).all()
+
+    summary: list[dict] = []
+    for assessment, ref_code, response_count in rows:
+        summary.append({
+            "project_id": str(assessment.project_id),
+            "project_name": name_by_id.get(str(assessment.project_id)),
+            "assessment_id": str(assessment.id),
+            "referential_code": ref_code,
+            "state": assessment.state,
+            "score": assessment.score,
+            "coverage_rate": (
+                float(assessment.coverage_rate)
+                if assessment.coverage_rate is not None
+                else None
+            ),
+            "covered_count": int(response_count or 0),
+            "missing_count": len(assessment.missing_criteria or []),
+        })
+    return summary
+
+
 async def _load_full_context_for_state(
     db: AsyncSession, user_id: uuid.UUID,
 ) -> dict[str, list | dict | None]:
-    """F06 — Charger profil + projets actifs pour le state LangGraph.
+    """F06/F048 — Charger profil + projets actifs + résumé ESG-projet.
 
-    Retourne un dict ``{"profile": ..., "projects": [...]}``.
+    Retourne ``{"profile": ..., "projects": [...], "project_esg_assessments": [...]}``.
     Les projets actifs sont ceux dont le statut n'est pas ``cancelled``/``closed``
-    (statut in {draft, seeking_funding, funded, in_execution}). Le LLM peut
-    ainsi être conscient des projets existants à chaque tour de conversation.
+    (statut in {draft, seeking_funding, funded, in_execution}). Le résumé ESG
+    (F048 D2) signale au LLM les évaluations ESG-projet existantes afin qu'il ne
+    présente pas comme « manquants » des critères déjà remplis (FR-008a).
     """
     from app.models.user import User as _User
     from app.modules.projects.service import get_active_projects_for_user
@@ -416,6 +488,7 @@ async def _load_full_context_for_state(
     )
     user_obj = user_result.scalar_one_or_none()
     projects: list = []
+    project_esg_assessments: list = []
     if user_obj is not None and user_obj.account_id is not None:
         try:
             projects = await get_active_projects_for_user(
@@ -425,7 +498,20 @@ async def _load_full_context_for_state(
             logger.exception("Erreur chargement projets actifs")
             projects = []
 
-    return {"profile": profile, "projects": projects}
+        # F048 (D2) — Résumé ESG-projet (tolérant aux erreurs, comme `projects`).
+        try:
+            project_esg_assessments = await _load_project_esg_assessments_summary(
+                db, user_obj.account_id, projects,
+            )
+        except Exception:
+            logger.exception("Erreur chargement résumé ESG-projet")
+            project_esg_assessments = []
+
+    return {
+        "profile": profile,
+        "projects": projects,
+        "project_esg_assessments": project_esg_assessments,
+    }
 
 
 def format_relative_time(
@@ -1174,6 +1260,7 @@ async def send_message(
     full_context = await _load_full_context_for_state(db, user_id)
     user_profile = full_context.get("profile")
     user_projects_state = full_context.get("projects") or []
+    user_project_esg_state = full_context.get("project_esg_assessments") or []
     context_memory = await _load_context_memory(db, user_id, conversation_id=conv_id)
 
     # Fix deadlock : committer la session requete AVANT de demarrer le stream SSE.
@@ -1237,6 +1324,7 @@ async def send_message(
                     active_entities=parsed_active_entities,
                     account_id=current_user.account_id,
                     user_projects=user_projects_state,
+                    user_project_esg_assessments=user_project_esg_state,
                 ):
                     event_type = event.get("type")
 

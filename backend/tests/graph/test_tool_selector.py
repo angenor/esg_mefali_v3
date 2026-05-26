@@ -57,10 +57,10 @@ def _all_tools() -> list:
     ("candidatures", "application"),
 ])
 def test_select_tools_by_page_exact_match(page_slug: str, node_name: str) -> None:
-    """Pour une page connue, la liste retournee doit etre exactement
-    PAGE_TOOL_MAPPING[slug] inter available_tools, plus la GLOBAL_WHITELIST.
-    Couvre des combinaisons (page, node_name) reelles pour eviter de masquer
-    le fallback module-level."""
+    """F048 (D1) — Pour une page connue, la liste retournee est l'UNION des
+    tools de la page, des tools du noeud (intention) et de la GLOBAL_WHITELIST,
+    intersectee avec le catalogue disponible. Couvre des combinaisons
+    (page, node_name) reelles."""
     all_tools = _all_tools()
     available_names = {t.name for t in all_tools}
 
@@ -70,7 +70,11 @@ def test_select_tools_by_page_exact_match(page_slug: str, node_name: str) -> Non
         all_tools=all_tools,
     )
 
-    expected = (PAGE_TOOL_MAPPING[page_slug] | GLOBAL_WHITELIST) & available_names
+    expected = (
+        PAGE_TOOL_MAPPING[page_slug]
+        | MODULE_TOOL_MAPPING.get(node_name, frozenset())
+        | GLOBAL_WHITELIST
+    ) & available_names
     actual = {t.name for t in selected}
 
     assert actual == expected, f"Page {page_slug}: attendu {expected}, recu {actual}"

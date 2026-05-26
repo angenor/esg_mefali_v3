@@ -50,8 +50,19 @@ def select_tools_for_node(
         Tuple `(tools_filtres, debug_info)` ou debug_info contient :
         - `tools_offered: list[str]` : noms des tools effectivement retenus.
         - `page_slug: str | None` : slug normalise (None si page inconnue).
-        - `fallback_used: bool` : True si MODULE_TOOL_MAPPING a ete utilise.
+        - `fallback_used: bool` : True si la page est inconnue (on s'appuie
+          alors uniquement sur le noeud + la whitelist).
+        - `node_tools_included: bool` : True si des tools du noeud (intention)
+          ont contribue a la base (F048 D1).
         - `truncated: bool` : True si une troncature a ete necessaire.
+
+    F048 (D1) — Selection pilotee par l'intention : la base est l'UNION des
+    tools de la page (contexte d'affichage) ET des tools du noeud LangGraph en
+    cours d'execution (= intention classifiee par le routeur F013), plus la
+    whitelist transverse. ``create_fund_application`` survit ainsi des que le
+    routeur route vers le noeud ``financing``/``application``, quelle que soit
+    la page. En cas de depassement de la borne, la troncature PRIORISE la
+    conservation : whitelist > tools du noeud (intention) > tools de page.
     """
     # `active_entities` est volontairement ignore en V1 (cf. story 10.2 §2).
     _ = active_entities
@@ -62,48 +73,61 @@ def select_tools_for_node(
     # (a) Normaliser current_page -> slug.
     slug = normalize_page(current_page)
 
-    # (b)(c) Choix de la base.
-    fallback_used = False
+    # (b) Trois ensembles, bornes au catalogue effectivement disponible.
+    whitelist_names = GLOBAL_WHITELIST & available_names
+    node_names = set(MODULE_TOOL_MAPPING.get(node_name, frozenset())) & available_names
+    page_names: set[str] = set()
     if slug is not None and slug in PAGE_TOOL_MAPPING:
-        base_names = set(PAGE_TOOL_MAPPING[slug])
-    else:
-        base_names = set(MODULE_TOOL_MAPPING.get(node_name, frozenset()))
-        fallback_used = True
+        page_names = set(PAGE_TOOL_MAPPING[slug]) & available_names
 
-    # Restreindre aux tools effectivement disponibles dans le catalogue passe.
-    base_names &= available_names
+    # `fallback_used` reste vrai quand aucune page connue n'est resolue : on
+    # s'appuie alors sur le noeud + la whitelist (compat. semantique historique).
+    fallback_used = slug is None or slug not in PAGE_TOOL_MAPPING
+    node_tools_included = bool(node_names)
 
-    # (d) Ajouter la whitelist transverse (limite aux tools dispos).
-    base_names |= (GLOBAL_WHITELIST & available_names)
+    # (c) UNION des trois sources (intention + page + transverse).
+    base_names = whitelist_names | node_names | page_names
 
-    # (e) Troncature deterministe si la base depasse MAX_TOOLS_PER_TURN.
+    # (d) Troncature deterministe priorisee si depassement de la borne.
     truncated = False
     if len(base_names) > MAX_TOOLS_PER_TURN:
         truncated = True
-        whitelist_present = sorted(base_names & GLOBAL_WHITELIST)
-        rest = sorted(base_names - GLOBAL_WHITELIST)
-        budget = MAX_TOOLS_PER_TURN - len(whitelist_present)
-        kept = set(whitelist_present) | set(rest[: max(budget, 0)])
+        # Priorite de conservation : whitelist > noeud (intention) > page.
+        groups = (
+            sorted(whitelist_names),
+            sorted(node_names - whitelist_names),
+            sorted(page_names - whitelist_names - node_names),
+        )
+        kept: list[str] = []
+        for group in groups:
+            for name in group:
+                if len(kept) >= MAX_TOOLS_PER_TURN:
+                    break
+                kept.append(name)
         logger.warning(
             "tool_selector.truncated node=%s slug=%s requested=%d kept=%d",
             node_name, slug, len(base_names), len(kept),
         )
-        base_names = kept
+        base_names = set(kept[:MAX_TOOLS_PER_TURN])
 
-    # (f) Materialiser les BaseTool dans un ordre stable (tri par nom).
+    # (e) Materialiser les BaseTool dans un ordre stable (tri par nom).
     ordered_names = sorted(base_names)
     selected: list[BaseTool] = [available_by_name[n] for n in ordered_names]
 
     # Invariant runtime — un depassement signifie un bug dans le filtrage.
-    assert len(selected) <= MAX_TOOLS_PER_TURN, (
-        f"select_tools_for_node a retourne {len(selected)} tools "
-        f"(>{MAX_TOOLS_PER_TURN}) — bug du selecteur."
-    )
+    # `raise` explicite (et non `assert`) pour rester actif sous `python -O`
+    # (les assertions y sont supprimees) — cf. tool_selector_config._validate_config.
+    if len(selected) > MAX_TOOLS_PER_TURN:
+        raise RuntimeError(
+            f"select_tools_for_node a retourne {len(selected)} tools "
+            f"(>{MAX_TOOLS_PER_TURN}) — bug du selecteur."
+        )
 
     debug_info: dict[str, Any] = {
         "tools_offered": [t.name for t in selected],
         "page_slug": slug,
         "fallback_used": fallback_used,
+        "node_tools_included": node_tools_included,
         "truncated": truncated,
     }
     return selected, debug_info

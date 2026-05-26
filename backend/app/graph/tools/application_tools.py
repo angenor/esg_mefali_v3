@@ -15,7 +15,7 @@ import uuid
 
 from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import tool
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.graph.tools.common import UUID_PATTERN, get_db_and_user, with_retry
 from app.models.application import TargetType
@@ -46,7 +46,13 @@ class CreateFundApplicationArgs(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    fund_id: str = Field(..., min_length=36, max_length=36, pattern=UUID_PATTERN)
+    # F048 — ``fund_id`` rendu optionnel : si ``offer_id`` est fourni, fund et
+    # intermediary sont dérivés de l'offre côté service. Évite que le LLM doive
+    # inventer un fund_id factice (source d'hallucination) quand il candidate à
+    # une offre.
+    fund_id: str | None = Field(
+        None, min_length=36, max_length=36, pattern=UUID_PATTERN,
+    )
     target_type: TargetType | None = None
     offer_id: str | None = Field(
         None, min_length=36, max_length=36, pattern=UUID_PATTERN,
@@ -54,6 +60,14 @@ class CreateFundApplicationArgs(BaseModel):
     project_id: str | None = Field(
         None, min_length=36, max_length=36, pattern=UUID_PATTERN,
     )
+
+    @model_validator(mode="after")
+    def _require_offer_or_fund(self) -> "CreateFundApplicationArgs":
+        if self.offer_id is None and self.fund_id is None:
+            raise ValueError(
+                "Fournis un offer_id (recommandé) ou, à défaut, un fund_id."
+            )
+        return self
 
 
 class GenerateApplicationSectionArgs(BaseModel):
@@ -148,11 +162,162 @@ async def _simulate_financing(db, application) -> dict:
     }
 
 
-async def _export_application(db, application, fmt: str) -> str:
-    """Exporter un dossier en PDF, DOCX ou JSON. Retourne le chemin du fichier."""
-    export_path = f"/uploads/applications/{application.id}.{fmt}"
-    logger.info("Export dossier %s au format %s -> %s", application.id, fmt, export_path)
-    return export_path
+async def _export_application(
+    db, application, fmt: str, *, user_id, account_id=None,
+) -> dict:
+    """F048 (D3) — Générer le fichier RÉEL, l'écrire sur disque et l'enregistrer.
+
+    Remplace l'ancien stub qui retournait un chemin factice sans écrire de
+    fichier. Appelle le vrai moteur ``applications/export.py`` (DOCX/PDF), écrit
+    les bytes sous ``uploads/applications/{id}.{fmt}`` puis enregistre un
+    ``Document`` utilisateur (visible dans ``/documents``, FR-004).
+
+    Retourne ``{storage_path, filename, document_id}``.
+    """
+    import json as _json
+
+    from app.models.document import DocumentType
+    from app.modules.applications.export import export_application as _real_export
+    from app.modules.documents import service as doc_service
+
+    if fmt == "json":
+        payload = {
+            "id": str(application.id),
+            "fund": getattr(application.fund, "name", None) if application.fund else None,
+            "status": (
+                application.status.value
+                if hasattr(application.status, "value")
+                else application.status
+            ),
+            "sections": application.sections or {},
+        }
+        file_bytes = _json.dumps(payload, ensure_ascii=False, indent=2).encode("utf-8")
+        content_type = "application/json"
+        filename = f"dossier_{application.id}.json"
+    else:
+        file_bytes, content_type, filename = await _real_export(application, fmt)
+
+    uploads_dir = doc_service.UPLOADS_DIR / "applications"
+    uploads_dir.mkdir(parents=True, exist_ok=True)
+    file_path = uploads_dir / f"{application.id}.{fmt}"
+    file_path.write_bytes(file_bytes)
+    storage_path = str(file_path.relative_to(doc_service.UPLOADS_DIR.parent))
+
+    document = await doc_service.register_generated_document(
+        db,
+        user_id=user_id,
+        account_id=account_id,
+        storage_path=storage_path,
+        original_filename=filename,
+        mime_type=content_type,
+        file_size=len(file_bytes),
+        document_type=DocumentType.autre,
+    )
+    logger.info(
+        "Export dossier %s format=%s -> %s (document_id=%s)",
+        application.id, fmt, storage_path, document.id,
+    )
+    return {
+        "storage_path": storage_path,
+        "filename": filename,
+        "document_id": str(document.id),
+    }
+
+
+async def _check_esg_gating(
+    db, *, account_id, project_id, offer_id,
+) -> dict | None:
+    """F048 (D4) — Garde de gating ESG avant génération du dossier.
+
+    Vérifie que les critères ESG ``is_required`` du référentiel applicable à
+    l'offre sont couverts par l'évaluation ESG-projet du projet cible.
+
+    Le référentiel est résolu via
+    ``multi_referential_service.resolve_offer_referential_id`` (pas de FK
+    offre→référentiel, fallback Mefali — research D4/U1). La couverture est
+    dérivée des réponses persistées (robuste pour les évaluations ``draft``
+    comme ``finalized``).
+
+    Retourne ``None`` si la génération est AUTORISÉE (aucun critère requis
+    manquant, ou gating inapplicable), sinon un dict
+    ``{ok:false, blocked:true, missing_criteria:[...], message:str}``.
+    """
+    if project_id is None or offer_id is None or account_id is None:
+        # Gating inapplicable sans cible projet/offre OU sans tenant résolu
+        # (ne JAMAIS requêter avec account_id=None → éviterait le scoping RLS).
+        return None
+
+    from sqlalchemy import select as _select
+
+    from app.models.indicator import Criterion
+    from app.modules.esg.multi_referential_service import (
+        resolve_offer_referential_id,
+    )
+    from app.modules.esg.project_models import (
+        ProjectEsgAssessment,
+        ProjectEsgCriterionResponse,
+    )
+
+    referential_id = await resolve_offer_referential_id(db, offer_id=offer_id)
+    if referential_id is None:
+        return None  # référentiel non résolu → mode dégradé permissif
+
+    required = (
+        await db.execute(
+            _select(Criterion).where(
+                Criterion.referential_id == referential_id,
+                Criterion.applies_to_project.is_(True),
+                Criterion.is_required.is_(True),
+            )
+        )
+    ).scalars().all()
+    if not required:
+        return None  # aucun critère requis → rien à bloquer
+
+    assessments = (
+        await db.execute(
+            _select(ProjectEsgAssessment)
+            .where(
+                ProjectEsgAssessment.account_id == account_id,
+                ProjectEsgAssessment.project_id == project_id,
+                ProjectEsgAssessment.referential_id == referential_id,
+            )
+            .order_by(ProjectEsgAssessment.created_at.desc())
+        )
+    ).scalars().all()
+
+    chosen = next((a for a in assessments if a.state == "finalized"), None)
+    if chosen is None and assessments:
+        chosen = assessments[0]  # draft le plus récent
+
+    covered_ids: set[str] = set()
+    if chosen is not None:
+        resp_ids = (
+            await db.execute(
+                _select(ProjectEsgCriterionResponse.criterion_id).where(
+                    ProjectEsgCriterionResponse.assessment_id == chosen.id
+                )
+            )
+        ).scalars().all()
+        covered_ids = {str(cid) for cid in resp_ids}
+
+    missing = [c for c in required if str(c.id) not in covered_ids]
+    if not missing:
+        return None
+
+    return {
+        "ok": False,
+        "blocked": True,
+        "missing_criteria": [
+            {"id": str(c.id), "code": c.code, "label": c.label} for c in missing
+        ],
+        "message": (
+            "Génération du dossier bloquée : l'évaluation ESG-projet ne couvre "
+            "pas encore tous les critères requis du référentiel de cette offre. "
+            "Complétez les critères manquants (via l'évaluation ESG-projet) "
+            "avant de produire le document."
+        ),
+    }
 
 
 # --- Tools ---
@@ -168,7 +333,7 @@ async def _export_application(db, application, fmt: str) -> str:
     ),
 )
 async def create_fund_application(
-    fund_id: str,
+    fund_id: str | None,
     config: RunnableConfig,
     target_type: str | None = None,
     offer_id: str | None = None,
@@ -189,41 +354,26 @@ async def create_fund_application(
     Exemple: "Je candidate à cette offre" -> create_fund_application(offer_id='<uuid>').
     Anti: "Quels fonds existent ?" -> NE PAS appeler.
     """
+    from app.graph.tools.common import _coerce_uuid
     from app.modules.applications.service import create_application
-    from app.models.offer import Offer
 
     try:
         db, user_id = get_db_and_user(config)
+        configurable = (config or {}).get("configurable", {}) or {}
+        account_id = _coerce_uuid(configurable.get("account_id"))
 
-        # F07 — Priorité à offer_id si fourni
-        target_offer_id = uuid.UUID(offer_id) if offer_id else None
-        target_fund_id = uuid.UUID(fund_id)
-        target_intermediary_id = None
-        target_project_id = uuid.UUID(project_id) if project_id else None
-
-        if target_offer_id is not None:
-            offer = await db.get(Offer, target_offer_id)
-            if offer is None:
-                return f"Offre introuvable (id={offer_id})."
-            target_fund_id = offer.fund_id
-            target_intermediary_id = offer.intermediary_id
-
+        # F048 (D5) — Chemin de création PARTAGÉ avec l'endpoint REST (parité
+        # FR-016) : le service résout fund/intermediary depuis l'offre et
+        # dédoublonne le dossier draft (FR-006). Plus d'assignation directe
+        # offer_id/project_id post-create.
         application = await create_application(
             db=db,
             user_id=user_id,
-            fund_id=target_fund_id,
-            intermediary_id=target_intermediary_id,
+            fund_id=uuid.UUID(fund_id) if fund_id else None,
+            offer_id=uuid.UUID(offer_id) if offer_id else None,
+            project_id=uuid.UUID(project_id) if project_id else None,
+            account_id=account_id,
         )
-
-        # F07 — Lier offer_id si fourni
-        if target_offer_id is not None:
-            application.offer_id = target_offer_id
-            await db.flush()
-
-        # F06 — Lier project_id si fourni
-        if target_project_id is not None:
-            application.project_id = target_project_id
-            await db.flush()
 
         return (
             f"Dossier de candidature cree avec succes.\n"
@@ -232,6 +382,10 @@ async def create_fund_application(
             f"- Offre : {application.offer_id or 'N/A (mode legacy)'}\n"
             f"- Fonds : {application.fund_id}"
         )
+    except ValueError as e:
+        # Offre/fonds introuvable, ou aucune cible fournie (404 amont côté REST).
+        logger.warning("create_fund_application — entrée invalide : %s", e)
+        return f"Impossible de créer le dossier : {e}"
     except Exception as e:
         logger.exception("Erreur lors de la creation du dossier de candidature")
         return f"Erreur lors de la creation du dossier : {e}"
@@ -258,10 +412,12 @@ async def generate_application_section(
     from app.modules.applications.service import generate_section, get_application_by_id
 
     try:
-        db, _user_id = get_db_and_user(config)
+        db, user_id = get_db_and_user(config)
 
         application = await get_application_by_id(db=db, application_id=uuid.UUID(application_id))
-        if application is None:
+        # F048 (sécurité) — garde de propriété : un dossier d'un autre utilisateur
+        # est traité comme « introuvable » (pas de fuite d'existence, anti-IDOR).
+        if application is None or application.user_id != user_id:
             return f"Dossier de candidature introuvable (id={application_id})."
 
         section = await generate_section(db=db, application=application, section_key=section_key)
@@ -299,10 +455,12 @@ async def update_application_section(
     from app.modules.applications.service import get_application_by_id, update_section
 
     try:
-        db, _user_id = get_db_and_user(config)
+        db, user_id = get_db_and_user(config)
 
         application = await get_application_by_id(db=db, application_id=uuid.UUID(application_id))
-        if application is None:
+        # F048 (sécurité) — garde de propriété : un dossier d'un autre utilisateur
+        # est traité comme « introuvable » (pas de fuite d'existence, anti-IDOR).
+        if application is None or application.user_id != user_id:
             return f"Dossier de candidature introuvable (id={application_id})."
 
         result = await update_section(
@@ -340,10 +498,12 @@ async def get_application_checklist(
     from app.modules.applications.service import get_application_by_id, get_checklist
 
     try:
-        db, _user_id = get_db_and_user(config)
+        db, user_id = get_db_and_user(config)
 
         application = await get_application_by_id(db=db, application_id=uuid.UUID(application_id))
-        if application is None:
+        # F048 (sécurité) — garde de propriété : un dossier d'un autre utilisateur
+        # est traité comme « introuvable » (pas de fuite d'existence, anti-IDOR).
+        if application is None or application.user_id != user_id:
             return f"Dossier de candidature introuvable (id={application_id})."
 
         checklist = await get_checklist(db=db, application=application)
@@ -387,10 +547,12 @@ async def simulate_financing(
     from app.modules.applications.service import get_application_by_id
 
     try:
-        db, _user_id = get_db_and_user(config)
+        db, user_id = get_db_and_user(config)
 
         application = await get_application_by_id(db=db, application_id=uuid.UUID(application_id))
-        if application is None:
+        # F048 (sécurité) — garde de propriété : un dossier d'un autre utilisateur
+        # est traité comme « introuvable » (pas de fuite d'existence, anti-IDOR).
+        if application is None or application.user_id != user_id:
             return f"Dossier de candidature introuvable (id={application_id})."
 
         simulation = await _simulate_financing(db, application)
@@ -438,23 +600,50 @@ async def export_application(
     Exemple: "Exporte en PDF" -> export_application(format='pdf').
     Anti: "Genere ma presentation" -> NE PAS appeler.
     """
+    import json as _json
+
+    from app.graph.tools.common import _coerce_uuid
     from app.modules.applications.service import get_application_by_id
 
     try:
-        db, _user_id = get_db_and_user(config)
+        db, user_id = get_db_and_user(config)
+        configurable = (config or {}).get("configurable", {}) or {}
 
         application = await get_application_by_id(db=db, application_id=uuid.UUID(application_id))
-        if application is None:
+        # F048 (sécurité) — garde de propriété AVANT toute génération de fichier :
+        # empêche d'exporter (et d'enregistrer comme document) le dossier d'un
+        # autre utilisateur (anti-IDOR, amplifié par la génération réelle D3).
+        if application is None or application.user_id != user_id:
             return f"Dossier de candidature introuvable (id={application_id})."
 
         if format not in ("pdf", "docx", "json"):
             return f"Format non supporte : '{format}'. Utilisez 'pdf', 'docx' ou 'json'."
 
-        export_path = await _export_application(db, application, format)
+        # F048 (D4) — Gating ESG : ne pas générer si des critères requis du
+        # référentiel de l'offre manquent dans l'évaluation ESG-projet.
+        account_id = (
+            getattr(application, "account_id", None)
+            or _coerce_uuid(configurable.get("account_id"))
+        )
+        gating = await _check_esg_gating(
+            db,
+            account_id=account_id,
+            project_id=getattr(application, "project_id", None),
+            offer_id=getattr(application, "offer_id", None),
+        )
+        if gating is not None:
+            return _json.dumps(gating, ensure_ascii=False)
+
+        # F048 (D3) — Génération RÉELLE : écrit le fichier + enregistre le Document.
+        result = await _export_application(
+            db, application, format, user_id=user_id, account_id=account_id,
+        )
 
         return (
             f"Dossier exporte avec succes au format {format.upper()}.\n"
-            f"- URL de telechargement : {export_path}"
+            f"- Fichier : {result['filename']}\n"
+            f"- Disponible dans vos documents (/documents).\n"
+            f"- Chemin : /{result['storage_path']}"
         )
     except Exception as e:
         logger.exception("Erreur lors de l'export du dossier")

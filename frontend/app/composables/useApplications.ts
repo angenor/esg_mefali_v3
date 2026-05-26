@@ -61,16 +61,30 @@ export function useApplications() {
     }
   }
 
-  async function createApplication(
-    fundId: string,
-    matchId?: string,
-    intermediaryId?: string,
-  ): Promise<ApplicationDetail | null> {
+  /**
+   * F048 (D5) — Crée un dossier de candidature via l'endpoint partagé.
+   *
+   * Accepte ``offerId`` (prioritaire, F07) et/ou ``projectId`` (F06). Le backend
+   * dérive fund/intermediary depuis l'offre et dédoublonne le dossier draft
+   * (FR-006). Lève une ``Error`` (message FR) en cas d'échec — l'appelant gère
+   * l'affichage (FR-015).
+   */
+  async function createApplication(params: {
+    offerId?: string
+    projectId?: string
+    fundId?: string
+    matchId?: string
+    intermediaryId?: string
+  }): Promise<ApplicationDetail> {
     loading.value = true
+    error.value = ''
     try {
-      const body: Record<string, string> = { fund_id: fundId }
-      if (matchId) body.match_id = matchId
-      if (intermediaryId) body.intermediary_id = intermediaryId
+      const body: Record<string, string> = {}
+      if (params.offerId) body.offer_id = params.offerId
+      if (params.projectId) body.project_id = params.projectId
+      if (params.fundId) body.fund_id = params.fundId
+      if (params.matchId) body.match_id = params.matchId
+      if (params.intermediaryId) body.intermediary_id = params.intermediaryId
 
       const response = await fetch(`${apiBase}/applications/`, {
         method: 'POST',
@@ -79,14 +93,24 @@ export function useApplications() {
       })
       if (!response.ok) {
         const errData = await response.json().catch(() => ({}))
+        if (response.status === 403) {
+          throw new Error(
+            errData.detail || "Ce projet n'appartient pas à votre compte.",
+          )
+        }
+        if (response.status === 404) {
+          throw new Error(errData.detail || 'Offre ou fonds introuvable.')
+        }
         throw new Error(errData.detail || 'Erreur lors de la création du dossier')
       }
       const data: ApplicationDetail = await response.json()
       appStore.setCurrentApplication(data)
       return data
     } catch (e) {
+      // Cohérence avec les autres fonctions du composable : on renseigne
+      // error.value, puis on relance pour que l'appelant gère l'UI (FR-015).
       error.value = e instanceof Error ? e.message : 'Erreur inconnue'
-      return null
+      throw e
     } finally {
       loading.value = false
     }

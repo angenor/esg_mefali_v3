@@ -2,6 +2,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { useFinancing } from '~/composables/useFinancing'
 import { useProjectMatching } from '~/composables/useProjectMatching'
+import { useApplications } from '~/composables/useApplications'
 import DualScoreDisplay from '~/components/financing/DualScoreDisplay.vue'
 import MissingProjectCriteriaList from '~/components/financing/MissingProjectCriteriaList.vue'
 import type { Offer } from '~/types/financing'
@@ -19,10 +20,15 @@ const route = useRoute()
 const router = useRouter()
 const { getOffer } = useFinancing()
 const { getMatchDetails } = useProjectMatching()
+const { createApplication } = useApplications()
 
 const offer = ref<Offer | null>(null)
 const loading = ref(true)
 const error = ref('')
+
+// F048 (US3) — état du bouton « Candidater »
+const applying = ref(false)
+const applyError = ref('')
 
 // F045 — Scores projet/entreprise pour ce match si project_id dans la query
 const matchProjectScore = ref<number | null>(null)
@@ -86,9 +92,35 @@ function handleCompare(fundId: string): void {
   router.push(`/financing/offers?fund_id=${fundId}&compare=true`)
 }
 
-function handleApply(offerId: string): void {
-  // Préparation pour F15 (générateur dossier).
-  router.push(`/financing/offers/${offerId}/apply`)
+async function handleApply(offerId: string): Promise<void> {
+  // F048 (US3, D5) — crée un dossier draft (rattaché projet + offre) via le
+  // service partagé puis conduit vers le dossier. Plus de redirection vers la
+  // route inexistante /apply.
+  if (applying.value) return // anti double-clic (FR-006)
+  applyError.value = ''
+
+  if (!activeProjectId.value) {
+    // FR-015 — pas de clic mort : message de guidage explicite.
+    applyError.value =
+      "Pour candidater, sélectionnez d'abord un projet cible (depuis « Mes Projets ») afin de rattacher votre dossier à ce projet."
+    return
+  }
+
+  applying.value = true
+  try {
+    const app = await createApplication({
+      offerId,
+      projectId: activeProjectId.value,
+    })
+    await router.push(`/applications/${app.id}`)
+  } catch (e) {
+    applyError.value =
+      e instanceof Error
+        ? e.message
+        : 'Échec de la création du dossier. Veuillez réessayer.'
+  } finally {
+    applying.value = false
+  }
 }
 
 onMounted(loadOffer)
@@ -144,8 +176,21 @@ onMounted(loadOffer)
         />
       </div>
 
+      <!-- F048 (US3, FR-015) — feedback de candidature : jamais de clic mort -->
+      <div
+        v-if="applyError"
+        class="mb-4 rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm
+               text-amber-900 dark:border-amber-700 dark:bg-amber-900/20
+               dark:text-amber-200"
+        role="alert"
+        data-testid="apply-error"
+      >
+        {{ applyError }}
+      </div>
+
       <OfferDetail
         :offer="offer"
+        :applying="applying"
         @compare="handleCompare"
         @apply="handleApply"
       />

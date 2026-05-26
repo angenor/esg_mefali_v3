@@ -67,15 +67,65 @@ async def determine_target_type(
 async def create_application(
     db: AsyncSession,
     user_id: uuid.UUID,
-    fund_id: uuid.UUID,
+    fund_id: uuid.UUID | None = None,
     match_id: uuid.UUID | None = None,
     intermediary_id: uuid.UUID | None = None,
+    offer_id: uuid.UUID | None = None,
+    project_id: uuid.UUID | None = None,
+    account_id: uuid.UUID | None = None,
 ) -> FundApplication:
-    """Creer un nouveau dossier de candidature."""
+    """Creer un nouveau dossier de candidature (chemin partagé chat/UI — F048 D5).
+
+    Si ``offer_id`` est fourni (prioritaire, F07), ``fund_id`` et
+    ``intermediary_id`` sont dérivés de l'offre. ``project_id`` rattache le
+    dossier au projet cible (F06).
+
+    Dédup (FR-006) : si un dossier ``draft`` existe déjà pour le triplet
+    ``(user_id, project_id, offer_id)``, il est retourné tel quel plutôt que
+    de créer un doublon. La parité chat/UI (FR-016) est garantie : le tool chat
+    et l'endpoint REST appellent ce même service.
+
+    Raises:
+        ValueError: offre/fonds introuvable, ou aucune cible fournie.
+    """
     from app.modules.applications.templates import (
         get_checklist_for_target,
         initialize_sections,
     )
+    from app.models.offer import Offer
+
+    # F07 — Résoudre fund_id/intermediary_id depuis l'offre (prioritaire).
+    if offer_id is not None:
+        offer = await db.get(Offer, offer_id)
+        if offer is None:
+            raise ValueError("Offre non trouvee")
+        fund_id = offer.fund_id
+        intermediary_id = offer.intermediary_id
+
+    if fund_id is None:
+        raise ValueError(
+            "Un identifiant d'offre (offer_id) ou de fonds (fund_id) est requis."
+        )
+
+    # FR-006 — Dédup : réutiliser le dossier draft existant pour ce triplet.
+    # Scopé au demandeur (user_id) ET au tenant (account_id si connu) afin
+    # d'éviter tout chevauchement cross-compte (F02).
+    if offer_id is not None and project_id is not None:
+        dedup_filters = [
+            FundApplication.user_id == user_id,
+            FundApplication.project_id == project_id,
+            FundApplication.offer_id == offer_id,
+            FundApplication.status == ApplicationStatus.draft,
+        ]
+        if account_id is not None:
+            dedup_filters.append(FundApplication.account_id == account_id)
+        existing = await db.execute(
+            select(FundApplication).where(*dedup_filters)
+        )
+        existing_draft = existing.scalar_one_or_none()
+        if existing_draft is not None:
+            await db.refresh(existing_draft, ["fund", "intermediary"])
+            return existing_draft
 
     # Verifier que le fonds existe
     fund_result = await db.execute(select(Fund).where(Fund.id == fund_id))
@@ -95,6 +145,9 @@ async def create_application(
         fund_id=fund_id,
         match_id=match_id,
         intermediary_id=intermediary_id,
+        offer_id=offer_id,
+        project_id=project_id,
+        account_id=account_id,
         target_type=target_type,
         status=ApplicationStatus.draft,
         sections=sections,

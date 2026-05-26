@@ -3,9 +3,11 @@ import type { Offer } from '~/types/financing'
 
 interface Props {
   offer: Offer
+  /** F048 (US3) — true pendant la création du dossier : désactive le bouton. */
+  applying?: boolean
 }
 
-defineProps<Props>()
+withDefaults(defineProps<Props>(), { applying: false })
 
 const emit = defineEmits<{
   (e: 'compare', fundId: string): void
@@ -132,11 +134,13 @@ function handleApply(offerId: string): void {
       </button>
       <button
         type="button"
-        class="inline-flex items-center justify-center rounded-lg bg-emerald-600 hover:bg-emerald-700 dark:bg-emerald-500 dark:hover:bg-emerald-600 px-5 py-2.5 text-sm font-semibold text-white transition focus:outline-none focus:ring-2 focus:ring-emerald-500"
+        class="inline-flex items-center justify-center rounded-lg bg-emerald-600 hover:bg-emerald-700 dark:bg-emerald-500 dark:hover:bg-emerald-600 px-5 py-2.5 text-sm font-semibold text-white transition focus:outline-none focus:ring-2 focus:ring-emerald-500 disabled:cursor-not-allowed disabled:opacity-60"
+        :disabled="applying"
+        :aria-busy="applying"
         :aria-label="`Candidater à cette offre`"
         @click="handleApply(offer.id)"
       >
-        Candidater
+        {{ applying ? 'Création du dossier…' : 'Candidater' }}
       </button>
     </footer>
   </article>

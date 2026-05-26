@@ -42,6 +42,9 @@ class ConversationState(TypedDict):
     conversation_id: NotRequired[str]
     # F06 — Projets actifs (statut ≠ cancelled/closed) pour le contexte LLM.
     user_projects: NotRequired[list[dict[str, Any]] | None]
+    # F048 (D2) — Résumé léger des évaluations ESG-projet existantes, injecté au
+    # démarrage pour éviter d'annoncer « manquants » des critères déjà remplis.
+    user_project_esg_assessments: NotRequired[list[dict[str, Any]] | None]
     # F23 — Snapshot des Skills actives pour ce tour (loader contextuel).
     # Format: [{"id": "uuid", "name": "skill_xxx", "version": "1.0.0"}]
     active_skills: NotRequired[list[dict[str, Any]] | None]

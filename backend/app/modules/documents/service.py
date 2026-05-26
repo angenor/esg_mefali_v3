@@ -242,6 +242,44 @@ async def upload_document(
     return document
 
 
+async def register_generated_document(
+    db: AsyncSession,
+    *,
+    user_id: uuid.UUID,
+    account_id: uuid.UUID | None,
+    storage_path: str,
+    original_filename: str,
+    mime_type: str,
+    file_size: int,
+    document_type: DocumentType = DocumentType.autre,
+) -> Document:
+    """F048 (D3) — Enregistrer un document DÉJÀ généré sur disque.
+
+    Contrairement à :func:`upload_document` (qui valide + écrit un ``UploadFile``
+    entrant), ce helper insère une ligne ``Document`` pour un fichier produit
+    par la plateforme (ex. dossier de candidature exporté en DOCX) et déjà
+    présent sur le disque (``storage_path`` relatif à ``UPLOADS_DIR.parent``).
+
+    Statut final ``analyzed`` (pas d'OCR/analyse : contenu maîtrisé). Le
+    document apparaît ainsi dans ``/documents`` (FR-004).
+    """
+    document = Document(
+        user_id=user_id,
+        account_id=account_id,
+        filename=_sanitize_filename(original_filename),
+        original_filename=original_filename,
+        mime_type=mime_type,
+        file_size=file_size,
+        storage_path=storage_path,
+        status=DocumentStatus.analyzed,
+        document_type=document_type,
+    )
+    db.add(document)
+    await db.flush()
+    await db.refresh(document)
+    return document
+
+
 # ─── Extraction de texte ─────────────────────────────────────────────
 
 

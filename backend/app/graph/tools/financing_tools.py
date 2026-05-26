@@ -180,15 +180,29 @@ async def get_fund_details(fund_id: str, config: RunnableConfig) -> str:
         min_amt = f"{fund.min_amount_xof:,}" if fund.min_amount_xof else "N/A"
         max_amt = f"{fund.max_amount_xof:,}" if fund.max_amount_xof else "N/A"
 
-        # Recuperer les intermediaires lies
+        # Recuperer les intermediaires lies via une requête EXPLICITE.
+        # Ne PAS traverser les relations lazy (`fund.fund_intermediaries`,
+        # `fi.intermediary`) sur une session async : asyncpg lève alors
+        # `MissingGreenlet` (lazy-load hors contexte greenlet). Bug constaté en
+        # live sur le parcours F048 (consultation du fonds GCF lié à BOAD).
+        from sqlalchemy import select as _select
+
+        from app.models.financing import FundIntermediary, Intermediary
+
+        interm_rows = (
+            await db.execute(
+                _select(Intermediary.name, Intermediary.id)
+                .join(
+                    FundIntermediary,
+                    FundIntermediary.intermediary_id == Intermediary.id,
+                )
+                .where(FundIntermediary.fund_id == fund.id)
+            )
+        ).all()
         intermediaries_text = ""
-        if fund.fund_intermediaries:
-            interm_names = []
-            for fi in fund.fund_intermediaries:
-                if fi.intermediary:
-                    interm_names.append(f"{fi.intermediary.name} (id={fi.intermediary.id})")
-            if interm_names:
-                intermediaries_text = f"- Intermediaires : {', '.join(interm_names)}\n"
+        if interm_rows:
+            interm_names = [f"{name} (id={iid})" for name, iid in interm_rows]
+            intermediaries_text = f"- Intermediaires : {', '.join(interm_names)}\n"
 
         return (
             f"Details du fonds :\n"

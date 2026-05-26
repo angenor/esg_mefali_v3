@@ -45,16 +45,42 @@ async def create_application(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> ApplicationResponse:
-    """Creer un nouveau dossier de candidature."""
+    """Creer un nouveau dossier de candidature (parité chat/UI — F048 D5).
+
+    Accepte ``offer_id``/``project_id`` ; le service dérive fund/intermediary
+    depuis l'offre et dédoublonne (FR-006/FR-016).
+
+    - 404 : offre/fonds introuvable, ou ``project_id`` inexistant ;
+    - 403 : ``project_id`` appartenant à un autre compte (RLS F02).
+    """
     from app.modules.applications.service import create_application as create_app
+
+    # F048 — Garde cross-compte : le projet ciblé doit appartenir au tenant.
+    if body.project_id is not None:
+        from app.models.project import Project
+
+        project = await db.get(Project, body.project_id)
+        if project is None:
+            raise HTTPException(status_code=404, detail="Projet introuvable")
+        # F048 (sécurité) — garde stricte : le projet DOIT appartenir au compte
+        # du demandeur. On ne contourne PAS le test si account_id est None
+        # (un utilisateur sans tenant ne peut rattacher aucun projet d'un compte).
+        if project.account_id != current_user.account_id:
+            raise HTTPException(
+                status_code=403,
+                detail="Ce projet n'appartient pas à votre compte.",
+            )
 
     try:
         application = await create_app(
             db,
             user_id=current_user.id,
             fund_id=body.fund_id,
+            offer_id=body.offer_id,
+            project_id=body.project_id,
             match_id=body.match_id,
             intermediary_id=body.intermediary_id,
+            account_id=current_user.account_id,
         )
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
