@@ -5,13 +5,15 @@ FROM node:24-slim AS builder
 
 WORKDIR /app
 
-# Installer les dépendances. `npm ci` (reproductible via lockfile) en priorité.
-# Repli : le lockfile est généré sur macOS ; sur Linux, npm omet alors les
-# binaires natifs spécifiques à la plateforme (résolveur unrs/oxc de Nuxt →
-# @emnapi/*), ce qui casse la résolution des alias (`~/...`). On supprime donc
-# le lockfile avant `npm install` pour forcer une résolution correcte sous Linux.
-COPY package.json package-lock.json* ./
-RUN npm ci || (rm -f package-lock.json && npm install --no-audit --no-fund)
+# Installer les dépendances. Le lockfile est généré sous macOS et `npm ci`
+# échoue sous Linux (résolution divergente des dépendances optionnelles
+# multiplateformes — bug npm connu), ce qui laissait un node_modules partiel
+# cassant la résolution des alias Nuxt (`~/...`) au build. On force donc une
+# installation propre sous Linux à partir du seul package.json.
+# NB : non strictement reproductible (pas de lock figé) ; à régénérer un
+# lockfile Linux si une reproductibilité stricte devient nécessaire.
+COPY package.json ./
+RUN npm install --no-audit --no-fund
 
 # Copier le code source
 COPY . .
