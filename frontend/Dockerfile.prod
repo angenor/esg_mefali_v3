@@ -22,6 +22,12 @@ COPY . .
 ARG NUXT_PUBLIC_API_BASE=/api
 ENV NUXT_PUBLIC_API_BASE=$NUXT_PUBLIC_API_BASE
 
+# Générer .nuxt/ (dont tsconfig.json avec le mapping de l'alias `~`) AVANT le
+# build : sinon @vue/compiler-sfc tente de résoudre les types importés dans les
+# defineProps (ex. `~/types/richblocks`) avant que `nuxt build` n'écrive ce
+# tsconfig, et échoue avec « Failed to resolve import source ».
+RUN npx nuxi prepare
+
 # Build Nuxt (SSR) -> sortie dans .output/
 RUN npm run build
 
