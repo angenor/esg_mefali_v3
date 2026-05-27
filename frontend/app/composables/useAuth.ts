@@ -237,7 +237,14 @@ export function useAuth() {
   }
 
   async function refresh(): Promise<boolean> {
-    if (!authStore.refreshToken) return false
+    if (!authStore.refreshToken) {
+      // Pas de refresh token : session non récupérable. On purge l'auth
+      // (store + localStorage) sinon un access_token résiduel serait
+      // réhydraté par le middleware global → boucle de redirection
+      // /login ↔ / = scintillement.
+      authStore.clearAuth()
+      return false
+    }
 
     try {
       const tokens = await apiFetch<TokenResponse>('/auth/refresh', {
@@ -261,6 +268,12 @@ export function useAuth() {
     if (authFailurePromise) return authFailurePromise
 
     authFailurePromise = (async () => {
+      // Logout atomique : purger l'auth (store + localStorage) AVANT toute
+      // navigation. Garantit que le middleware global ne peut plus réhydrater
+      // un access_token résiduel et rediriger /login → / en boucle (cause du
+      // scintillement à l'expiration de session). Idempotent si clearAuth a
+      // déjà été appelé par refresh().
+      authStore.clearAuth()
       const uiStore = useUiStore()
       if (uiStore.guidedTourActive) {
         try {

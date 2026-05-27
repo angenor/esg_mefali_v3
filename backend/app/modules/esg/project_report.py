@@ -182,6 +182,14 @@ async def _collect_context(
         for c in criteria_rows
         if c.is_required and c.id not in covered_ids
     ]
+    # Tous les critères applicables non couverts (requis ou non) — pilote la
+    # Section 5 pour matérialiser les axes restants même quand les seuls
+    # obligatoires sont renseignés (cause du rapport trop court F047 US3).
+    uncovered_criteria = [
+        {"code": c.code, "label": c.label, "is_required": bool(c.is_required)}
+        for c in criteria_rows
+        if c.id not in covered_ids
+    ]
 
     src_ids = {r.source_id for r in responses if r.source_id is not None}
     sources_by_id: dict[uuid.UUID, Source] = {}
@@ -253,6 +261,7 @@ async def _collect_context(
         "executive_summary": executive_summary,
         "covered_responses": covered_responses,
         "missing_required": missing_required,
+        "uncovered_criteria": uncovered_criteria,
         "donut_svg": _generate_donut_svg(covered_count, missing_count),
         "generation_date": datetime.now(timezone.utc).strftime("%d/%m/%Y"),
         "sources_data": sources_data,

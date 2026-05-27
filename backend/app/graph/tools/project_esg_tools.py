@@ -391,10 +391,14 @@ async def create_project_esg_assessment(
       ``save_project_esg_criterion`` — **N'INVENTE JAMAIS un UUID**.
 
     Workflow attendu après ce tool :
-    1. Pour chaque critère ``is_required=True`` de ``applicable_criteria``,
-       poser une question via ``ask_interactive_question`` puis appeler
+    1. Pour CHAQUE critère de ``applicable_criteria`` (tous, pas seulement les
+       ``is_required=True``), poser une question via
+       ``ask_interactive_question`` puis appeler
        ``save_project_esg_criterion(assessment_id=<id retourné>,
-       criterion_id=<id du critère>, …)``.
+       criterion_id=<id du critère>, …)``. Traite d'abord les obligatoires,
+       puis enchaîne sur les recommandés : un rapport ESIA-light complet
+       suppose une couverture maximale du référentiel, pas seulement les
+       4 critères obligatoires.
     2. ``finalize_project_esg_assessment(assessment_id=<id>)``.
     3. ``generate_project_esg_report(assessment_id=<id>)`` si l'utilisateur
        demande le rapport ESIA-light.
@@ -417,9 +421,11 @@ async def create_project_esg_assessment(
                 "applicable_criteria": applicable,
                 "applicable_criteria_count": len(applicable),
                 "next_step": (
-                    "Pour chaque critère is_required=True, appelle "
+                    "Pour TOUS les critères applicables ci-dessus (obligatoires "
+                    "ET recommandés, pas seulement is_required=True), appelle "
                     "ask_interactive_question puis save_project_esg_criterion "
-                    "avec son criterion_id ci-dessus."
+                    "avec son criterion_id. Commence par les obligatoires, puis "
+                    "couvre les recommandés pour un rapport ESIA-light complet."
                 ),
             },
             ensure_ascii=False,

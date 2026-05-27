@@ -202,6 +202,21 @@ describe('useAuth — intercepteur 401 → refresh → retry (story 7.2)', () =>
       await expect(apiFetch('/dashboard/summary')).rejects.toThrow(/unauthenticated/)
       expect(mockFetch).toHaveBeenCalledTimes(1)
     })
+
+    it('test_refresh_clears_auth_when_no_refresh_token', async () => {
+      // [fix scintillement] Sans refresh_token, refresh() doit purger l'auth
+      // (clearAuth) et retourner false SANS appel réseau. Sinon l'access_token
+      // survit en localStorage → réhydraté par le middleware → boucle infinie.
+      mockAuthStore.refreshToken = null
+      const { useAuth } = await importUseAuth()
+      const { refresh } = useAuth()
+
+      const ok = await refresh()
+
+      expect(ok).toBe(false)
+      expect(mockAuthStore.clearAuth).toHaveBeenCalled()
+      expect(mockFetch).not.toHaveBeenCalled()
+    })
   })
 
   // ═════════════════════════════════════════════════════════════════
@@ -368,6 +383,23 @@ describe('useAuth — intercepteur 401 → refresh → retry (story 7.2)', () =>
       expect(mockCancelTour).toHaveBeenCalledTimes(1)
       expect(mockAddSystemMessage).toHaveBeenCalledTimes(1)
       expect(mockNavigateTo).toHaveBeenCalledTimes(1)
+    })
+
+    it('test_handleAuthFailure_clears_auth_before_redirect', async () => {
+      // [fix scintillement] handleAuthFailure DOIT purger le store + localStorage
+      // (clearAuth) AVANT de naviguer vers /login. Sinon accessToken survit, le
+      // middleware global voit isAuthenticated=true sur /login et redirige vers
+      // '/', qui relance un apiFetch → 401 → boucle de redirection = scintillement.
+      mockUiStore.guidedTourActive = false
+      const { useAuth } = await importUseAuth()
+      const { handleAuthFailure } = useAuth()
+
+      await handleAuthFailure()
+
+      expect(mockAuthStore.clearAuth).toHaveBeenCalled()
+      expect(mockNavigateTo).toHaveBeenCalledWith('/login')
+      // Au moment de la navigation, le token doit déjà être purgé.
+      expect(mockAuthStore.accessToken).toBeNull()
     })
   })
 

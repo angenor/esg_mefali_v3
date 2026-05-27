@@ -105,15 +105,21 @@
 <!-- Section 5 — Mesures d'atténuation -->
 <section>
   <h2>5. Mesures d'atténuation</h2>
-  {% if missing_required %}
-    <p>Critères obligatoires restants nécessitant des mesures correctives ou d'atténuation :</p>
-    <ul>
-      {% for c in missing_required %}
-        <li><strong>{{ c.code }}</strong> — {{ c.label }}</li>
-      {% endfor %}
-    </ul>
+  {% if uncovered_criteria %}
+    <p>Critères du référentiel {{ referential_label }} restant à documenter, nécessitant des mesures correctives ou d'atténuation à intégrer au Plan de Gestion E&amp;S (PGES) :</p>
+    <table>
+      <thead><tr><th>Critère</th><th>Type</th></tr></thead>
+      <tbody>
+        {% for c in uncovered_criteria %}
+          <tr>
+            <td><strong>{{ c.code }}</strong> — {{ c.label }}</td>
+            <td>{% if c.is_required %}Obligatoire{% else %}Recommandé{% endif %}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
   {% else %}
-    <p>L'ensemble des critères obligatoires du référentiel ont été couverts. Les mesures d'atténuation détaillées seront définies dans le Plan de Gestion E&amp;S (PGES) du projet, en cohérence avec le standard {{ referential_label }}.</p>
+    <p>L'ensemble des critères applicables du référentiel ont été couverts. Les mesures d'atténuation détaillées seront définies dans le Plan de Gestion E&amp;S (PGES) du projet, en cohérence avec le standard {{ referential_label }}.</p>
   {% endif %}
 </section>
 
