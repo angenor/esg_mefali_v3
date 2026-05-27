@@ -660,8 +660,12 @@ async def is_generation_in_progress(
 async def generate_credit_score(
     db: AsyncSession,
     user_id: uuid.UUID,
+    account_id: uuid.UUID | None = None,
 ) -> CreditScore:
     """Generer un nouveau score de credit vert complet.
+
+    F02 multi-tenant : `account_id` est requis par la RLS (policy WITH CHECK
+    `account_id IS NOT NULL`). Si non fourni, on le resout depuis l'utilisateur.
 
     1. Collecter les data points
     2. Calculer solvabilite et impact vert
@@ -673,6 +677,18 @@ async def generate_credit_score(
     # Verrou anti-generation simultanee
     if await is_generation_in_progress(db, user_id):
         raise ValueError("Une generation de score est deja en cours. Veuillez patienter.")
+
+    # F02 — resoudre account_id (sinon l'INSERT est rejete par la RLS)
+    if account_id is None:
+        from app.models.user import User as _User
+
+        result = await db.execute(select(_User).where(_User.id == user_id))
+        user_obj = result.scalar_one_or_none()
+        if user_obj is None or user_obj.account_id is None:
+            raise ValueError(
+                "generate_credit_score: account_id introuvable pour l'utilisateur."
+            )
+        account_id = user_obj.account_id
 
     # Collecter les donnees
     solvability_points, green_impact_points, source_coverage, intermediary_interactions = (
@@ -736,6 +752,7 @@ async def generate_credit_score(
 
     credit_score = CreditScore(
         user_id=user_id,
+        account_id=account_id,
         version=version,
         solvability_score=solvability_score,
         green_impact_score=green_impact_score,

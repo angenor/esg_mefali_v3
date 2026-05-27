@@ -54,15 +54,17 @@ async def generate_credit_score(config: RunnableConfig) -> str:
 
     try:
         db, user_id = get_db_and_user(config)
+        account_id = await _resolve_account_id(db, user_id)
 
-        score = await gen_score(db=db, user_id=user_id)
+        score = await gen_score(db=db, user_id=user_id, account_id=account_id)
+        await db.commit()
 
         return (
             f"Score de credit vert calcule avec succes !\n"
             f"- Score combine : {score.combined_score}/100\n"
             f"- Solvabilite : {score.solvability_score}/100\n"
             f"- Impact vert : {score.green_impact_score}/100\n"
-            f"- Niveau de risque : {score.risk_level}\n"
+            f"- Niveau de confiance : {score.confidence_label}\n"
             f"- Version : {score.version}\n\n"
             f"Le score est visible sur la page /credit-score."
         )
@@ -103,7 +105,7 @@ async def get_credit_score(config: RunnableConfig) -> str:
             f"- Score combine : {score.combined_score}/100\n"
             f"- Solvabilite : {score.solvability_score}/100\n"
             f"- Impact vert : {score.green_impact_score}/100\n"
-            f"- Niveau de risque : {score.risk_level}\n"
+            f"- Niveau de confiance : {score.confidence_label}\n"
             f"- Version : {score.version}"
         )
     except Exception as e:

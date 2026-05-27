@@ -992,9 +992,37 @@ async def router_node(
         if instructions:
             profiling_instructions = instructions
 
+    # Une évaluation/un bilan en cours ne doit PAS masquer une demande explicite
+    # d'un AUTRE module : sinon le node actif (ESG/carbone) capte la requête sans
+    # les bons tools, d'où des hallucinations « je n'ai pas accès à ce tool »
+    # (ex. « calcule mon score de crédit vert » pendant une évaluation ESG en
+    # cours). Les continuations implicites (« oui », « continue ») ne déclenchent
+    # aucun détecteur explicite et restent donc routées vers le module actif.
+    _explicit_module_requests = {
+        "esg": is_esg_request,
+        "carbon": is_carbon_request,
+        "financing": is_financing_request,
+        "application": is_application_request,
+        "credit": is_credit_request,
+        "action_plan": is_action_plan_request,
+    }
+    explicit_non_esg = any(v for k, v in _explicit_module_requests.items() if k != "esg")
+    explicit_non_carbon = any(v for k, v in _explicit_module_requests.items() if k != "carbon")
+
+    # « Calcule mon score de crédit vert » déclenche à tort les détecteurs ESG
+    # (pattern générique « calcul … score ») ET financing (pattern « crédits
+    # verts »), tous deux PRIORITAIRES sur credit dans `_route_after_router`.
+    # Les mots-clés crédit étant spécifiques et non ambigus (« score de crédit »,
+    # « solvabilité », « scoring vert »…), une demande crédit explicite prime sur
+    # ces faux positifs et doit atteindre le node credit (qui seul expose
+    # generate_credit_score).
+    esg_over_credit = is_esg_request and not is_credit_request
+    financing_over_credit = is_financing_request and not is_credit_request
+
     # Log DEBUG diagnostique (spec fix-profile-and-routing-regression, AC4).
     # Tronqué à 80 chars pour défense en profondeur RGPD.
-    final_route_esg = bool(is_esg_request or has_active_esg)
+    final_route_esg = bool(esg_over_credit or (has_active_esg and not explicit_non_esg))
+    final_route_carbon = bool(is_carbon_request or (has_active_carbon and not explicit_non_carbon))
     logger.debug(
         "router_node decision | last_user_msg=%r | is_esg_request=%s | "
         "active_module=%s | has_active_esg=%s | _route_esg=%s | is_continuation=%s",
@@ -1013,9 +1041,9 @@ async def router_node(
         "esg_assessment": esg_assessment,
         "_route_esg": final_route_esg,
         "carbon_data": carbon_data,
-        "_route_carbon": is_carbon_request or has_active_carbon,
+        "_route_carbon": final_route_carbon,
         "financing_data": financing_data,
-        "_route_financing": is_financing_request,
+        "_route_financing": financing_over_credit,
         "application_data": application_data,
         "_route_application": is_application_request,
         "credit_data": credit_data,

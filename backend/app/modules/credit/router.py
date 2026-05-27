@@ -63,7 +63,11 @@ async def generate_score(
         pass
 
     try:
-        score = await generate_credit_score(db=db, user_id=current_user.id)
+        score = await generate_credit_score(
+            db=db,
+            user_id=current_user.id,
+            account_id=current_user.account_id,
+        )
         await db.commit()
         await db.refresh(score)
     except ValueError as e:

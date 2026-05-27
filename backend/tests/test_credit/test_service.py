@@ -659,6 +659,7 @@ class TestAsyncGenerateCreditScore:
 
         mock_db = AsyncMock()
         user_id = uuid.uuid4()
+        account_id = uuid.uuid4()
 
         # Mock les dependances
         empty_points = {
@@ -689,12 +690,14 @@ class TestAsyncGenerateCreditScore:
             new_callable=AsyncMock,
             return_value=1,
         ):
-            result = await generate_credit_score(mock_db, user_id)
+            result = await generate_credit_score(mock_db, user_id, account_id=account_id)
 
             # Verifie que l'objet CreditScore a ete cree
             assert result.combined_score > 0
             assert result.version == 1
             assert result.user_id == user_id
+            # F02 — account_id propage pour satisfaire la RLS
+            assert result.account_id == account_id
             mock_db.add.assert_called_once()
             mock_db.flush.assert_awaited_once()
 
