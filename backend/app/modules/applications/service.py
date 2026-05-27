@@ -323,6 +323,8 @@ INSTRUCTIONS :
 - Integre les donnees de l'entreprise et du fonds disponibles.
 - Longueur visee : 300-800 mots selon la section.
 - Ne mets pas de titre principal (il sera ajoute par l'interface).
+- IMPORTANT : reponds UNIQUEMENT avec le HTML brut. N'entoure JAMAIS ta reponse
+  de balises de bloc de code markdown (ni ```html, ni ```).
 
 Ecris directement le contenu HTML de la section :"""
 
@@ -445,7 +447,11 @@ async def generate_section(
         HumanMessage(content=f"Genere la section '{section_config['title']}' du dossier."),
     ])
 
-    content = response.content
+    # Nettoyer les fences markdown (```html … ```) que le LLM ajoute parfois,
+    # sinon elles polluent la fiche dossier ET les exports PDF/Word.
+    from app.modules.applications.export import strip_code_fences
+
+    content = strip_code_fences(response.content)
 
     # Mettre a jour la section
     return await update_section(

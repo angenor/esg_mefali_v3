@@ -58,4 +58,26 @@ describe('AppSidebar (Story 2.2 — AC2, AC4)', () => {
     expect(routes).toContain('/carbon')
     expect(routes).toContain('/financing')
   })
+
+  it('chaque lien de navigation possède une icône SVG (régression "Dossiers" sans icône)', () => {
+    const wrapper = mountSidebar()
+    const navLinks = wrapper.findAll('a[data-to]')
+    expect(navLinks.length).toBeGreaterThan(0)
+    for (const link of navLinks) {
+      const to = link.attributes('data-to')
+      expect(
+        link.find('svg').exists(),
+        `le lien de navigation "${to}" doit afficher une icône SVG`,
+      ).toBe(true)
+    }
+  })
+
+  it('le lien "Dossiers" (/applications) a une icône', () => {
+    const wrapper = mountSidebar()
+    const dossiers = wrapper.findAll('a[data-to]').find(
+      l => l.attributes('data-to') === '/applications',
+    )
+    expect(dossiers, 'le lien /applications doit exister').toBeTruthy()
+    expect(dossiers!.find('svg').exists()).toBe(true)
+  })
 })

@@ -113,7 +113,7 @@ Pour le détail technique exhaustif (tables, colonnes, FK, endpoints, composants
 - **004** — Upload/analyse documents (OCR + pgvector).
 
 ### Module 3 — Financement & Projets
-- **F048** — Fiabilisation création dossier + mémoire ESG (sélecteur union, gating ESG, export DOCX/PDF réel, dédup draft, parité chat/UI).
+- **F048** — Fiabilisation création dossier + mémoire ESG (sélecteur union, gating ESG, export DOCX/PDF réel, dédup draft, parité chat/UI). Fixes post-live : (1) `get_fund_details` lazy-load async → `MissingGreenlet` ⟹ requête explicite `FundIntermediary↔Intermediary` ; (2) sections LLM enveloppées de fences markdown ` ```html…``` ` ⟹ helper `strip_code_fences` (génération + export PDF/Word) + util frontend `stripCodeFences` (affichage `v-html` + éditeur).
 - **F25** (feature 044) — Catalogue admin financement vert (lecture seule, `/api/admin/catalog/*`).
 - **F16** — Simulateur financement sourcé (`POST /api/projects/{id}/simulate-multi`, ranking cheapest/fastest).
 - **F07** (mig. 028) — Entité Offre = Fonds × Intermédiaire (calculator `compute_effective_offer`). Feature flag `USE_OFFER_VIEW`.

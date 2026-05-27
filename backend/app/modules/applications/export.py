@@ -26,6 +26,32 @@ SECTION_STATUS_LABELS = {
 }
 
 
+_CODE_FENCE_WRAP_RE = re.compile(
+    r"^```[a-zA-Z0-9_-]*[ \t]*\r?\n?(.*?)\r?\n?```$", re.DOTALL,
+)
+
+
+def strip_code_fences(content: str | None) -> str | None:
+    """Retirer les fences markdown (```html … ```) d'un contenu généré par LLM.
+
+    Le LLM enveloppe parfois le HTML d'une section dans un bloc de code
+    ``` ```html … ``` ``` malgré la consigne. Ces marqueurs apparaissent alors
+    tels quels sur la fiche dossier ET dans les exports PDF/Word. Ce helper
+    retire un bloc englobant complet, ou des fences orphelines en début/fin.
+    Idempotent et sûr sur un contenu déjà propre.
+    """
+    if not content:
+        return content
+    stripped = content.strip()
+    match = _CODE_FENCE_WRAP_RE.match(stripped)
+    if match:
+        return match.group(1).strip()
+    # Fences orphelines (ouverture ou fermeture seule).
+    stripped = re.sub(r"^```[a-zA-Z0-9_-]*[ \t]*\r?\n?", "", stripped)
+    stripped = re.sub(r"\r?\n?```[ \t]*$", "", stripped)
+    return stripped.strip()
+
+
 def _prepare_sections(sections: dict) -> list[dict]:
     """Preparer les sections pour le template."""
     result = []
@@ -33,7 +59,8 @@ def _prepare_sections(sections: dict) -> list[dict]:
         result.append({
             "key": key,
             "title": section.get("title", key),
-            "content": section.get("content"),
+            # Défense : nettoyer les fences markdown du contenu déjà stocké.
+            "content": strip_code_fences(section.get("content")),
             "status": section.get("status", "not_generated"),
             "status_label": SECTION_STATUS_LABELS.get(
                 section.get("status", "not_generated"), "Inconnu"
@@ -110,7 +137,7 @@ def _export_docx(application) -> bytes:
 
         content = section.get("content")
         if content:
-            plain_text = _strip_html(content)
+            plain_text = _strip_html(strip_code_fences(content))
             for paragraph_text in plain_text.split("\n\n"):
                 if paragraph_text.strip():
                     doc.add_paragraph(paragraph_text.strip())

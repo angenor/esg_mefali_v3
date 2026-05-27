@@ -126,7 +126,9 @@ function cancelRegenerate() {
 function startEditing(sectionKey: string) {
   if (!app.value) return
   const section = app.value.sections[sectionKey]
-  editorContent.value = section?.content || ''
+  // Nettoyer d'éventuelles fences markdown du contenu stocké avant édition
+  // (le sauvegarder nettoiera aussi la donnée persistée).
+  editorContent.value = stripCodeFences(section?.content)
   editingSection.value = sectionKey
 }
 
@@ -355,7 +357,7 @@ function formatXOF(amount: number): string {
               </div>
             </template>
             <template v-else-if="section.content">
-              <div class="prose dark:prose-invert max-w-none" v-html="section.content" />
+              <div class="prose dark:prose-invert max-w-none" v-html="stripCodeFences(section.content)" />
             </template>
             <template v-else>
               <p class="text-gray-400 dark:text-gray-500 italic">
