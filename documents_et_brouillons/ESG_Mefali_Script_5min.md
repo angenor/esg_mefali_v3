@@ -20,7 +20,7 @@ Moins de 10 % des financements climat en Afrique atteignent les PME. Source BAD/
 
 Pourquoi ? Quatre murs. Un : les référentiels ESG sont complexes et souvent en anglais. Deux : un consultant coûte 5 000 à 20 000 dollars — impensable pour une PME ici. Trois : des dizaines de fonds existent, mais aucune visibilité sur lequel viser ni comment monter le dossier. Quatre : sans historique de crédit, pas de prêt bancaire, même avec d'excellentes pratiques.
 
-↪ *Comment faire tomber ces quatre murs d'un coup ? C'est là qu'intervient ESG Mefali.*
+↪ *Des outils existent pourtant. Pourquoi ne suffisent-ils pas ?*
 
 ---
 
