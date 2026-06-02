@@ -58,9 +58,9 @@ Le terrain est immense. TAM : 14,5 milliards de dollars par an, ~100 millions de
 
 ## SLIDE 5 — Business model · `~0:25`
 
-Freemium SaaS, trois plans : Trial gratuit 30 jours, Pro à 20 dollars par mois — notre plan recommandé — et Max à 100 dollars pour les intermédiaires et l'API.
+Le modèle est un freemium SaaS, en trois plans : on essaie gratuitement pendant 30 jours, on passe au Pro à 20 dollars par mois — c'est notre cœur de cible — et les intermédiaires montent au plan Max, à 100 dollars, avec l'accès API.
 
-Unit economics saines dès le départ : LTV de 504 dollars, ratio LTV/CAC de 12,6. Trajectoire : 1,51 million d'ARR à 36 mois, break-even autour du mois 18.
+Et les fondamentaux sont sains dès le départ : chaque client nous rapporte plus de douze fois ce qu'il coûte à acquérir — 504 dollars de valeur vie pour un ratio LTV/CAC de 12,6. Sur cette base, on vise 1,5 million d'ARR à trois ans, avec une rentabilité atteinte dès le 18ᵉ mois.
 
 ↪ *Voilà la mécanique. Comment on conquiert le marché concrètement ?*
 
