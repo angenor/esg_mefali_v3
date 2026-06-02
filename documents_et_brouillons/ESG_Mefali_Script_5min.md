@@ -18,7 +18,7 @@ Bonjour, je suis Angenor N'GOUANDI, fondateur d'ESG Mefali : l'intelligence arti
 
 Moins de 10 % des financements climat en Afrique atteignent les PME. Source BAD/GCF, 2024.
 
-Pourquoi ? Quatre murs. Un : les référentiels ESG sont complexes et souvent en anglais. Deux : un consultant coûte 5 000 à 20 000 dollars — impensable pour une PME ici. Trois : des dizaines de fonds existent, mais aucune visibilité sur lequel viser ni comment monter le dossier. Quatre : sans historique de crédit, pas de prêt bancaire, même avec d'excellentes pratiques.
+Pourquoi ? Quatre murs. Un : les référentiels ESG sont complexes et souvent en anglais. Deux : un consultant ESG coûte 5 000 à 20 000 dollars — impensable pour une PME Africaine. Trois : il existe des dizaines de fonds — BOAD, GCF, BAD, AFD — mais personne ne sait lequel correspond à son profil, ni comment remplir le dossier. Quatre : sans historique de crédit, pas de prêt bancaire, même avec d'excellentes pratiques.
 
 ↪ *Des outils existent pourtant. Pourquoi ne suffisent-ils pas ?*
 
@@ -50,7 +50,7 @@ Plutôt que de vous le décrire, laissez-moi vous le montrer.
 
 ## SLIDE 4 — Le marché · `~0:25`
 
-Le terrain est immense. TAM : 14,5 milliards de dollars par an, ~100 millions de PME, +28 % par an. SAM, sur les PME francophones UEMOA/CEDEAO en secteurs verts : 2 à 4 milliards par an. SOM à 3 ans : 50 à 150 millions de financements intermédiés, via les bailleurs comme canal de distribution.
+Le terrain est immense, et on le cible par cercles. Le marché total, d'abord : 14,5 milliards de dollars par an, près de 100 millions de PME, et il grossit de 28 % chaque année. Le cercle qu'on adresse vraiment — les PME francophones d'UEMOA et de CEDEAO dans les secteurs verts — pèse déjà 2 à 4 milliards. Et ce qu'on vise concrètement à trois ans : 50 à 150 millions de financements intermédiés, en passant par les bailleurs comme canal de distribution.
 
 ↪ *Et on monétise comment ? Notre modèle.*
 
@@ -68,7 +68,7 @@ Et les fondamentaux sont sains dès le départ : chaque client nous rapporte plu
 
 ## SLIDE 6 — Go-to-Market · `~0:20`
 
-Trois vagues sur 36 mois. Valider : 2 marchés pilotes, 80 premiers payants. Scaler : acquisition à coût marginal via BOAD, AFD/SUNREF, GCF — 800 payants. Étendre : plan Max, API, et une Series A de 3 à 5 millions. CAC cible de 40 dollars, dont 60 % via les bailleurs.
+On conquiert en trois vagues sur 36 mois. D'abord valider : deux marchés pilotes, 80 premiers clients payants. Ensuite scaler : on acquiert à coût marginal en s'appuyant sur les bailleurs — BOAD, AFD via SUNREF, GCF — pour atteindre 800 payants. Enfin étendre : le plan Max, l'API, et une levée de 3 à 5 millions en Series A. Le tout pour un coût d'acquisition de 40 dollars seulement, dont 60 % vient justement de ces bailleurs.
 
 ↪ *Derrière les chiffres, il y a une raison d'être.*
 
@@ -76,7 +76,7 @@ Trois vagues sur 36 mois. Valider : 2 marchés pilotes, 80 premiers payants. Sca
 
 ## SLIDE 7 — Impact · `~0:20`
 
-ESG Mefali sert cinq ODD : accès au capital, inclusion financière, économie circulaire, financement climat, et partenariats. À 3 ans : 10 000 PME accompagnées, 100 millions de dollars débloqués, 8 pays UEMOA couverts.
+Cette raison d'être, c'est notre impact. ESG Mefali sert cinq Objectifs de développement durable : l'accès au capital, l'inclusion financière, l'économie circulaire, le financement climat et les partenariats. Et concrètement, à trois ans : 10 000 PME accompagnées, 100 millions de dollars débloqués, les 8 pays de l'UEMOA couverts.
 
 ↪ *Et tout ça n'est pas une idée — vous venez de le voir tourner.*
 
