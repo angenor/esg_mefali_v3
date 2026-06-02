@@ -26,7 +26,7 @@ Pourquoi ? Quatre murs. Un : les référentiels ESG sont complexes et souvent en
 
 ## SLIDE 3 — La solution · `~0:25` *(puis démo)*
 
-Là où Refinitiv ou Sustainalytics s'arrêtent au diagnostic — en anglais, à 10 000 dollars par an — ESG Mefali va jusqu'au financement. C'est un conseiller ESG virtuel en français : l'entrepreneur dialogue avec l'agent, pas de formulaires.
+Parce qu'ils s'arrêtent au diagnostic. Refinitiv, Sustainalytics : de l'analyse en anglais, à 10 000 dollars par an, et puis plus rien. ESG Mefali, lui, va jusqu'au financement. C'est un conseiller ESG virtuel en français : l'entrepreneur dialogue avec l'agent, pas de formulaires.
 
 Plutôt que de vous le décrire, laissez-moi vous le montrer.
 
