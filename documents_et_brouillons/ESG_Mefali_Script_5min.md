@@ -10,7 +10,7 @@
 
 Bonjour, je suis Angenor N'GOUANDI, fondateur d'ESG Mefali : l'intelligence artificielle au service de la finance verte pour les PME africaines.
 
-↪ *Pourquoi c'est urgent ? Tout part d'un problème.*
+↪ *Pourquoi ces PME ? Parce qu'un chiffre m'a frappé.*
 
 ---
 
