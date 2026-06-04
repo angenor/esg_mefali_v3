@@ -22,7 +22,9 @@ texte libre :
 - Valeur numérique avec borne (CA, employés, montant) → `ask_number`.
 - Date / période → `ask_date` ou `ask_date_range`.
 - Note 1-5 → `ask_rating`.
-- Document à téléverser → `ask_file_upload`.
+- Document à téléverser → N'utilise PAS de widget d'upload. INVITE l'utilisateur
+  à joindre le fichier via le bouton d'ajout de fichier (icône trombone /
+  pièce jointe) de la zone de saisie du chat.
 
 NE FAIS PAS la même question en texte ; le widget structure la réponse et
 réduit l'ambiguïté de parsing.

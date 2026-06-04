@@ -50,15 +50,18 @@ GLOBAL_WHITELIST: frozenset[str] = frozenset({
     # F12 — recall_history transverse pour permettre la recherche sémantique
     # dans l'historique depuis n'importe quel noeud spécialiste.
     "recall_history",
-    # F10 — 7 widgets transverses disponibles partout (FR-014, FR-015).
+    # F10 — widgets transverses disponibles partout (FR-014, FR-015).
     # show_form / show_summary_card sont contextuels (ajoutés par MODULE_TOOL_MAPPING).
+    # NB : ``ask_file_upload`` (widget d'upload) est VOLONTAIREMENT retiré — le
+    # bouton natif d'ajout de fichier de la zone de saisie remplace ce widget.
+    # Le LLM ne doit donc plus proposer de widget d'upload mais INVITER
+    # l'utilisateur à utiliser ce bouton (cf. prompts/system.py & widget.py).
     "ask_yes_no",
     "ask_select",
     "ask_number",
     "ask_date",
     "ask_date_range",
     "ask_rating",
-    "ask_file_upload",
     # F20 — Bibliothèque Ressources : recherche transverse depuis tous les nœuds.
     "search_resources",
     "get_resource_content",
@@ -220,6 +223,11 @@ PAGE_TOOL_MAPPING: dict[str, frozenset[str]] = {
         "get_application_checklist",
         "simulate_financing",
         "export_application",
+        # 049 — Découverte des dossiers depuis l'onglet /applications.
+        # provide/detach_checklist_document restent fournis via
+        # MODULE_TOOL_MAPPING["application"] (nœud, priorité de troncature
+        # supérieure) pour respecter la borne statique PAGE|GLOBAL ≤ MAX.
+        "list_applications",
         # F11 — Match/Comparison pour comparer offres concurrentes
         "show_match_card",
         "show_comparison_table",
@@ -339,6 +347,15 @@ MODULE_TOOL_MAPPING: dict[str, frozenset[str]] = {
         "save_fund_interest",
         "get_fund_details",
         "create_fund_application",
+        # 049 — Une demande de dossier existant (« mon dossier GCF ») est happée
+        # par le nœud financing (mot-clé fonds prioritaire) : il doit pouvoir
+        # lister les dossiers, lire la checklist et fournir un document.
+        # `get_application_checklist` listé ici car absent de FINANCING_TOOLS.
+        "list_applications",
+        "get_application_checklist",
+        "provide_checklist_document",
+        "detach_checklist_document",
+        "list_user_documents",
         # F11 — Match/Comparison/Map pour matching et géolocalisation
         "show_match_card",
         "show_comparison_table",
@@ -362,6 +379,13 @@ MODULE_TOOL_MAPPING: dict[str, frozenset[str]] = {
         "get_application_checklist",
         "simulate_financing",
         "export_application",
+        # 049 — Découverte des dossiers + fourniture des documents de checklist.
+        "list_applications",
+        "provide_checklist_document",
+        "detach_checklist_document",
+        # 049 — list_user_documents visible ici (US2 : rattacher un document
+        # déjà téléversé). Exécutable via DOCUMENT_TOOLS injecté au ToolNode.
+        "list_user_documents",
         # F11 — Match/Comparison pour comparaison cross-offres
         "show_match_card",
         "show_comparison_table",

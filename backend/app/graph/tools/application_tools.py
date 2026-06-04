@@ -1,12 +1,15 @@
 """Tools LangChain pour le noeud dossiers de candidature.
 
-Six tools exposes au LLM :
+Neuf tools exposes au LLM :
 - create_fund_application : creer un nouveau dossier de candidature
 - generate_application_section : generer une section du dossier
 - update_application_section : modifier une section
 - get_application_checklist : consulter la checklist
 - simulate_financing : simulation financiere
 - export_application : exporter en PDF/DOCX/JSON
+- list_applications : lister les dossiers de l'utilisateur courant (decouverte, 049)
+- provide_checklist_document : rattacher un document a un item de checklist (049)
+- detach_checklist_document : detacher le document d'un item de checklist (049)
 """
 
 import enum
@@ -24,6 +27,10 @@ logger = logging.getLogger(__name__)
 
 
 _SECTION_KEY_PATTERN = r"^[a-z][a-z0-9_]{0,63}$"
+# 049 — Les `item_key` de checklist suivent la même convention que les section
+# keys (ex. ``company_registration``, ``env_impact_study``) : minuscules,
+# chiffres et underscores. Réutilisé pour valider provide/detach.
+_ITEM_KEY_PATTERN = _SECTION_KEY_PATTERN
 
 
 class ExportFormat(str, enum.Enum):
@@ -113,6 +120,40 @@ class ExportApplicationArgs(BaseModel):
 
     application_id: str = Field(..., min_length=36, max_length=36, pattern=UUID_PATTERN)
     format: ExportFormat
+
+
+class ListApplicationsArgs(BaseModel):
+    """Args pour list_applications (049) — filtre statut optionnel.
+
+    Aucun argument requis : le tool liste les dossiers de l'utilisateur courant.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    status: str | None = Field(
+        None,
+        max_length=64,
+        description="Filtre optionnel par statut (draft, submitted_to_fund, …).",
+    )
+
+
+class ProvideChecklistDocumentArgs(BaseModel):
+    """Args strict pour provide_checklist_document (049, US1/US2/US4)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    application_id: str = Field(..., min_length=36, max_length=36, pattern=UUID_PATTERN)
+    item_key: str = Field(..., pattern=_ITEM_KEY_PATTERN)
+    document_id: str = Field(..., min_length=36, max_length=36, pattern=UUID_PATTERN)
+
+
+class DetachChecklistDocumentArgs(BaseModel):
+    """Args strict pour detach_checklist_document (049, US4)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    application_id: str = Field(..., min_length=36, max_length=36, pattern=UUID_PATTERN)
+    item_key: str = Field(..., pattern=_ITEM_KEY_PATTERN)
 
 
 # --- Helpers ---
@@ -521,11 +562,23 @@ async def get_application_checklist(
             provided = item.get("status") == "provided"
             status_icon = "[X]" if provided else "[ ]"
             required_label = " (requis)" if item.get("required_by") else ""
-            lines.append(f"  {status_icon} {item.get('name', 'N/A')}{required_label}")
+            # L'``item_key`` DOIT être exposé : c'est l'argument attendu par
+            # provide_checklist_document / detach_checklist_document. Sans lui,
+            # le LLM ne peut pas rattacher un document (il ne voit que le libellé).
+            item_key = item.get("key", "?")
+            lines.append(
+                f"  {status_icon} {item.get('name', 'N/A')}{required_label} "
+                f"— item_key: `{item_key}`"
+            )
             if provided:
                 provided_count += 1
 
         lines.append(f"\nProgression : {provided_count}/{len(checklist)} documents fournis.")
+        lines.append(
+            "Pour fournir (ou remplacer) le document d'un item « manquant », appelle "
+            "provide_checklist_document(application_id, item_key, document_id) en "
+            "utilisant l'item_key exact affiché ci-dessus."
+        )
 
         return "\n".join(lines)
     except Exception as e:
@@ -655,6 +708,264 @@ async def export_application(
         return f"Erreur lors de l'export : {e}"
 
 
+# ---------------------------------------------------------------------
+# 049 — Découverte des dossiers + fourniture des documents de checklist
+# ---------------------------------------------------------------------
+
+
+@tool(args_schema=ListApplicationsArgs)
+async def list_applications(
+    config: RunnableConfig,
+    status: str | None = None,
+) -> str:
+    """Liste les dossiers de candidature de l'utilisateur courant (sans argument requis).
+
+    Use when:
+    - "mes dossiers", "où en est mon dossier", "mon dossier GCF", "que manque-t-il".
+    - identifier LE bon dossier avant de lire sa checklist ou fournir un document.
+    Don't use when:
+    - créer un nouveau dossier (utiliser `create_fund_application`).
+    - lister des fonds à financer (cf. module financing).
+    Exemple: "Où en est mon dossier GCF ?" -> list_applications().
+    Anti: "Quels fonds verts existent ?" -> NE PAS appeler.
+
+    Args:
+        status: Filtre optionnel par statut (draft, submitted_to_fund, …).
+    """
+    from app.models.application import ApplicationStatus
+    from app.modules.applications.schemas import (
+        compute_checklist_progress,
+        compute_sections_progress,
+        get_status_label,
+    )
+    from app.modules.applications.service import get_applications
+
+    try:
+        db, user_id = get_db_and_user(config)
+
+        # Garde robustesse : ``status`` est un texte libre côté LLM ; un filtre
+        # hors enum (ex. « en cours ») provoquerait une DataError PostgreSQL sur
+        # la colonne ``application_status_enum`` (transaction avortée → cascade).
+        # On ignore silencieusement un statut invalide plutôt que d'échouer.
+        valid_status: str | None = None
+        if status and status in {s.value for s in ApplicationStatus}:
+            valid_status = status
+
+        # Garde anti-IDOR : get_applications est scopé au user_id du config —
+        # un utilisateur ne voit JAMAIS les dossiers d'un autre (F02).
+        applications, total = await get_applications(
+            db=db, user_id=user_id, status=valid_status,
+        )
+
+        if not applications:
+            return (
+                "Vous n'avez aucun dossier de candidature pour le moment. "
+                "Dites-moi à quelle offre ou quel fonds vous souhaitez candidater "
+                "pour en créer un."
+            )
+
+        lines: list[str] = [f"Vos dossiers de candidature ({total}) :"]
+        for application in applications:
+            fund_name = (
+                application.fund.name
+                if getattr(application, "fund", None)
+                else "Fonds inconnu"
+            )
+            project_name = (
+                application.project.name
+                if getattr(application, "project", None)
+                else None
+            )
+            status_val = (
+                application.status.value
+                if hasattr(application.status, "value")
+                else application.status
+            )
+            target_val = (
+                application.target_type.value
+                if hasattr(application.target_type, "value")
+                else application.target_type
+            )
+            sections_progress = compute_sections_progress(application.sections or {})
+            # 049 — Progression sur le statut STOCKÉ (comme l'endpoint REST de
+            # liste ``_build_application_summary`` / les cartes UI) : pas de N+1
+            # de chargement des documents sur une liste. L'invariant
+            # « provided ⟺ document valide » est maintenu eager par
+            # ``clear_document_references`` à la suppression d'un document
+            # (FR-014). La vue DÉTAIL (get_application_checklist / onglet UI)
+            # recalcule le statut effectif via ``serialize_checklist``.
+            checklist = list(application.checklist or [])
+            checklist_progress = compute_checklist_progress(checklist)
+            missing = [
+                it.get("name")
+                for it in checklist
+                if it.get("status") != "provided"
+            ]
+
+            header = f"  - {fund_name}"
+            if project_name:
+                header += f" — projet « {project_name} »"
+            header += f" [{get_status_label(status_val)}]"
+            lines.append(header)
+            lines.append(f"      id : {application.id} · destinataire : {target_val}")
+            lines.append(
+                f"      Sections : {sections_progress.generated}/{sections_progress.total} générées"
+                f" · Documents : {checklist_progress.provided}/{checklist_progress.total} fournis"
+            )
+            if missing:
+                preview = ", ".join(name for name in missing[:4] if name)
+                suffix = " …" if len(missing) > 4 else ""
+                lines.append(f"      À fournir : {preview}{suffix}")
+
+        return "\n".join(lines)
+    except Exception as e:
+        logger.exception("Erreur lors de la liste des dossiers de candidature")
+        return f"Erreur lors de la consultation de vos dossiers : {e}"
+
+
+@tool(args_schema=ProvideChecklistDocumentArgs)
+async def provide_checklist_document(
+    application_id: str,
+    item_key: str,
+    document_id: str,
+    config: RunnableConfig,
+) -> str:
+    """Rattache un document déjà téléversé à un item « Manquant » de la checklist.
+
+    Réutilise la validation 049 (service ``attach_checklist_document``) : 403 si
+    le document appartient à un autre compte, 404 si le document ou l'item est
+    introuvable. L'item passe à « Fourni » et la progression est recalculée.
+
+    Use when:
+    - "rattache mon RCCM à l'item registre", "fournis ce document pour …".
+    - après `list_applications` → `get_application_checklist` → `list_user_documents`.
+    Don't use when:
+    - le document n'existe pas encore (inviter à utiliser le bouton d'ajout de fichier / trombone, PAS de widget).
+    - retirer un document d'un item (utiliser `detach_checklist_document`).
+    Exemple: provide_checklist_document(application_id='…', item_key='company_registration', document_id='…').
+    Anti: "Téléverse un fichier" -> NE PAS proposer de widget ; inviter à utiliser le bouton d'ajout de fichier.
+
+    Args:
+        application_id: UUID du dossier de candidature.
+        item_key: Clé de l'item de checklist (cf. get_application_checklist).
+        document_id: UUID du document à rattacher.
+    """
+    from app.modules.applications.service import (
+        ApplicationItemNotFound,
+        DocumentCrossAccount,
+        DocumentNotFound,
+        attach_checklist_document,
+        get_application_by_id,
+    )
+
+    try:
+        db, user_id = get_db_and_user(config)
+
+        application = await get_application_by_id(
+            db=db, application_id=uuid.UUID(application_id),
+        )
+        # Garde de propriété (anti-IDOR) : le dossier d'un autre utilisateur est
+        # traité comme « introuvable » (pas de fuite d'existence, ni de mutation).
+        if application is None or application.user_id != user_id:
+            return f"Dossier de candidature introuvable (id={application_id})."
+
+        try:
+            result = await attach_checklist_document(
+                db=db,
+                application=application,
+                item_key=item_key,
+                document_id=uuid.UUID(document_id),
+            )
+        except ApplicationItemNotFound:
+            return (
+                f"Aucun item « {item_key} » dans la checklist de ce dossier. "
+                "Appelle get_application_checklist pour voir les item_key valides."
+            )
+        except DocumentNotFound:
+            return (
+                f"Document introuvable (id={document_id}) : impossible de le rattacher."
+            )
+        except DocumentCrossAccount:
+            return (
+                "Ce document n'appartient pas à votre compte (organisation) : "
+                "rattachement refusé."
+            )
+
+        item = result["item"]
+        progress = result["checklist_progress"]
+        name = item.get("name", item_key)
+        return (
+            f"Document rattaché à l'item « {name} » : il est désormais « fourni ».\n"
+            f"Progression documentaire : "
+            f"{progress['provided']}/{progress['total']} documents fournis."
+        )
+    except Exception as e:
+        logger.exception("Erreur lors du rattachement du document à la checklist")
+        return f"Erreur lors du rattachement du document : {e}"
+
+
+@tool(args_schema=DetachChecklistDocumentArgs)
+async def detach_checklist_document(
+    application_id: str,
+    item_key: str,
+    config: RunnableConfig,
+) -> str:
+    """Détache le document d'un item « Fourni » (l'item repasse « Manquant »).
+
+    Ne supprime PAS le document (réutilisable ailleurs — FR-011). Idempotent sur
+    un item déjà « Manquant ». Réutilise le service 049 ``detach_checklist_document``.
+
+    Use when:
+    - "retire / détache le document de l'item …".
+    - corriger un mauvais rattachement avant d'en fournir un autre.
+    Don't use when:
+    - remplacer par un autre document (utiliser `provide_checklist_document`).
+    - supprimer définitivement le fichier (il reste listé par `list_user_documents`).
+    Exemple: detach_checklist_document(application_id='…', item_key='company_registration').
+    Anti: "Supprime mon document" -> NE PAS appeler (le fichier reste dans /documents).
+
+    Args:
+        application_id: UUID du dossier de candidature.
+        item_key: Clé de l'item de checklist (cf. get_application_checklist).
+    """
+    from app.modules.applications.service import (
+        ApplicationItemNotFound,
+        detach_checklist_document as detach_doc,
+        get_application_by_id,
+    )
+
+    try:
+        db, user_id = get_db_and_user(config)
+
+        application = await get_application_by_id(
+            db=db, application_id=uuid.UUID(application_id),
+        )
+        if application is None or application.user_id != user_id:
+            return f"Dossier de candidature introuvable (id={application_id})."
+
+        try:
+            result = await detach_doc(
+                db=db, application=application, item_key=item_key,
+            )
+        except ApplicationItemNotFound:
+            return (
+                f"Aucun item « {item_key} » dans la checklist de ce dossier. "
+                "Appelle get_application_checklist pour voir les item_key valides."
+            )
+
+        item = result["item"]
+        progress = result["checklist_progress"]
+        name = item.get("name", item_key)
+        return (
+            f"Document détaché de l'item « {name} » : il est désormais « manquant ».\n"
+            f"Progression documentaire : "
+            f"{progress['provided']}/{progress['total']} documents fournis."
+        )
+    except Exception as e:
+        logger.exception("Erreur lors du détachement du document de la checklist")
+        return f"Erreur lors du détachement du document : {e}"
+
+
 APPLICATION_TOOLS = [
     create_fund_application,
     generate_application_section,
@@ -662,4 +973,22 @@ APPLICATION_TOOLS = [
     get_application_checklist,
     simulate_financing,
     export_application,
+    # 049 — découverte + fourniture de documents de checklist depuis le chat.
+    list_applications,
+    provide_checklist_document,
+    detach_checklist_document,
+]
+
+
+# 049 — Bundle « découverte + checklist » ré-injecté dans le ToolNode du nœud
+# `financing` (cf. graph.py) pour que ce nœud puisse EXÉCUTER ces tools quand le
+# routeur y dirige une demande de dossier nommant un fonds (ex. « candidature au
+# fonds vert » est happée par financing). Le nœud `application` les possède déjà
+# via APPLICATION_TOOLS. `get_application_checklist` y figure car il n'est PAS
+# dans FINANCING_TOOLS.
+APPLICATION_DISCOVERY_TOOLS = [
+    list_applications,
+    get_application_checklist,
+    provide_checklist_document,
+    detach_checklist_document,
 ]

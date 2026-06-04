@@ -131,7 +131,14 @@ def build_graph() -> StateGraph:
     """
     # Importer les tools de chaque module (imports paresseux pour eviter les cycles)
     from app.graph.tools.action_plan_tools import ACTION_PLAN_TOOLS
-    from app.graph.tools.application_tools import APPLICATION_TOOLS
+    # 049 — APPLICATION_DISCOVERY_TOOLS (list_applications, get_application_checklist,
+    # provide/detach_checklist_document) ré-injectés dans le ToolNode `financing`
+    # pour qu'une demande de dossier happée par le nœud financing (formulation
+    # nommant un fonds, ex. « candidature au fonds vert ») reste EXÉCUTABLE.
+    from app.graph.tools.application_tools import (
+        APPLICATION_DISCOVERY_TOOLS,
+        APPLICATION_TOOLS,
+    )
     from app.graph.tools.carbon_tools import CARBON_TOOLS
     from app.graph.tools.chat_tools import CHAT_TOOLS
     from app.graph.tools.credit_tools import CREDIT_TOOLS
@@ -175,8 +182,13 @@ def build_graph() -> StateGraph:
     create_tool_loop(graph, "chat", chat_node, tools=PROFILING_TOOLS + CHAT_TOOLS + DOCUMENT_TOOLS + INTERACTIVE_TOOLS + GUIDED_TOUR_TOOLS + MEMORY_TOOLS + PROJECT_TOOLS + _PROJECT_ESG_TOOLS + RESOURCE_TOOLS + REPORT_TOOLS)
     create_tool_loop(graph, "esg_scoring", esg_scoring_node, tools=ESG_TOOLS + INTERACTIVE_TOOLS + GUIDED_TOUR_TOOLS + MEMORY_TOOLS + RESOURCE_TOOLS)
     create_tool_loop(graph, "carbon", carbon_node, tools=CARBON_TOOLS + INTERACTIVE_TOOLS + GUIDED_TOUR_TOOLS + MEMORY_TOOLS + RESOURCE_TOOLS)
-    create_tool_loop(graph, "financing", financing_node, tools=FINANCING_TOOLS + INTERACTIVE_TOOLS + GUIDED_TOUR_TOOLS + MEMORY_TOOLS + RESOURCE_TOOLS)
-    create_tool_loop(graph, "application", application_node, tools=APPLICATION_TOOLS + INTERACTIVE_TOOLS + MEMORY_TOOLS + RESOURCE_TOOLS)
+    # 049 — Le nœud financing peut recevoir une demande de dossier (« mon dossier
+    # GCF ») : il doit pouvoir EXÉCUTER les tools découverte/checklist + lister les
+    # documents pour rattacher (DOCUMENT_TOOLS).
+    create_tool_loop(graph, "financing", financing_node, tools=FINANCING_TOOLS + APPLICATION_DISCOVERY_TOOLS + DOCUMENT_TOOLS + INTERACTIVE_TOOLS + GUIDED_TOUR_TOOLS + MEMORY_TOOLS + RESOURCE_TOOLS)
+    # 049 — DOCUMENT_TOOLS ajouté au nœud application pour que list_user_documents
+    # soit exécutable (US2 : rattacher un document déjà téléversé).
+    create_tool_loop(graph, "application", application_node, tools=APPLICATION_TOOLS + DOCUMENT_TOOLS + INTERACTIVE_TOOLS + MEMORY_TOOLS + RESOURCE_TOOLS)
     create_tool_loop(graph, "credit", credit_node, tools=CREDIT_TOOLS + INTERACTIVE_TOOLS + GUIDED_TOUR_TOOLS + MEMORY_TOOLS + RESOURCE_TOOLS)
     create_tool_loop(graph, "action_plan", action_plan_node, tools=ACTION_PLAN_TOOLS + INTERACTIVE_TOOLS + GUIDED_TOUR_TOOLS + MEMORY_TOOLS + RESOURCE_TOOLS)
 

@@ -23,7 +23,7 @@ des widgets dans le bottom sheet conversationnel.
 | Date unique (validite attestation) | `ask_date` |
 | Periode (exercice fiscal) | `ask_date_range` |
 | Auto-evaluation (etoiles 1-5 / points 1-10) | `ask_rating` |
-| Upload fichier (business plan, statuts) | `ask_file_upload` |
+| Upload fichier (business plan, statuts) | AUCUN widget — inviter à utiliser le bouton d'ajout de fichier (trombone) |
 | Creation entite 3+ champs | `show_form` |
 | Recap extraction document avec edition | `show_summary_card` |
 
@@ -98,9 +98,10 @@ ask_date_range(question="Quel exercice fiscal evaluez-vous ?")
 ask_rating(question="Comment evaluez-vous votre pratique de tri selectif ?",
            scale=5, labels=["Tres mauvais", "Mauvais", "Moyen", "Tres bien", "Excellent"])
 
-# Upload contextualise
-ask_file_upload(question="Pouvez-vous m'envoyer votre business plan ?",
-                accept=[".pdf", ".docx"], max_size_mb=10)
+# Upload de fichier : PAS de widget. Inviter en texte à utiliser le bouton
+# d'ajout de fichier (trombone) de la zone de saisie. Exemple de formulation :
+# « Pour joindre votre business plan, cliquez sur l'icône trombone (📎) en bas
+#   de la zone de message et sélectionnez votre fichier (PDF, DOCX…). »
 
 # Creation entite (max 10 champs)
 show_form(title="Nouveau projet vert",
