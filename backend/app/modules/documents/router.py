@@ -91,6 +91,8 @@ async def upload_documents(
                 content_type=file.content_type or "application/octet-stream",
                 file_size=len(content),
                 conversation_id=conversation_id,
+                # F02 — tenant requis (documents.account_id NOT NULL en PostgreSQL).
+                account_id=current_user.account_id,
             )
             uploaded_docs.append(
                 DocumentResponse(

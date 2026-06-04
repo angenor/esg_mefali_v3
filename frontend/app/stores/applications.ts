@@ -7,6 +7,11 @@ export interface SectionsProgress {
   validated: number
 }
 
+export interface ChecklistProgress {
+  provided: number
+  total: number
+}
+
 export interface ApplicationSummary {
   id: string
   fund_name: string
@@ -15,6 +20,7 @@ export interface ApplicationSummary {
   status: string
   status_label: string
   sections_progress: SectionsProgress
+  checklist_progress: ChecklistProgress
   created_at: string
   updated_at: string
 }
@@ -40,12 +46,21 @@ export interface SectionData {
   updated_at: string | null
 }
 
+export interface DocumentRef {
+  id: string
+  original_filename: string
+  mime_type: string
+  status: string
+}
+
 export interface ChecklistItem {
   key: string
   name: string
   status: string
   document_id: string | null
   required_by: string
+  // 049 — sous-objet enrichi par l'API (null si pas/plus rattaché).
+  document?: DocumentRef | null
 }
 
 export interface ApplicationDetail {
@@ -58,6 +73,7 @@ export interface ApplicationDetail {
   status_label: string
   sections: Record<string, SectionData>
   checklist: ChecklistItem[]
+  checklist_progress: ChecklistProgress
   intermediary_prep: Record<string, unknown> | null
   simulation: Record<string, unknown> | null
   created_at: string
@@ -111,6 +127,30 @@ export const useApplicationsStore = defineStore('applications', () => {
     }
   }
 
+  /**
+   * 049 — Remplace (par sa ``key``) un item de checklist du dossier courant par
+   * sa version enrichie renvoyée par l'API (mise à jour optimiste après
+   * rattachement / détachement).
+   */
+  function setChecklistItem(itemKey: string, item: ChecklistItem) {
+    if (!currentApplication.value) return
+    currentApplication.value = {
+      ...currentApplication.value,
+      checklist: currentApplication.value.checklist.map(it =>
+        it.key === itemKey ? item : it,
+      ),
+    }
+  }
+
+  /** 049 — Met à jour la progression documentaire du dossier courant. */
+  function setChecklistProgress(progress: ChecklistProgress) {
+    if (!currentApplication.value) return
+    currentApplication.value = {
+      ...currentApplication.value,
+      checklist_progress: progress,
+    }
+  }
+
   function reset() {
     applications.value = []
     applicationsTotal.value = 0
@@ -134,6 +174,8 @@ export const useApplicationsStore = defineStore('applications', () => {
     setError,
     setActiveTab,
     updateSection,
+    setChecklistItem,
+    setChecklistProgress,
     reset,
   }
 })

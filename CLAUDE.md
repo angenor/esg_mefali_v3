@@ -139,3 +139,8 @@ Pour le détail technique exhaustif (tables, colonnes, FK, endpoints, composants
 - Python 3.12, TypeScript 5.x strict + FastAPI, SQLAlchemy async, Pydantic v2, Alembic, LangGraph (>=0.2), LangChain (>=0.3), WeasyPrint, python-docx.
 - Nuxt 4, Vue 3 Composition API, Pinia, TailwindCSS, Chart.js, Leaflet.
 - PostgreSQL 16 + pgvector (embeddings Voyage depuis mig. 043).
+- Python 3.12 (backend), TypeScript 5.x strict (frontend) + FastAPI, SQLAlchemy async, Pydantic v2 (backend) ; Nuxt 4, Vue 3 Composition API, Pinia, TailwindCSS (frontend) (049-checklist-documents)
+- PostgreSQL 16 — réutilisation du champ `fund_applications.checklist` (JSON) et de la table `documents`. **Aucune migration Alembic** (pas de changement de schéma). (049-checklist-documents)
+
+## Recent Changes
+- 049-checklist-documents: Added Python 3.12 (backend), TypeScript 5.x strict (frontend) + FastAPI, SQLAlchemy async, Pydantic v2 (backend) ; Nuxt 4, Vue 3 Composition API, Pinia, TailwindCSS (frontend)

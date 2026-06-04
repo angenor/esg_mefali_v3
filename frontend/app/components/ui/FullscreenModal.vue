@@ -1,6 +1,9 @@
 <script setup lang="ts">
 const props = defineProps<{
   visible: boolean
+  // 049 — permet de masquer la croix de fermeture du modal lorsque le contenu
+  // slotté fournit déjà la sienne (ex. DocumentPreview), évitant un double bouton.
+  showClose?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -44,8 +47,9 @@ onUnmounted(() => {
         @click="handleBackdropClick"
       >
         <div class="relative w-full max-w-5xl max-h-[90vh] bg-white dark:bg-dark-card rounded-2xl shadow-2xl overflow-auto p-6">
-          <!-- Bouton fermer -->
+          <!-- Bouton fermer (masquable si le contenu fournit déjà le sien) -->
           <button
+            v-if="showClose !== false"
             class="absolute top-3 right-3 w-8 h-8 flex items-center justify-center rounded-full text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-dark-hover transition-colors"
             @click="emit('close')"
           >

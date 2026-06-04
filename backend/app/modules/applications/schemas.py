@@ -90,6 +90,16 @@ class SectionUpdateRequest(BaseModel):
     status: SectionStatusEnum | None = None
 
 
+class AttachDocumentRequest(BaseModel):
+    """049 — Rattachement (ou remplacement) du document d'un item de checklist.
+
+    Un ``document_id`` mal formé ou absent → 422 (validation Pydantic), conforme
+    au contrat ``attach-document.md`` (FR-001..FR-004, FR-007).
+    """
+
+    document_id: uuid.UUID
+
+
 class ExportRequest(BaseModel):
     """Demande d'export."""
 
@@ -148,14 +158,44 @@ class SectionsProgress(BaseModel):
     validated: int
 
 
+class DocumentRef(BaseModel):
+    """049 — Référence légère vers un document rattaché à un item de checklist.
+
+    Exposée dans la sérialisation enrichie de la checklist (sous-objet
+    ``document``) pour afficher le nom du fichier (FR-004) et permettre
+    l'aperçu (FR-005) sans recharger la liste documentaire complète.
+    """
+
+    id: uuid.UUID
+    original_filename: str
+    mime_type: str
+    status: str
+
+    model_config = {"from_attributes": True}
+
+
 class ChecklistItem(BaseModel):
-    """Element de checklist."""
+    """Element de checklist (forme de SORTIE enrichie — ``ChecklistItemOut``).
+
+    049 — ``status`` est le statut EFFECTIF (revalidé à la sérialisation) et
+    ``document`` est peuplé par chargement groupé des ``document_id`` non nuls.
+    Un item dont le document est introuvable/supprimé est renvoyé
+    ``status="missing"``, ``document=null`` (défense en profondeur, research D3).
+    """
 
     key: str
     name: str
     status: str
     document_id: uuid.UUID | None = None
     required_by: str
+    document: DocumentRef | None = None
+
+
+class ChecklistProgress(BaseModel):
+    """049 — Progression documentaire d'un dossier (FR-008, SC-004)."""
+
+    provided: int
+    total: int
 
 
 class ApplicationSummary(BaseModel):
@@ -168,6 +208,7 @@ class ApplicationSummary(BaseModel):
     status: ApplicationStatusEnum
     status_label: str
     sections_progress: SectionsProgress
+    checklist_progress: ChecklistProgress
     created_at: datetime
     updated_at: datetime
 
@@ -186,6 +227,7 @@ class ApplicationResponse(BaseModel):
     status_label: str
     sections: dict
     checklist: list[ChecklistItem]
+    checklist_progress: ChecklistProgress
     intermediary_prep: dict | None = None
     simulation: dict | None = None
     created_at: datetime
@@ -231,3 +273,19 @@ def compute_sections_progress(sections: dict) -> SectionsProgress:
         if s.get("status") == "validated"
     )
     return SectionsProgress(total=total, generated=generated, validated=validated)
+
+
+def compute_checklist_progress(items: list) -> ChecklistProgress:
+    """049 — Calculer la progression documentaire (FR-008, SC-004).
+
+    Compte les items au statut « provided ». Accepte aussi bien des items
+    stockés (dict) que des items sérialisés (statut effectif) : un item est
+    « provided » ssi son champ ``status`` vaut ``"provided"``.
+    """
+    total = len(items)
+    provided = sum(
+        1 for it in items
+        if (it.get("status") if isinstance(it, dict) else getattr(it, "status", None))
+        == "provided"
+    )
+    return ChecklistProgress(provided=provided, total=total)

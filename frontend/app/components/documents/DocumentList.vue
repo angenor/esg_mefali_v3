@@ -4,6 +4,9 @@ import type { Document, DocumentType, DocumentStatus } from '~/types/documents'
 const props = defineProps<{
   documents: Document[]
   isLoading?: boolean
+  // 049 — masque l'action destructrice (corbeille + confirmation) lorsque la
+  // liste sert de sélecteur (DocumentPicker), où seul @select a du sens.
+  selectableOnly?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -158,8 +161,9 @@ function executeDelete(id: string) {
           {{ statusLabels[doc.status] }}
         </span>
 
-        <!-- Bouton supprimer -->
+        <!-- Bouton supprimer (masqué en mode sélecteur) -->
         <button
+          v-if="!selectableOnly"
           class="shrink-0 p-1.5 text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all"
           @click.stop="confirmDelete(doc.id)"
         >

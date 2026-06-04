@@ -207,8 +207,15 @@ async def upload_document(
     content_type: str,
     file_size: int,
     conversation_id: uuid.UUID | None = None,
+    account_id: uuid.UUID | None = None,
 ) -> Document:
-    """Uploader un document : validation, stockage et enregistrement BDD."""
+    """Uploader un document : validation, stockage et enregistrement BDD.
+
+    F02 — ``account_id`` (tenant) est requis en base PostgreSQL (colonne
+    ``documents.account_id`` NOT NULL post-migration 019). On le propage depuis
+    l'utilisateur courant ; ``None`` reste toléré par le modèle pour les tests
+    legacy (SQLite, sans contrainte).
+    """
     _validate_mime_type(content_type)
     _validate_file_size(file_size)
     # F10 — Validation MIME signature (refus si extension/signature incohérent).
@@ -227,6 +234,7 @@ async def upload_document(
     document = Document(
         id=document_id,
         user_id=user_id,
+        account_id=account_id,
         conversation_id=conversation_id,
         filename=safe_filename,
         original_filename=filename,
@@ -665,7 +673,16 @@ async def delete_document(
     db: AsyncSession,
     document: Document,
 ) -> None:
-    """Supprimer un document (fichier physique + BDD)."""
+    """Supprimer un document (fichier physique + BDD).
+
+    049 (FR-014, SC-005) — Avant la suppression, on nettoie les références
+    souples portées par les checklists de dossiers : tout item du compte
+    référençant ce document repasse à « missing ». Dépendance unidirectionnelle
+    documents → applications (import différé pour éviter un cycle).
+    """
+    from app.modules.applications.service import clear_document_references
+
+    await clear_document_references(db, document.account_id, document.id)
     _delete_file_from_disk(document.storage_path)
     await db.delete(document)
     await db.flush()

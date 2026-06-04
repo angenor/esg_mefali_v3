@@ -100,12 +100,28 @@ class TestGetApplicationChecklist:
     @patch("app.modules.applications.service.get_checklist", new_callable=AsyncMock)
     @patch("app.modules.applications.service.get_application_by_id", new_callable=AsyncMock)
     async def test_checklist_success(self, mock_get_app, mock_checklist, mock_config):
-        """Checklist retourne les elements."""
+        """Checklist : parité FR-019 — lecture de la forme réelle des items
+        (`{key, name, status, document_id, required_by}`)."""
         app = _make_application()
+        app.user_id = mock_config["configurable"]["user_id"]
         mock_get_app.return_value = app
+        # 049 — forme RÉELLE stockée (et non l'ancienne forme fictive
+        # `{label, required, provided}` qui n'existe nulle part).
         mock_checklist.return_value = [
-            {"label": "Statuts", "required": True, "provided": True},
-            {"label": "Plan financier", "required": True, "provided": False},
+            {
+                "key": "company_registration",
+                "name": "Registre de commerce (RCCM)",
+                "status": "provided",
+                "document_id": str(uuid.uuid4()),
+                "required_by": "fund_direct",
+            },
+            {
+                "key": "financial_statements",
+                "name": "Plan financier",
+                "status": "missing",
+                "document_id": None,
+                "required_by": "fund_direct",
+            },
         ]
 
         result = await get_application_checklist.ainvoke(
@@ -113,7 +129,10 @@ class TestGetApplicationChecklist:
             config=mock_config,
         )
 
-        assert "Statuts" in result or "checklist" in result.lower()
+        # Le libellé `name` remonte, le comptage utilise status == "provided".
+        assert "Registre de commerce (RCCM)" in result
+        assert "Plan financier" in result
+        assert "1/2 documents fournis" in result
 
 
 class TestSimulateFinancing:

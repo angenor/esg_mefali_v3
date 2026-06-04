@@ -514,10 +514,15 @@ async def get_application_checklist(
         lines: list[str] = ["Checklist du dossier :"]
         provided_count = 0
         for item in checklist:
-            status_icon = "[X]" if item.get("provided") else "[ ]"
-            required_label = " (requis)" if item.get("required") else ""
-            lines.append(f"  {status_icon} {item.get('label', 'N/A')}{required_label}")
-            if item.get("provided"):
+            # 049 (FR-019) — parité : on lit la forme réelle des items stockés
+            # (`{key, name, status, document_id, required_by}`). « fourni » ⇔
+            # status == "provided" ; tous les items du catalogue sont requis,
+            # ce que signale la présence de `required_by`.
+            provided = item.get("status") == "provided"
+            status_icon = "[X]" if provided else "[ ]"
+            required_label = " (requis)" if item.get("required_by") else ""
+            lines.append(f"  {status_icon} {item.get('name', 'N/A')}{required_label}")
+            if provided:
                 provided_count += 1
 
         lines.append(f"\nProgression : {provided_count}/{len(checklist)} documents fournis.")

@@ -4,6 +4,7 @@ import { useApplicationsStore } from '~/stores/applications'
 import { useSources } from '~/composables/useSources'
 import SourceLink from '~/components/sources/SourceLink.vue'
 import SourceModal from '~/components/sources/SourceModal.vue'
+import ChecklistItemRow from '~/components/applications/ChecklistItemRow.vue'
 
 definePageMeta({ layout: 'default' })
 
@@ -86,6 +87,20 @@ const TARGET_TYPE_COLORS: Record<string, string> = {
   intermediary_bank: 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300',
   intermediary_agency: 'bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300',
   intermediary_developer: 'bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300',
+}
+
+// 049 — progression documentaire (M / N) de l'onglet Checklist.
+const checklistPercent = computed(() => {
+  const p = app.value?.checklist_progress
+  if (!p || p.total === 0) return 0
+  return Math.round((p.provided / p.total) * 100)
+})
+
+// 049 — après un rattachement/détachement, le store est déjà mis à jour de
+// façon optimiste (item enrichi + progression) ; on recharge le dossier pour
+// garantir la cohérence du statut effectif (FR-014, défense en profondeur).
+async function handleChecklistChanged() {
+  if (app.value) await fetchApplication(app.value.id)
 }
 
 const SECTION_STATUS_LABELS: Record<string, string> = {
@@ -370,45 +385,34 @@ function formatXOF(amount: number): string {
 
       <!-- Onglet Checklist -->
       <div v-if="activeTab === 'checklist'" class="bg-white dark:bg-dark-card border border-gray-200 dark:border-dark-border rounded-xl p-6">
-        <h3 class="text-lg font-semibold text-surface-text dark:text-surface-dark-text mb-4">
-          Documents requis
-        </h3>
+        <div class="flex items-center justify-between mb-4 gap-4">
+          <h3 class="text-lg font-semibold text-surface-text dark:text-surface-dark-text">
+            Documents requis
+          </h3>
+          <!-- 049 (US5) — progression M / N documents fournis -->
+          <div v-if="app.checklist.length > 0" class="text-right shrink-0">
+            <div class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              {{ app.checklist_progress.provided }} / {{ app.checklist_progress.total }} documents fournis
+            </div>
+            <div class="w-40 h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+              <div
+                class="h-full bg-emerald-500 rounded-full transition-all"
+                :style="{ width: `${checklistPercent}%` }"
+              />
+            </div>
+          </div>
+        </div>
         <div v-if="app.checklist.length === 0" class="text-gray-400 dark:text-gray-500 italic">
           Aucun document requis.
         </div>
-        <div v-else class="space-y-3">
-          <div
+        <div v-else class="space-y-1">
+          <ChecklistItemRow
             v-for="item in app.checklist"
             :key="item.key"
-            class="flex items-center justify-between py-3 border-b border-gray-100 dark:border-gray-800 last:border-0"
-          >
-            <div class="flex items-center gap-3">
-              <div
-                :class="[
-                  'w-5 h-5 rounded-full flex items-center justify-center',
-                  item.status === 'provided'
-                    ? 'bg-emerald-100 text-emerald-600 dark:bg-emerald-900 dark:text-emerald-400'
-                    : 'bg-gray-100 text-gray-400 dark:bg-gray-700 dark:text-gray-500',
-                ]"
-              >
-                <svg v-if="item.status === 'provided'" class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
-                  <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" />
-                </svg>
-                <div v-else class="w-2 h-2 rounded-full bg-current" />
-              </div>
-              <span class="text-sm text-surface-text dark:text-surface-dark-text">{{ item.name }}</span>
-            </div>
-            <span
-              :class="[
-                'text-xs font-medium px-2 py-0.5 rounded-full',
-                item.status === 'provided'
-                  ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900 dark:text-emerald-300'
-                  : 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300',
-              ]"
-            >
-              {{ item.status === 'provided' ? 'Fourni' : 'Manquant' }}
-            </span>
-          </div>
+            :application-id="app.id"
+            :item="item"
+            @changed="handleChecklistChanged"
+          />
         </div>
       </div>
 

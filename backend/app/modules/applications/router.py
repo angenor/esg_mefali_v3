@@ -17,7 +17,9 @@ from app.modules.applications.schemas import (
     ApplicationStatusResponse,
     ApplicationStatusUpdate,
     ApplicationSummary,
+    AttachDocumentRequest,
     ChecklistItem,
+    ChecklistProgress,
     ExportRequest,
     FundInfo,
     IntermediaryInfo,
@@ -25,6 +27,7 @@ from app.modules.applications.schemas import (
     SectionGenerateRequest,
     SectionResponse,
     SectionUpdateRequest,
+    compute_checklist_progress,
     compute_sections_progress,
     get_status_label,
 )
@@ -110,9 +113,12 @@ async def get_application_detail(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> ApplicationResponse:
-    """Detail d'un dossier."""
+    """Detail d'un dossier (checklist enrichie + progression — 049)."""
+    from app.modules.applications.service import serialize_checklist
+
     application = await _get_user_application(db, application_id, current_user.id)
-    return _build_application_response(application)
+    serialized = await serialize_checklist(db, application)
+    return _build_application_response(application, serialized_checklist=serialized)
 
 
 @router.patch("/{application_id}/status", response_model=ApplicationStatusResponse)
@@ -202,12 +208,85 @@ async def get_checklist(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> dict:
-    """Checklist documentaire adaptee au destinataire."""
-    from app.modules.applications.service import get_checklist as get_cl
+    """Checklist documentaire enrichie (statut effectif + progression — 049)."""
+    from app.modules.applications.service import serialize_checklist
 
     application = await _get_user_application(db, application_id, current_user.id)
-    checklist = await get_cl(db, application)
-    return {"success": True, "data": checklist}
+    serialized = await serialize_checklist(db, application)
+    progress = compute_checklist_progress(serialized)
+    return {
+        "success": True,
+        "data": serialized,
+        "checklist_progress": progress.model_dump(),
+    }
+
+
+@router.put("/{application_id}/checklist/{item_key}/document")
+async def attach_checklist_document(
+    application_id: uuid.UUID,
+    item_key: str,
+    body: AttachDocumentRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    """Rattacher / remplacer le document d'un item de checklist (US1/US2/US4).
+
+    Codes (contrat ``attach-document.md``) : 403 document d'un autre compte
+    (FR-010), 404 dossier / item / document introuvable (FR-016/FR-018), 422
+    body invalide. Réponse : item enrichi + ``checklist_progress``.
+    """
+    from app.modules.applications.service import (
+        ApplicationItemNotFound,
+        DocumentCrossAccount,
+        DocumentNotFound,
+        attach_checklist_document as attach_doc,
+    )
+
+    application = await _get_user_application(db, application_id, current_user.id)
+    try:
+        result = await attach_doc(db, application, item_key, body.document_id)
+    except DocumentCrossAccount:
+        raise HTTPException(
+            status_code=403,
+            detail="Ce document n'appartient pas à votre organisation.",
+        )
+    except DocumentNotFound:
+        raise HTTPException(status_code=404, detail="Document introuvable.")
+    except ApplicationItemNotFound:
+        raise HTTPException(
+            status_code=404, detail="Élément de checklist introuvable."
+        )
+
+    return {"success": True, "data": result}
+
+
+@router.delete("/{application_id}/checklist/{item_key}/document")
+async def detach_checklist_document(
+    application_id: uuid.UUID,
+    item_key: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    """Détacher le document d'un item de checklist (US4) → item « missing ».
+
+    Ne supprime pas le document (FR-011). Idempotent sur un item déjà
+    « missing ». 404 si dossier ou ``item_key`` introuvable. Réponse : item +
+    ``checklist_progress``.
+    """
+    from app.modules.applications.service import (
+        ApplicationItemNotFound,
+        detach_checklist_document as detach_doc,
+    )
+
+    application = await _get_user_application(db, application_id, current_user.id)
+    try:
+        result = await detach_doc(db, application, item_key)
+    except ApplicationItemNotFound:
+        raise HTTPException(
+            status_code=404, detail="Élément de checklist introuvable."
+        )
+
+    return {"success": True, "data": result}
 
 
 # =====================================================================
@@ -360,13 +439,26 @@ def _build_application_summary(application) -> ApplicationSummary:
         status=status_val,
         status_label=get_status_label(status_val),
         sections_progress=compute_sections_progress(application.sections or {}),
+        # 049 — progression documentaire (badge « M/N » de la carte de dossier).
+        # Calculée sur le statut stocké (maintenu cohérent par le nettoyage
+        # eager FR-014), sans charger les documents (pas de N+1 sur la liste).
+        checklist_progress=compute_checklist_progress(list(application.checklist or [])),
         created_at=application.created_at,
         updated_at=application.updated_at,
     )
 
 
-def _build_application_response(application) -> ApplicationResponse:
-    """Construire la reponse complete d'un dossier."""
+def _build_application_response(
+    application,
+    serialized_checklist: list[dict] | None = None,
+) -> ApplicationResponse:
+    """Construire la reponse complete d'un dossier.
+
+    049 — ``serialized_checklist`` (statut effectif + sous-objet document) est
+    fourni par les endpoints qui chargent les documents référencés. À défaut
+    (ex. POST création : tous les items « missing »), on retombe sur la forme
+    stockée. ``checklist_progress`` est dérivé de la checklist effective.
+    """
     status_val = application.status.value if hasattr(application.status, 'value') else application.status
     target_val = application.target_type.value if hasattr(application.target_type, 'value') else application.target_type
 
@@ -391,9 +483,14 @@ def _build_application_response(application) -> ApplicationResponse:
     match_info = None
     # match_id existe mais on n'a pas de relation chargee — a enrichir si besoin
 
+    source_items = (
+        serialized_checklist
+        if serialized_checklist is not None
+        else list(application.checklist or [])
+    )
     checklist_items = [
         ChecklistItem(**item) if isinstance(item, dict) else item
-        for item in (application.checklist or [])
+        for item in source_items
     ]
 
     return ApplicationResponse(
@@ -406,6 +503,7 @@ def _build_application_response(application) -> ApplicationResponse:
         status_label=get_status_label(status_val),
         sections=application.sections or {},
         checklist=checklist_items,
+        checklist_progress=compute_checklist_progress(source_items),
         intermediary_prep=application.intermediary_prep,
         simulation=application.simulation,
         created_at=application.created_at,

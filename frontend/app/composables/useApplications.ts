@@ -1,6 +1,10 @@
 import { ref } from 'vue'
 import { useApplicationsStore } from '~/stores/applications'
-import type { ApplicationDetail, ApplicationSummary } from '~/stores/applications'
+import type {
+  ApplicationDetail,
+  ApplicationSummary,
+  ChecklistItem,
+} from '~/stores/applications'
 
 export function useApplications() {
   const config = useRuntimeConfig()
@@ -226,6 +230,76 @@ export function useApplications() {
     }
   }
 
+  /**
+   * 049 (US1/US2/US4) — Rattache (ou remplace) le document d'un item de
+   * checklist. PUT idempotent ; met à jour le store (item enrichi + progression)
+   * en cas de succès. Retourne ``true`` si l'opération a abouti.
+   */
+  async function attachDocument(
+    applicationId: string,
+    itemKey: string,
+    documentId: string,
+  ): Promise<boolean> {
+    error.value = ''
+    try {
+      const response = await fetch(
+        `${apiBase}/applications/${applicationId}/checklist/${itemKey}/document`,
+        {
+          method: 'PUT',
+          headers: getHeaders(),
+          body: JSON.stringify({ document_id: documentId }),
+        },
+      )
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}))
+        if (response.status === 403) {
+          throw new Error(
+            errData.detail || "Ce document n'appartient pas à votre organisation.",
+          )
+        }
+        throw new Error(errData.detail || 'Erreur lors du rattachement du document')
+      }
+      const data = await response.json()
+      appStore.setChecklistItem(itemKey, data.data.item as ChecklistItem)
+      appStore.setChecklistProgress(data.data.checklist_progress)
+      return true
+    } catch (e) {
+      error.value = e instanceof Error ? e.message : 'Erreur inconnue'
+      return false
+    }
+  }
+
+  /**
+   * 049 (US4) — Détache le document d'un item (→ « Manquant »). Le document
+   * n'est pas supprimé (réutilisable ailleurs). Met à jour le store.
+   */
+  async function detachDocument(
+    applicationId: string,
+    itemKey: string,
+  ): Promise<boolean> {
+    error.value = ''
+    try {
+      const response = await fetch(
+        `${apiBase}/applications/${applicationId}/checklist/${itemKey}/document`,
+        {
+          method: 'DELETE',
+          headers: getHeaders(),
+        },
+      )
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}))
+        throw new Error(errData.detail || 'Erreur lors du détachement du document')
+      }
+      const data = await response.json()
+      appStore.setChecklistItem(itemKey, data.data.item as ChecklistItem)
+      appStore.setChecklistProgress(data.data.checklist_progress)
+      return true
+    } catch (e) {
+      error.value = e instanceof Error ? e.message : 'Erreur inconnue'
+      return false
+    }
+  }
+
   async function simulateFinancing(applicationId: string): Promise<Record<string, unknown> | null> {
     loading.value = true
     try {
@@ -287,6 +361,8 @@ export function useApplications() {
     updateStatus,
     exportApplication,
     fetchChecklist,
+    attachDocument,
+    detachDocument,
     simulateFinancing,
     generatePrepSheet,
   }

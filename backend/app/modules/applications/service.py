@@ -470,3 +470,272 @@ async def get_checklist(
 ) -> list[dict]:
     """Retourner la checklist du dossier."""
     return list(application.checklist)
+
+
+# ---------------------------------------------------------------------
+# 049 — Fourniture des documents de la checklist
+# ---------------------------------------------------------------------
+
+
+class ChecklistError(Exception):
+    """Erreur de base pour les opérations de checklist documentaire (049)."""
+
+
+class ApplicationItemNotFound(ChecklistError):
+    """``item_key`` absent de la checklist du dossier → 404 (FR-016)."""
+
+
+class DocumentNotFound(ChecklistError):
+    """``document_id`` ne résout aucun document → 404."""
+
+
+class DocumentCrossAccount(ChecklistError):
+    """Document d'un autre compte que le dossier → 403 (FR-010, SC-003)."""
+
+
+def _coerce_uuid(value) -> uuid.UUID | None:
+    """Convertit une valeur (str/UUID/None) en UUID, ou None si invalide."""
+    if value is None:
+        return None
+    if isinstance(value, uuid.UUID):
+        return value
+    try:
+        return uuid.UUID(str(value))
+    except (ValueError, TypeError):
+        return None
+
+
+def _document_belongs_to_application(document, application: FundApplication) -> bool:
+    """Vrai si ``document`` est rattachable au dossier (même tenant).
+
+    Règle (research D6) : si les deux ``account_id`` sont connus, ils doivent
+    être égaux. Pour les documents legacy sans ``account_id`` (nullable), on
+    exige au moins le même propriétaire (``user_id``) que le dossier. Garantit
+    SC-003 (0 rattachement inter-comptes) tout en tolérant les documents legacy.
+    """
+    doc_account = getattr(document, "account_id", None)
+    app_account = getattr(application, "account_id", None)
+    if doc_account is not None and app_account is not None:
+        return doc_account == app_account
+    return document.user_id == application.user_id
+
+
+async def _load_referenced_documents(
+    db: AsyncSession,
+    application: FundApplication,
+    document_ids: list[uuid.UUID],
+) -> dict[uuid.UUID, "Document"]:
+    """Charge en une requête (anti-N+1) les documents référencés, filtrés au
+    compte du dossier (défense en profondeur, research D3)."""
+    from app.models.document import Document
+
+    if not document_ids:
+        return {}
+    result = await db.execute(
+        select(Document).where(Document.id.in_(document_ids))
+    )
+    resolved: dict[uuid.UUID, Document] = {}
+    for doc in result.scalars().all():
+        if _document_belongs_to_application(doc, application):
+            resolved[doc.id] = doc
+    return resolved
+
+
+def _document_ref(document) -> dict:
+    """Sous-objet ``document`` sérialisé pour un item « provided »."""
+    status = document.status.value if hasattr(document.status, "value") else document.status
+    return {
+        "id": document.id,
+        "original_filename": document.original_filename,
+        "mime_type": document.mime_type,
+        "status": status,
+    }
+
+
+def _serialize_item(item: dict, document) -> dict:
+    """Construit la forme enrichie (``ChecklistItemOut``) d'un item.
+
+    ``document`` est l'objet ``Document`` résolu (ou ``None``). Le statut renvoyé
+    est EFFECTIF : « provided » ssi un document valide est résolu.
+    """
+    if document is not None:
+        return {
+            "key": item["key"],
+            "name": item["name"],
+            "status": "provided",
+            "required_by": item.get("required_by", ""),
+            "document_id": document.id,
+            "document": _document_ref(document),
+        }
+    return {
+        "key": item["key"],
+        "name": item["name"],
+        "status": "missing",
+        "required_by": item.get("required_by", ""),
+        "document_id": None,
+        "document": None,
+    }
+
+
+async def serialize_checklist(
+    db: AsyncSession,
+    application: FundApplication,
+) -> list[dict]:
+    """Sérialise la checklist enrichie (statut effectif + sous-objet document).
+
+    Chargement groupé des ``document_id`` non nuls (anti-N+1). Un document
+    introuvable/supprimé ou d'un autre compte → item « missing », document null
+    (research D3).
+    """
+    checklist = list(application.checklist or [])
+    doc_ids: list[uuid.UUID] = []
+    for item in checklist:
+        did = _coerce_uuid(item.get("document_id"))
+        if did is not None:
+            doc_ids.append(did)
+    documents = await _load_referenced_documents(db, application, doc_ids)
+    return [
+        _serialize_item(item, documents.get(_coerce_uuid(item.get("document_id"))))
+        for item in checklist
+    ]
+
+
+async def attach_checklist_document(
+    db: AsyncSession,
+    application: FundApplication,
+    item_key: str,
+    document_id: uuid.UUID,
+) -> dict:
+    """Rattache (ou remplace) le document d'un item de checklist (US1/US2/US4).
+
+    Atomique par item (FR-021) : verrou de ligne ``with_for_update()`` sur le
+    dossier avant le read-modify-write du JSON ``checklist`` (research D11), de
+    sorte qu'une écriture concurrente sur un autre item ne soit pas écrasée.
+
+    Raises:
+        DocumentNotFound: ``document_id`` inexistant.
+        DocumentCrossAccount: document d'un autre compte (FR-010).
+        ApplicationItemNotFound: ``item_key`` absent de la checklist.
+    """
+    from app.models.document import Document
+
+    # Verrou de ligne + RELECTURE EFFECTIVE : `populate_existing=True` force la
+    # ré-hydratation des attributs de l'instance déjà présente dans l'identity
+    # map (chargée par le routeur via _get_user_application) depuis la ligne
+    # re-verrouillée. Sans cela, l'ORM renverrait l'instance avec son `checklist`
+    # périmé (pré-verrou) → le read-modify-write écraserait une écriture
+    # concurrente committée entre-temps (last-write-wins), violant FR-021.
+    locked = await db.execute(
+        select(FundApplication)
+        .where(FundApplication.id == application.id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    app_locked = locked.scalar_one()
+
+    document = await db.get(Document, document_id)
+    if document is None:
+        raise DocumentNotFound(str(document_id))
+    if not _document_belongs_to_application(document, app_locked):
+        raise DocumentCrossAccount(str(document_id))
+
+    checklist = [dict(it) for it in (app_locked.checklist or [])]
+    target = next((it for it in checklist if it.get("key") == item_key), None)
+    if target is None:
+        raise ApplicationItemNotFound(item_key)
+
+    target["document_id"] = str(document.id)
+    target["status"] = "provided"
+    app_locked.checklist = checklist
+    app_locked.updated_at = datetime.now(timezone.utc)
+    await db.flush()
+
+    from app.modules.applications.schemas import compute_checklist_progress
+
+    return {
+        "item": _serialize_item(target, document),
+        "checklist_progress": compute_checklist_progress(checklist).model_dump(),
+    }
+
+
+async def detach_checklist_document(
+    db: AsyncSession,
+    application: FundApplication,
+    item_key: str,
+) -> dict:
+    """Détache le document d'un item (US4) → item « missing ».
+
+    Ne supprime PAS le document (réutilisable ailleurs — FR-011). Idempotent :
+    détacher un item déjà « missing » renvoie l'item inchangé. Atomique par item
+    (verrou de ligne, research D11).
+
+    Raises:
+        ApplicationItemNotFound: ``item_key`` absent de la checklist.
+    """
+    # Verrou + relecture effective (cf. attach : populate_existing évite de
+    # repartir d'un `checklist` périmé → garantit l'atomicité par item FR-021).
+    locked = await db.execute(
+        select(FundApplication)
+        .where(FundApplication.id == application.id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    app_locked = locked.scalar_one()
+
+    checklist = [dict(it) for it in (app_locked.checklist or [])]
+    target = next((it for it in checklist if it.get("key") == item_key), None)
+    if target is None:
+        raise ApplicationItemNotFound(item_key)
+
+    target["document_id"] = None
+    target["status"] = "missing"
+    app_locked.checklist = checklist
+    app_locked.updated_at = datetime.now(timezone.utc)
+    await db.flush()
+
+    from app.modules.applications.schemas import compute_checklist_progress
+
+    return {
+        "item": _serialize_item(target, None),
+        "checklist_progress": compute_checklist_progress(checklist).model_dump(),
+    }
+
+
+async def clear_document_references(
+    db: AsyncSession,
+    account_id: uuid.UUID | None,
+    document_id: uuid.UUID,
+) -> None:
+    """Nettoyage eager des références à un document supprimé (FR-014, SC-005).
+
+    Parcourt les dossiers du compte et réinitialise (``document_id=None``,
+    ``status="missing"``) chaque item référençant ``document_id``. Appelé depuis
+    ``documents.service.delete_document`` (dépendance unidirectionnelle
+    documents → applications) AVANT la suppression de la ligne document.
+    """
+    target_id = _coerce_uuid(document_id)
+    if target_id is None:
+        return
+
+    query = select(FundApplication)
+    if account_id is not None:
+        query = query.where(FundApplication.account_id == account_id)
+    # populate_existing : rafraîchit les instances déjà chargées (la session de
+    # delete_document peut en contenir) pour ne pas réécrire un `checklist` périmé.
+    result = await db.execute(
+        query.with_for_update().execution_options(populate_existing=True)
+    )
+
+    for app in result.scalars().all():
+        checklist = [dict(it) for it in (app.checklist or [])]
+        changed = False
+        for item in checklist:
+            if _coerce_uuid(item.get("document_id")) == target_id:
+                item["document_id"] = None
+                item["status"] = "missing"
+                changed = True
+        if changed:
+            app.checklist = checklist
+            app.updated_at = datetime.now(timezone.utc)
+
+    await db.flush()
