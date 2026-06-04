@@ -68,7 +68,7 @@ Et les fondamentaux sont sains dès le départ : chaque client nous rapporte plu
 
 ## SLIDE 6 — Go-to-Market · `~0:20`
 
-On conquiert en trois vagues sur 36 mois. D'abord valider : deux marchés pilotes, 80 premiers clients payants. Ensuite scaler : on acquiert à coût marginal en s'appuyant sur les bailleurs — BOAD, AFD via SUNREF, GCF — pour atteindre 800 payants. Enfin étendre : le plan Max, l'API, et une levée de 3 à 5 millions en Series A. Le tout pour un coût d'acquisition de 40 dollars seulement, dont 60 % vient justement de ces bailleurs.
+On conquiert en trois vagues sur 36 mois. D'abord valider deux marchés pilotes, 80 premiers clients payants. Ensuite scaler : on acquiert à coût marginal en s'appuyant sur les bailleurs — BOAD, AFD via SUNREF, GCF — pour atteindre 800 payants. Enfin étendre : le plan Max, l'API, et une levée de 3 à 5 millions en Series A. Le tout pour un coût d'acquisition de 40 dollars seulement, dont 60 % vient justement de ces bailleurs.
 
 ↪ *Derrière les chiffres, il y a une raison d'être.*
 
