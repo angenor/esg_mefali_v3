@@ -2105,6 +2105,7 @@ async def chat_node(
     pour permettre au LLM de mettre a jour le profil et consulter les donnees
     en temps reel depuis la base.
     """
+    from app.graph.tools.application_tools import APPLICATION_STATUS_TOOLS
     from app.graph.tools.carbon_tools import generate_carbon_report
     from app.graph.tools.chat_tools import CHAT_TOOLS
     from app.graph.tools.document_tools import DOCUMENT_TOOLS
@@ -2126,6 +2127,11 @@ async def chat_node(
     # et le LLM hallucine « tool indisponible » quand le routing reste sur chat.
     # F047 — PROJECT_ESG_TOOLS ajoutés au catalogue pour que le selecteur puisse
     # les inclure quand current_page=`profile_projects` ou `profile_projects_esg`.
+    # 051 — APPLICATION_STATUS_TOOLS (list_applications / get_application_checklist,
+    # LECTURE SEULE) ajoutés au catalogue pour que le selecteur puisse les surfacer
+    # depuis le chat flottant (« où en est mon dossier ? » depuis n'importe quelle
+    # page). Sans cette entrée, le mapping `chat` les filtre via base_names &
+    # available_names et le LLM hallucine « tool indisponible ».
     all_tools = (
         PROFILING_TOOLS
         + CHAT_TOOLS
@@ -2136,6 +2142,7 @@ async def chat_node(
         + PROJECT_TOOLS
         + PROJECT_ESG_TOOLS
         + VISUALIZATION_TOOLS
+        + APPLICATION_STATUS_TOOLS
         + [generate_esg_report, generate_carbon_report]
     )
 

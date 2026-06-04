@@ -21,6 +21,7 @@ import tiktoken
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.graph.tool_selector_config import SKILL_PROTECTED_READONLY_TOOLS
 from app.models.source import Source
 
 logger = logging.getLogger(__name__)
@@ -216,6 +217,20 @@ def select_tools_with_skills(
             whitelist,
             base_names,
         )
+        # Le fallback retourne tout base_tools (qui inclut déjà les tools
+        # protégés) — la garantie de statut est donc préservée ici aussi.
         return list(base_tools)
 
-    return intersected
+    # 051 — Les tools de découverte/statut en LECTURE SEULE survivent TOUJOURS à
+    # l'intersection : un skill restreint les tools experts de sa procédure mais
+    # ne doit jamais masquer un tool de statut que l'utilisateur peut demander à
+    # tout moment (« où en est mon dossier ? »). On les ré-ajoute s'ils étaient
+    # dans base_tools mais absents du whitelist du skill, en préservant l'ordre
+    # (matches d'abord) et sans doublon.
+    intersected_names = {getattr(t, "name", None) for t in intersected}
+    protected = [
+        t for t in base_tools
+        if getattr(t, "name", None) in SKILL_PROTECTED_READONLY_TOOLS
+        and getattr(t, "name", None) not in intersected_names
+    ]
+    return intersected + protected

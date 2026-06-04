@@ -992,3 +992,16 @@ APPLICATION_DISCOVERY_TOOLS = [
     provide_checklist_document,
     detach_checklist_document,
 ]
+
+
+# 051 — Sous-ensemble LECTURE SEULE (découverte + statut) destiné à la base du
+# chat flottant : injecté dans le catalogue ET le ToolNode du nœud `chat` (cf.
+# nodes.py / graph.py) pour qu'une demande « où en est mon dossier ? » fonctionne
+# depuis N'IMPORTE QUELLE page sans navigation manuelle. Volontairement SANS les
+# tools de mutation (`provide_checklist_document`/`detach_checklist_document`),
+# qui restent réservés aux nœuds application/financing (049). Les deux tools sont
+# scopés au `user_id` du config (garde anti-IDOR F02) : aucune fuite cross-tenant.
+APPLICATION_STATUS_TOOLS = [
+    list_applications,
+    get_application_checklist,
+]

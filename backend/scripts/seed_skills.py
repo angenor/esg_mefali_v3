@@ -24,7 +24,7 @@ from sqlalchemy import select  # noqa: E402
 
 from app.core.database import async_session_factory  # noqa: E402
 from app.models.user import User  # noqa: E402
-from app.modules.skills.seed import seed_skills  # noqa: E402
+from app.modules.skills.seed import seed_skills, sync_seed_tool_whitelists  # noqa: E402
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
@@ -43,11 +43,16 @@ async def main() -> int:
             return 1
 
         inserted = await seed_skills(session, default_creator_id=admin.id)
+        # Resynchronise les tool_whitelist des skills DÉJÀ présentes (seed_skills
+        # étant insert-only) — ex. 051 : list_applications/get_application_checklist.
+        synced = await sync_seed_tool_whitelists(session)
         await session.commit()
         if inserted == 0:
-            logger.info("Seed skills : toutes les 3 skills sont déjà présentes.")
+            logger.info("Seed skills : toutes les skills sont déjà présentes.")
         else:
             logger.info("Seed skills : %d skills insérées.", inserted)
+        if synced:
+            logger.info("Seed skills : %d tool_whitelist resynchronisés.", synced)
         return 0
 
 

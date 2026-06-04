@@ -137,6 +137,7 @@ def build_graph() -> StateGraph:
     # nommant un fonds, ex. « candidature au fonds vert ») reste EXÉCUTABLE.
     from app.graph.tools.application_tools import (
         APPLICATION_DISCOVERY_TOOLS,
+        APPLICATION_STATUS_TOOLS,
         APPLICATION_TOOLS,
     )
     from app.graph.tools.carbon_tools import CARBON_TOOLS
@@ -179,7 +180,12 @@ def build_graph() -> StateGraph:
     # les exécuter (cf. commentaire ci-dessus). Sans cela, le LLM hallucine
     # « tool indisponible » et retombe sur ask_interactive_question.
     from app.graph.tools.project_esg_tools import PROJECT_ESG_TOOLS as _PROJECT_ESG_TOOLS
-    create_tool_loop(graph, "chat", chat_node, tools=PROFILING_TOOLS + CHAT_TOOLS + DOCUMENT_TOOLS + INTERACTIVE_TOOLS + GUIDED_TOUR_TOOLS + MEMORY_TOOLS + PROJECT_TOOLS + _PROJECT_ESG_TOOLS + RESOURCE_TOOLS + REPORT_TOOLS)
+    # 051 — APPLICATION_STATUS_TOOLS (list_applications / get_application_checklist,
+    # LECTURE SEULE) doivent figurer AUSSI dans le ToolNode `chat`, sinon le LLM
+    # voit ces tools de découverte (via bind_tools) mais ne peut pas les EXÉCUTER
+    # → hallucination « tool indisponible ». Permet « où en est mon dossier ? »
+    # depuis le chat flottant sur n'importe quelle page.
+    create_tool_loop(graph, "chat", chat_node, tools=PROFILING_TOOLS + CHAT_TOOLS + DOCUMENT_TOOLS + INTERACTIVE_TOOLS + GUIDED_TOUR_TOOLS + MEMORY_TOOLS + PROJECT_TOOLS + _PROJECT_ESG_TOOLS + RESOURCE_TOOLS + REPORT_TOOLS + APPLICATION_STATUS_TOOLS)
     create_tool_loop(graph, "esg_scoring", esg_scoring_node, tools=ESG_TOOLS + INTERACTIVE_TOOLS + GUIDED_TOUR_TOOLS + MEMORY_TOOLS + RESOURCE_TOOLS)
     create_tool_loop(graph, "carbon", carbon_node, tools=CARBON_TOOLS + INTERACTIVE_TOOLS + GUIDED_TOUR_TOOLS + MEMORY_TOOLS + RESOURCE_TOOLS)
     # 049 — Le nœud financing peut recevoir une demande de dossier (« mon dossier

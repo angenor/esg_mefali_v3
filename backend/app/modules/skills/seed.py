@@ -137,6 +137,12 @@ def _build_seeds(creator_id: uuid.UUID) -> list[dict]:
             "tool_whitelist": [
                 "update_company_profile",
                 "get_company_profile",
+                # 051 — Découverte/statut des dossiers (LECTURE SEULE) : ce skill
+                # s'active sur /financing /applications, où l'utilisateur peut
+                # demander « où en est mon dossier ? ». Sans ces entrées,
+                # l'intersection F23 les masque.
+                "list_applications",
+                "get_application_checklist",
             ],
             "sources": [],
             "activation_rules": {
@@ -198,6 +204,13 @@ def _build_seeds(creator_id: uuid.UUID) -> list[dict]:
                 "create_fund_application",
                 "update_company_profile",
                 "get_company_profile",
+                # 051 — Découverte/statut des dossiers (LECTURE SEULE) : un expert
+                # dossier DOIT pouvoir lister les dossiers et lire leur checklist
+                # (« où en est mon dossier ? »). Sans ces entrées, l'intersection
+                # F23 (select_tools_with_skills) les retire alors qu'ils sont
+                # exposés par le sélecteur → l'agent répond « tool indisponible ».
+                "list_applications",
+                "get_application_checklist",
             ],
             "sources": [],
             "activation_rules": {
@@ -591,3 +604,29 @@ async def seed_skills(
         logger.info("[skills.seed] %s insérée (status=%s)", seed["name"], status)
     await db.flush()
     return inserted
+
+
+async def sync_seed_tool_whitelists(db: AsyncSession) -> int:
+    """Aligne le ``tool_whitelist`` des skills seedées DÉJÀ présentes sur les défs
+    de seed (``seed_skills`` étant insert-only : il ne met jamais à jour les rows
+    existantes).
+
+    Idempotent : ne touche qu'une row dont le whitelist diffère de la déf de seed.
+    Utile après ajout de tools à un whitelist (ex. 051 : ``list_applications`` /
+    ``get_application_checklist`` sur les skills dossier/financement) sans recréer
+    les skills ni bumper de version. Retourne le nombre de rows mises à jour.
+    """
+    # ``creator_id`` est sans effet ici (aucune insertion) — uuid factice.
+    desired = {s["name"]: list(s["tool_whitelist"]) for s in _build_seeds(uuid.uuid4())}
+    rows = (
+        await db.execute(select(Skill).where(Skill.name.in_(desired)))
+    ).scalars().all()
+    updated = 0
+    for skill in rows:
+        want = desired.get(skill.name)
+        if want is not None and list(skill.tool_whitelist or []) != want:
+            skill.tool_whitelist = want
+            updated += 1
+            logger.info("[skills.seed] tool_whitelist resynchronisé pour %s", skill.name)
+    await db.flush()
+    return updated
