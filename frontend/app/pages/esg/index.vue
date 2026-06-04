@@ -45,6 +45,21 @@ async function startNewAssessment(): Promise<void> {
   }
 }
 
+// Numéro d'évaluation logique : séquence chronologique propre à l'utilisateur
+// (la plus ancienne = n°1). Le champ `assessment.version` est réservé au
+// versioning catalogue (F04) et vaut 1 pour toutes les évaluations — l'afficher
+// produisait un libellé « v1 » identique et trompeur pour chaque ligne.
+const assessmentNumberById = computed<Record<string, number>>(() => {
+  const sorted = [...esgStore.assessments].sort(
+    (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
+  )
+  const map: Record<string, number> = {}
+  sorted.forEach((a, index) => {
+    map[a.id] = index + 1
+  })
+  return map
+})
+
 function formatDate(dateStr: string): string {
   return new Date(dateStr).toLocaleDateString('fr-FR', {
     day: 'numeric',
@@ -168,7 +183,7 @@ function scoreColor(score: number | null): string {
               <div>
                 <div class="flex items-center gap-2">
                   <span class="font-semibold text-surface-text dark:text-surface-dark-text">
-                    Evaluation v{{ assessment.version }}
+                    Évaluation n°{{ assessmentNumberById[assessment.id] }}
                   </span>
                   <span
                     class="inline-block px-2 py-0.5 rounded-full text-xs font-medium"
