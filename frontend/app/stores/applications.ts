@@ -1,10 +1,24 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
+import type { ObjectiveEnvValue, ProjectStatus } from '~/types/project'
 
 export interface SectionsProgress {
   total: number
   generated: number
   validated: number
+}
+
+/**
+ * 050 — Projet vert auquel le dossier se rapporte (lien 1:1, F06). ``status``
+ * réutilise ``ProjectStatus`` pour résoudre le libellé via ``STATUS_LABELS``
+ * (``~/types/project``). ``null`` pour les dossiers legacy sans projet.
+ */
+export interface ApplicationProjectInfo {
+  id: string
+  name: string
+  status: ProjectStatus
+  objective_env: ObjectiveEnvValue[]
+  description: string | null
 }
 
 export interface ChecklistProgress {
@@ -16,6 +30,8 @@ export interface ApplicationSummary {
   id: string
   fund_name: string
   intermediary_name: string | null
+  // 050 — rappel du projet lié sur la carte de dossier (null si legacy).
+  project: ApplicationProjectInfo | null
   target_type: string
   status: string
   status_label: string
@@ -68,6 +84,8 @@ export interface ApplicationDetail {
   fund: FundInfo
   intermediary: IntermediaryInfo | null
   match: { id: string; compatibility_score: number } | null
+  // 050 — projet vert ciblé par le dossier (null si legacy project_id NULL).
+  project: ApplicationProjectInfo | null
   target_type: string
   status: string
   status_label: string

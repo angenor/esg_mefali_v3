@@ -128,3 +128,45 @@ class TestSelectToolsWithSkills:
         skill = _mock_skill(tool_whitelist=["x"])
         out = select_tools_with_skills(base, [skill], allow_fallback=True)
         assert [t.name for t in out] == ["a"]
+
+    # ─── 051 — Protection des tools de découverte/statut (lecture seule) ──────
+
+    def test_readonly_discovery_tools_survive_intersection(self) -> None:
+        """Un skill « dossier » dont le whitelist liste create_fund_application
+        + update_company_profile mais PAS les tools de statut ne doit pas masquer
+        list_applications / get_application_checklist (« où en est mon dossier ? »
+        doit rester possible sous skill)."""
+        base = [
+            self._tool("create_fund_application"),
+            self._tool("update_company_profile"),
+            self._tool("list_applications"),
+            self._tool("get_application_checklist"),
+            self._tool("get_esg_assessment_chat"),
+        ]
+        # Réplique le whitelist réel de skill_dossier_gcf_via_boad.
+        skill = _mock_skill(
+            name="skill_dossier_gcf_via_boad",
+            tool_whitelist=["create_fund_application", "update_company_profile", "get_company_profile"],
+        )
+        out = {t.name for t in select_tools_with_skills(base, [skill])}
+        # Les tools expert du whitelist sont conservés…
+        assert {"create_fund_application", "update_company_profile"} <= out
+        # …ET les tools de statut/découverte en lecture seule survivent.
+        assert {"list_applications", "get_application_checklist", "get_esg_assessment_chat"} <= out
+
+    def test_protected_tools_not_injected_when_absent_from_base(self) -> None:
+        """La protection ne fait que CONSERVER : elle n'ajoute jamais un tool
+        protégé absent du catalogue du nœud."""
+        base = [self._tool("create_fund_application"), self._tool("update_company_profile")]
+        skill = _mock_skill(tool_whitelist=["create_fund_application"])
+        out = {t.name for t in select_tools_with_skills(base, [skill])}
+        assert out == {"create_fund_application"}
+        assert "list_applications" not in out
+
+    def test_protected_tool_in_whitelist_not_duplicated(self) -> None:
+        """Un tool protégé déjà dans le whitelist n'apparaît qu'une fois."""
+        base = [self._tool("list_applications"), self._tool("create_fund_application")]
+        skill = _mock_skill(tool_whitelist=["list_applications", "create_fund_application"])
+        out = [t.name for t in select_tools_with_skills(base, [skill])]
+        assert out.count("list_applications") == 1
+        assert set(out) == {"list_applications", "create_fund_application"}

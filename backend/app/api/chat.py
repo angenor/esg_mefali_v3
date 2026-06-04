@@ -1203,6 +1203,11 @@ async def send_message(
                 content_type=file.content_type or "application/octet-stream",
                 file_size=len(file_content),
                 conversation_id=conversation.id,
+                # F02 — tenant requis (documents.account_id NOT NULL en
+                # PostgreSQL, mig. 019). Sans cet argument, l'INSERT lève une
+                # IntegrityError non interceptée (seul ValueError l'est) → 500
+                # sur POST /messages, masqué côté navigateur en erreur CORS.
+                account_id=current_user.account_id,
             )
         except ValueError as e:
             return StreamingResponse(

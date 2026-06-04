@@ -34,6 +34,17 @@ import re
 # GLOBAL_WHITELIST (le chat est flottant, accessible depuis toute page) et
 # RETIRES des PAGE_TOOL_MAPPING explicites pour respecter la borne 36.
 # Compte transverse : 16 widgets/sourcing/memory/resources + 6 F047 = 22.
+# 051 : 2 tools de découverte/statut LECTURE SEULE (list_applications,
+# get_application_checklist) ajoutés à la BASE DU CHAT (MODULE_TOOL_MAPPING['chat']
+# + PAGE_TOOL_MAPPING['chat_global']) — PAS à GLOBAL_WHITELIST, pour ne pas
+# pousser les pages déjà pleines (profile_projects/financing à 35) au-delà de la
+# borne. La borne reste donc à 36 (inchangée). Projection chat_global : 12 tools
+# de page | 21 whitelist = 33 ≤ 36 ; sélection runtime du nœud chat = 36 pile sur
+# sa surface d'origine (/chat, /). Sur des pages plus riches (/financing,
+# /carbon, /esg, /profile), la base unie atteint 37-38 → troncature PAGE-TIER
+# bénigne : la priorité (whitelist > nœud > page) garantit que TOUS les tools du
+# nœud chat — dont les 2 tools de découverte — sont préservés ; seuls des widgets
+# de page (ex. show_summary_card/show_form) surnuméraires sont coupés.
 MAX_TOOLS_PER_TURN: int = 36
 
 # Whitelist transverse : tools toujours disponibles, ajoutes a chaque selection.
@@ -50,15 +61,18 @@ GLOBAL_WHITELIST: frozenset[str] = frozenset({
     # F12 — recall_history transverse pour permettre la recherche sémantique
     # dans l'historique depuis n'importe quel noeud spécialiste.
     "recall_history",
-    # F10 — 7 widgets transverses disponibles partout (FR-014, FR-015).
+    # F10 — widgets transverses disponibles partout (FR-014, FR-015).
     # show_form / show_summary_card sont contextuels (ajoutés par MODULE_TOOL_MAPPING).
+    # NB : ``ask_file_upload`` (widget d'upload) est VOLONTAIREMENT retiré — le
+    # bouton natif d'ajout de fichier de la zone de saisie remplace ce widget.
+    # Le LLM ne doit donc plus proposer de widget d'upload mais INVITER
+    # l'utilisateur à utiliser ce bouton (cf. prompts/system.py & widget.py).
     "ask_yes_no",
     "ask_select",
     "ask_number",
     "ask_date",
     "ask_date_range",
     "ask_rating",
-    "ask_file_upload",
     # F20 — Bibliothèque Ressources : recherche transverse depuis tous les nœuds.
     "search_resources",
     "get_resource_content",
@@ -78,6 +92,24 @@ GLOBAL_WHITELIST: frozenset[str] = frozenset({
     "get_project_esg_assessment",
     "list_project_esg_assessments",
     "generate_project_esg_report",
+})
+
+
+# 051 — Tools de DÉCOUVERTE/STATUT en LECTURE SEULE qui doivent SURVIVRE à
+# l'intersection des skills (F23). Un skill (playbook) restreint les tools
+# EXPERTS/d'action de sa procédure via son `tool_whitelist`, mais ne doit JAMAIS
+# masquer un tool de statut que l'utilisateur peut demander à tout moment
+# (« où en est mon dossier ? », « mon score ESG ? »). Sans cette protection,
+# `select_tools_with_skills` (prompt_fusion) retire ces tools dès qu'un skill
+# dont le whitelist ne les liste pas est actif — défaisant la garantie 051.
+# Tous sont strictement en lecture seule et scopés au user_id (anti-IDOR F02).
+SKILL_PROTECTED_READONLY_TOOLS: frozenset[str] = frozenset({
+    "list_applications",          # découverte des dossiers
+    "get_application_checklist",  # statut documentaire d'un dossier
+    "get_esg_assessment_chat",    # score ESG (lecture)
+    "get_carbon_summary_chat",    # bilan carbone (lecture)
+    "get_user_dashboard_summary",  # état d'avancement transverse
+    "get_company_profile_chat",   # profil entreprise (lecture)
 })
 
 
@@ -101,6 +133,12 @@ PAGE_TOOL_MAPPING: dict[str, frozenset[str]] = {
         # filtre et le LLM hallucine « tool indisponible ».
         "generate_esg_report",
         "generate_carbon_report",
+        # 051 — Découverte/statut des dossiers (LECTURE SEULE) depuis le chat
+        # flottant : « où en est mon dossier ? » doit fonctionner depuis /chat
+        # comme depuis toute autre page (cf. MODULE_TOOL_MAPPING['chat']). Les
+        # mutations de checklist restent réservées aux nœuds application/financing.
+        "list_applications",
+        "get_application_checklist",
     }),
     # Profil entreprise : edition de fiche + lecture profil.
     "profile": frozenset({
@@ -220,6 +258,11 @@ PAGE_TOOL_MAPPING: dict[str, frozenset[str]] = {
         "get_application_checklist",
         "simulate_financing",
         "export_application",
+        # 049 — Découverte des dossiers depuis l'onglet /applications.
+        # provide/detach_checklist_document restent fournis via
+        # MODULE_TOOL_MAPPING["application"] (nœud, priorité de troncature
+        # supérieure) pour respecter la borne statique PAGE|GLOBAL ≤ MAX.
+        "list_applications",
         # F11 — Match/Comparison pour comparer offres concurrentes
         "show_match_card",
         "show_comparison_table",
@@ -302,6 +345,16 @@ MODULE_TOOL_MAPPING: dict[str, frozenset[str]] = {
         "list_matches_for_project",
         # F045 — Matching projet-centric depuis le chat global
         "match_funds_for_project",
+        # 051 — Découverte/statut des dossiers (LECTURE SEULE) disponibles
+        # depuis le chat flottant sur N'IMPORTE QUELLE page. Le mapping de nœud
+        # étant page-indépendant, ces tools sont exposés même quand le routing
+        # reste sur `chat` (formulations ambiguës/proactives non happées par un
+        # détecteur spécialiste). `get_esg_assessment_chat` (score ESG) et
+        # `get_user_dashboard_summary` (état d'avancement) sont déjà listés
+        # ci-dessus. Exécutables via APPLICATION_STATUS_TOOLS injecté au ToolNode
+        # chat (graph.py). Garde anti-IDOR : tools scopés au user_id (F02).
+        "list_applications",
+        "get_application_checklist",
     }),
     "esg_scoring": frozenset({
         "create_esg_assessment",
@@ -339,6 +392,15 @@ MODULE_TOOL_MAPPING: dict[str, frozenset[str]] = {
         "save_fund_interest",
         "get_fund_details",
         "create_fund_application",
+        # 049 — Une demande de dossier existant (« mon dossier GCF ») est happée
+        # par le nœud financing (mot-clé fonds prioritaire) : il doit pouvoir
+        # lister les dossiers, lire la checklist et fournir un document.
+        # `get_application_checklist` listé ici car absent de FINANCING_TOOLS.
+        "list_applications",
+        "get_application_checklist",
+        "provide_checklist_document",
+        "detach_checklist_document",
+        "list_user_documents",
         # F11 — Match/Comparison/Map pour matching et géolocalisation
         "show_match_card",
         "show_comparison_table",
@@ -362,6 +424,13 @@ MODULE_TOOL_MAPPING: dict[str, frozenset[str]] = {
         "get_application_checklist",
         "simulate_financing",
         "export_application",
+        # 049 — Découverte des dossiers + fourniture des documents de checklist.
+        "list_applications",
+        "provide_checklist_document",
+        "detach_checklist_document",
+        # 049 — list_user_documents visible ici (US2 : rattacher un document
+        # déjà téléversé). Exécutable via DOCUMENT_TOOLS injecté au ToolNode.
+        "list_user_documents",
         # F11 — Match/Comparison pour comparaison cross-offres
         "show_match_card",
         "show_comparison_table",

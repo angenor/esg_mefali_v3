@@ -68,3 +68,8 @@ de plus j'ai de nouvelles évolution pour la plateforme:
 - le Tableau de bord peut etre plus expressif, plus grafique
 
 Comment gerer tout ca avec BMAD
+
+
+Retour arrière (si besoin) pour ECC
+bash ~/.claude/_ecc_disabled_20260603-081806/RESTORE.sh   # remet les fichiers
+cp ~/.claude/settings.json.bak-20260603-083927 ~/.claude/settings.json  # remet les réglages

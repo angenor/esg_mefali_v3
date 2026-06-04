@@ -133,6 +133,10 @@ class TestGetApplicationChecklist:
         assert "Registre de commerce (RCCM)" in result
         assert "Plan financier" in result
         assert "1/2 documents fournis" in result
+        # 049 — l'item_key DOIT être exposé : sans lui, provide_checklist_document
+        # ne peut pas être appelé (le LLM ne voit sinon que le libellé).
+        assert "company_registration" in result
+        assert "financial_statements" in result
 
 
 class TestSimulateFinancing:
@@ -194,8 +198,8 @@ class TestApplicationToolsExport:
     """Tests pour l'export du module."""
 
     def test_tools_list_count(self):
-        """APPLICATION_TOOLS contient 6 tools."""
-        assert len(APPLICATION_TOOLS) == 6
+        """APPLICATION_TOOLS contient 9 tools (6 + 3 tools 049 découverte/checklist)."""
+        assert len(APPLICATION_TOOLS) == 9
 
     def test_tool_names(self):
         """Les tools ont les bons noms."""
@@ -207,6 +211,10 @@ class TestApplicationToolsExport:
             "get_application_checklist",
             "simulate_financing",
             "export_application",
+            # 049 — découverte des dossiers + fourniture des documents de checklist.
+            "list_applications",
+            "provide_checklist_document",
+            "detach_checklist_document",
         }
 
     def test_tools_have_french_descriptions(self):

@@ -489,13 +489,28 @@ async def analyze_document(
         document.status = DocumentStatus.analyzed
         await db.flush()
 
-        # Stocker les embeddings pour le RAG (non bloquant)
+        # Stocker les embeddings pour le RAG (NON BLOQUANT — défense en profondeur).
+        # Isolé dans un SAVEPOINT : si l'INSERT échoue (ex. dimension du vecteur
+        # incohérente avec la colonne `document_chunks.embedding` — voir note
+        # ci-dessous), seul le savepoint est annulé. SANS cette isolation, un
+        # échec de `flush()` met la session PostgreSQL en état « aborted » et
+        # TOUTE opération suivante lève « transaction has been rolled back »,
+        # cassant la réponse chat alors que l'analyse, elle, a réussi.
+        #
+        # NOTE (dette tech) : `_get_embeddings` produit des vecteurs 1536d
+        # (OpenAI text-embedding-3-small) alors que la migration 043 a porté
+        # `document_chunks.embedding` à `vector(1024)` (Voyage). L'indexation RAG
+        # des documents est donc inopérante tant que ce chemin n'est pas aligné
+        # sur Voyage (cf. `docs/embeddings-voyage.md`). Le savepoint garantit que
+        # cette dette ne casse pas l'upload/analyse/rattachement.
         try:
-            await store_embeddings(db, document.id, raw_text)
+            async with db.begin_nested():
+                await store_embeddings(db, document.id, raw_text)
         except Exception:
             logger.warning(
-                "Erreur lors du stockage des embeddings pour %s",
+                "Stockage des embeddings ignoré pour %s (RAG non indexé)",
                 document.id,
+                exc_info=True,
             )
 
         return analysis
