@@ -24,6 +24,7 @@ from app.modules.applications.schemas import (
     FundInfo,
     IntermediaryInfo,
     MatchInfo,
+    ProjectInfo,
     SectionGenerateRequest,
     SectionResponse,
     SectionUpdateRequest,
@@ -435,6 +436,12 @@ def _build_application_summary(application) -> ApplicationSummary:
         id=application.id,
         fund_name=application.fund.name if application.fund else "Inconnu",
         intermediary_name=application.intermediary.name if application.intermediary else None,
+        # 050 — rappel du projet lié (None si legacy project_id NULL).
+        project=(
+            ProjectInfo.model_validate(application.project)
+            if application.project
+            else None
+        ),
         target_type=target_val,
         status=status_val,
         status_label=get_status_label(status_val),
@@ -483,6 +490,13 @@ def _build_application_response(
     match_info = None
     # match_id existe mais on n'a pas de relation chargee — a enrichir si besoin
 
+    # 050 — projet vert ciblé par le dossier (None si legacy project_id NULL).
+    project_info = (
+        ProjectInfo.model_validate(application.project)
+        if application.project
+        else None
+    )
+
     source_items = (
         serialized_checklist
         if serialized_checklist is not None
@@ -498,6 +512,7 @@ def _build_application_response(
         fund=fund_info,
         intermediary=intermediary_info,
         match=match_info,
+        project=project_info,
         target_type=target_val,
         status=status_val,
         status_label=get_status_label(status_val),

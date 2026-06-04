@@ -5,6 +5,7 @@ import { useSources } from '~/composables/useSources'
 import SourceLink from '~/components/sources/SourceLink.vue'
 import SourceModal from '~/components/sources/SourceModal.vue'
 import ChecklistItemRow from '~/components/applications/ChecklistItemRow.vue'
+import ApplicationProjectLink from '~/components/applications/ApplicationProjectLink.vue'
 
 definePageMeta({ layout: 'default' })
 
@@ -220,6 +221,14 @@ function formatXOF(amount: number): string {
             {{ TARGET_TYPE_LABELS[app.target_type] || app.target_type }}
           </span>
         </div>
+
+        <!-- 050 — Projet ciblé par le dossier (lien 1:1, F06) -->
+        <ApplicationProjectLink
+          v-if="app.project"
+          :project="app.project"
+          variant="header"
+          class="mb-4"
+        />
 
         <!-- Intermediaire (si present) -->
         <div v-if="app.intermediary" class="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4 mb-4">
