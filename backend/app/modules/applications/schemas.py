@@ -150,6 +150,26 @@ class MatchInfo(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class ProjectInfo(BaseModel):
+    """050 — Info projet vert rattaché à un dossier (lien 1:1, F06).
+
+    Exposé dans ``ApplicationResponse`` ET ``ApplicationSummary`` pour que l'UI
+    indique clairement à quel projet le dossier se rapporte. ``objective_env``
+    porte la classification thématique/sectorielle du projet (le modèle Project
+    n'a pas de champ « secteur » : les objectifs environnementaux en tiennent
+    lieu). ``status`` est la valeur brute — le libellé français est résolu côté
+    frontend (``types/project.ts`` ``STATUS_LABELS``).
+    """
+
+    id: uuid.UUID
+    name: str
+    status: str
+    objective_env: list[str] = Field(default_factory=list)
+    description: str | None = None
+
+    model_config = {"from_attributes": True}
+
+
 class SectionsProgress(BaseModel):
     """Progression des sections."""
 
@@ -204,6 +224,8 @@ class ApplicationSummary(BaseModel):
     id: uuid.UUID
     fund_name: str
     intermediary_name: str | None = None
+    # 050 — rappel discret du projet lié sur la carte de dossier (lien 1:1, F06).
+    project: ProjectInfo | None = None
     target_type: TargetTypeEnum
     status: ApplicationStatusEnum
     status_label: str
@@ -222,6 +244,8 @@ class ApplicationResponse(BaseModel):
     fund: FundInfo
     intermediary: IntermediaryInfo | None = None
     match: MatchInfo | None = None
+    # 050 — projet vert ciblé par le dossier (lien 1:1, F06).
+    project: ProjectInfo | None = None
     target_type: TargetTypeEnum
     status: ApplicationStatusEnum
     status_label: str

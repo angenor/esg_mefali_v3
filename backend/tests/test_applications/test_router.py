@@ -55,6 +55,9 @@ def _make_application(
     app_mock.match_id = None
     app_mock.intermediary_id = None
     app_mock.intermediary = None
+    # 050 — lien dossier↔projet. None par défaut (les builders de réponse
+    # exposent alors project=null sans tenter de valider un auto-MagicMock).
+    app_mock.project = None
     app_mock.target_type = MagicMock(value=target_type)
     app_mock.status = MagicMock(value=status)
     app_mock.sections = {

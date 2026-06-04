@@ -47,6 +47,7 @@ def _make_application(
     target_type: str = "fund_direct",
     status: str = "draft",
     sections: dict | None = None,
+    project=None,
 ) -> FundApplication:
     app = MagicMock(spec=FundApplication)
     app.id = uuid.uuid4()
@@ -72,6 +73,10 @@ def _make_application(
     app.submitted_at = None
     app.fund = _make_fund()
     app.intermediary = None
+    # 050 — lien dossier↔projet. Par défaut None (cas legacy : project_id NULL
+    # en base SQLite de test) ; ``generate_section`` doit alors générer sans
+    # contexte projet, sans crash.
+    app.project = project
     return app
 
 

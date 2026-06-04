@@ -61,6 +61,10 @@ async def test_t3_create_with_offer_and_project_returns_201(
     data = resp.json()
     assert data["status"] == "draft"
     assert data["fund"]["id"] == str(f048_offer.fund_id)
+    # 050 — le dossier expose le projet auquel il se rapporte (lien 1:1, F06).
+    assert data["project"] is not None
+    assert data["project"]["id"] == str(f048_project.id)
+    assert data["project"]["name"] == "Solarisation Boulangerie Dakar"
 
 
 async def test_t4_unknown_offer_returns_404(endpoint_client):

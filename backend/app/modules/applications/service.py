@@ -3,6 +3,7 @@
 import logging
 import uuid
 from datetime import datetime, timezone
+from decimal import Decimal
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -124,7 +125,9 @@ async def create_application(
         )
         existing_draft = existing.scalar_one_or_none()
         if existing_draft is not None:
-            await db.refresh(existing_draft, ["fund", "intermediary"])
+            # 050 — charger ``project`` (lazy selectin non déclenché hors requête)
+            # pour que la réponse expose le projet sans MissingGreenlet (async).
+            await db.refresh(existing_draft, ["fund", "intermediary", "project"])
             return existing_draft
 
     # Verifier que le fonds existe
@@ -155,7 +158,9 @@ async def create_application(
     )
     db.add(application)
     await db.flush()
-    await db.refresh(application, ["fund", "intermediary"])
+    # 050 — ``project`` chargé explicitement (selectin non déclenché à la
+    # création) pour exposer le projet lié dans la réponse sans MissingGreenlet.
+    await db.refresh(application, ["fund", "intermediary", "project"])
     return application
 
 
@@ -296,17 +301,39 @@ def build_section_prompt(
     company_context: str,
     fund_context: str,
     rag_context: str = "",
+    project_context: str = "",
 ) -> str:
-    """Construire le prompt pour generer une section du dossier."""
+    """Construire le prompt pour generer une section du dossier.
+
+    050 — ``project_context`` (issu de :func:`build_project_context`) injecte
+    les données réelles du PROJET vert lié au dossier (lien 1:1, F06). Sans lui,
+    les sections « projet » (description, impacts, budget) seraient inventées par
+    le LLM à partir des seules données génériques d'entreprise. Vide → bloc omis
+    (cas legacy ``project_id`` NULL).
+    """
     tone_instruction = section_config.get("tone", "Professionnel et factuel.")
     description = section_config.get("description", "")
+
+    project_block = ""
+    project_instruction = ""
+    if project_context:
+        project_block = (
+            "CONTEXTE PROJET (le dossier porte sur CE projet précis — appuie-toi "
+            "sur ces données réelles, n'invente rien) :\n"
+            f"{project_context}\n\n"
+        )
+        project_instruction = (
+            "\n- Pour toute section relative au projet (description, objectifs, "
+            "impacts, budget, localisation), appuie-toi EXCLUSIVEMENT sur le "
+            "CONTEXTE PROJET réel ci-dessus ; n'invente pas de données génériques."
+        )
 
     prompt = f"""Tu es un expert en redaction de dossiers de candidature aux fonds verts pour les PME africaines francophones.
 
 CONTEXTE ENTREPRISE :
 {company_context}
 
-CONTEXTE FONDS :
+{project_block}CONTEXTE FONDS :
 {fund_context}
 
 {"INFORMATIONS COMPLEMENTAIRES (RAG) :" + chr(10) + rag_context if rag_context else ""}
@@ -320,7 +347,7 @@ INSTRUCTIONS :
 - Redige le contenu de cette section en francais, de maniere professionnelle et complete.
 - Utilise un format HTML structure (titres h3/h4, paragraphes, listes a puces).
 - Adapte le ton au destinataire ({target_type}).
-- Integre les donnees de l'entreprise et du fonds disponibles.
+- Integre les donnees de l'entreprise et du fonds disponibles.{project_instruction}
 - Longueur visee : 300-800 mots selon la section.
 - Ne mets pas de titre principal (il sera ajoute par l'interface).
 - IMPORTANT : reponds UNIQUEMENT avec le HTML brut. N'entoure JAMAIS ta reponse
@@ -379,6 +406,158 @@ def build_company_context(profile) -> str:
     return "\n".join(parts)
 
 
+# Libellés français des énumérations Project (F06) pour le prompt LLM.
+# Le modèle Project stocke des valeurs canoniques (anglais) ; le prompt étant
+# rédigé en français, on les traduit pour un contexte naturel et précis.
+_PROJECT_OBJECTIVE_ENV_LABELS: dict[str, str] = {
+    # Libellés alignés sur le frontend (``types/project.ts`` OBJECTIVE_ENV_LABELS)
+    # pour une terminologie cohérente entre le prompt LLM et l'UI.
+    "mitigation": "Atténuation",
+    "adaptation": "Adaptation",
+    "biodiversity": "Biodiversité",
+    "circular_economy": "Économie circulaire",
+    "water": "Eau",
+    "renewable_energy": "Énergie renouvelable",
+    "sustainable_agriculture": "Agriculture durable",
+    "mixed": "Mixte",
+}
+
+_PROJECT_MATURITY_LABELS: dict[str, str] = {
+    "ideation": "Idéation",
+    "pre_feasibility": "Pré-faisabilité",
+    "pilot": "Pilote",
+    "scale": "Mise à l'échelle",
+    "replication": "Réplication",
+}
+
+_PROJECT_STATUS_LABELS: dict[str, str] = {
+    "draft": "Brouillon",
+    "seeking_funding": "En recherche de financement",
+    "funded": "Financé",
+    "in_execution": "En exécution",
+    "closed": "Clôturé",
+    "cancelled": "Annulé",
+}
+
+_PROJECT_FINANCING_STRUCTURE_LABELS: dict[str, str] = {
+    "subvention": "Subvention",
+    "pret_concessionnel": "Prêt concessionnel",
+    "equity": "Fonds propres (equity)",
+    "blending": "Financement mixte (blending)",
+    "mixte": "Mixte",
+}
+
+
+def _fmt_num(value) -> str:
+    """Formate un nombre (``Decimal``/``int``) pour le prompt LLM.
+
+    Les colonnes ``Numeric`` renvoient des ``Decimal`` à l'échelle déclarée
+    (ex. ``Numeric(20,2)`` → ``Decimal('75000000.00')``). On retire les zéros
+    décimaux parasites et on ajoute un séparateur de milliers (espace) pour un
+    contexte lisible : ``Decimal('75000000.00')`` → ``'75 000 000'``,
+    ``Decimal('12.50')`` → ``'12.5'``.
+    """
+    s = format(value, "f") if isinstance(value, Decimal) else str(value)
+    intpart, _, decpart = s.partition(".")
+    decpart = decpart.rstrip("0")
+    try:
+        grouped = f"{int(intpart):,}".replace(",", " ")
+    except ValueError:
+        return s
+    return f"{grouped}.{decpart}" if decpart else grouped
+
+
+def build_project_context(project) -> str:
+    """050 — Construit le bloc « CONTEXTE PROJET » injecté dans le prompt.
+
+    Le dossier de candidature est lié 1:1 à un projet vert
+    (:class:`~app.models.project.Project`, F06). Cette fonction restitue les
+    VRAIES données du projet ciblé (nom, description, objectifs, budget Money
+    typé, localisation, impacts attendus) afin que les sections générées par le
+    LLM reflètent le projet et non des données génériques d'entreprise.
+
+    Robuste au cas legacy : ``project`` à ``None`` (``project_id`` NULL en base
+    SQLite de test ou antérieur à la migration 025) → chaîne vide, sans crash.
+    Lit défensivement les attributs (``getattr``) pour tolérer des objets
+    partiels.
+    """
+    if project is None:
+        return ""
+
+    parts: list[str] = []
+
+    name = getattr(project, "name", None)
+    if name:
+        parts.append(f"Nom du projet : {name}")
+
+    description = getattr(project, "description", None)
+    if description:
+        parts.append(f"Description : {description}")
+
+    objective_env = getattr(project, "objective_env", None) or []
+    if objective_env:
+        labels = ", ".join(
+            _PROJECT_OBJECTIVE_ENV_LABELS.get(o, o) for o in objective_env
+        )
+        parts.append(f"Objectifs environnementaux : {labels}")
+
+    maturity = getattr(project, "maturity", None)
+    if maturity:
+        parts.append(
+            f"Maturité : {_PROJECT_MATURITY_LABELS.get(maturity, maturity)}"
+        )
+
+    status = getattr(project, "status", None)
+    if status:
+        parts.append(f"Statut : {_PROJECT_STATUS_LABELS.get(status, status)}")
+
+    # Budget cible — Money typé F04 (paire amount + currency, les deux requis).
+    amount = getattr(project, "target_amount_amount", None)
+    currency = getattr(project, "target_amount_currency", None)
+    if amount is not None and currency:
+        parts.append(f"Budget cible : {_fmt_num(amount)} {currency}")
+
+    duration_months = getattr(project, "duration_months", None)
+    if duration_months:
+        parts.append(f"Durée prévue : {duration_months} mois")
+
+    financing_structure = getattr(project, "financing_structure", None)
+    if financing_structure:
+        parts.append(
+            "Structure de financement : "
+            f"{_PROJECT_FINANCING_STRUCTURE_LABELS.get(financing_structure, financing_structure)}"
+        )
+
+    # Localisation (pays ISO + région éventuelle).
+    location_bits = [
+        b for b in (
+            getattr(project, "location_region", None),
+            getattr(project, "location_country", None),
+        ) if b
+    ]
+    if location_bits:
+        parts.append(f"Localisation : {', '.join(location_bits)}")
+
+    # Impacts attendus mesurables (concaténés sur une ligne).
+    impacts: list[str] = []
+    tco2e = getattr(project, "expected_impact_tco2e", None)
+    if tco2e is not None:
+        impacts.append(f"{_fmt_num(tco2e)} tCO2e évitées/an")
+    jobs = getattr(project, "expected_jobs_created", None)
+    if jobs:
+        impacts.append(f"{_fmt_num(jobs)} emplois créés")
+    beneficiaries = getattr(project, "expected_beneficiaries", None)
+    if beneficiaries:
+        impacts.append(f"{_fmt_num(beneficiaries)} bénéficiaires")
+    hectares = getattr(project, "expected_hectares_restored", None)
+    if hectares is not None:
+        impacts.append(f"{_fmt_num(hectares)} ha restaurés")
+    if impacts:
+        parts.append(f"Impacts attendus : {' ; '.join(impacts)}")
+
+    return "\n".join(parts)
+
+
 async def generate_section(
     db: AsyncSession,
     application: FundApplication,
@@ -409,6 +588,11 @@ async def generate_section(
     profile = await get_or_create_profile(db, application.user_id)
     company_context = build_company_context(profile)
 
+    # 050 — Construire le contexte PROJET réel (lien 1:1, F06). La relation
+    # ``project`` est lazy="selectin" : déjà chargée quand le dossier provient
+    # d'une requête (chemin router). Cas legacy (project_id NULL) → contexte vide.
+    project_context = build_project_context(application.project)
+
     # Construire le contexte fonds
     fund = application.fund
     fund_context = f"Fonds : {fund.name} ({fund.organization})"
@@ -435,6 +619,7 @@ async def generate_section(
         company_context=company_context,
         fund_context=fund_context,
         rag_context=rag_context,
+        project_context=project_context,
     )
 
     # Appeler le LLM

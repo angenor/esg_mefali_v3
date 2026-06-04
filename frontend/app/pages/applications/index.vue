@@ -2,6 +2,7 @@
 import { useApplications } from '~/composables/useApplications'
 import { useApplicationsStore } from '~/stores/applications'
 import type { ApplicationSummary } from '~/stores/applications'
+import ApplicationProjectLink from '~/components/applications/ApplicationProjectLink.vue'
 
 definePageMeta({ layout: 'default' })
 
@@ -136,6 +137,13 @@ function progressPercent(app: ApplicationSummary): number {
                 </svg>
                 {{ TARGET_TYPE_LABELS[app.target_type] || app.target_type }}
               </span>
+              <!-- 050 — rappel discret du projet lié (lien 1:1, F06) -->
+              <ApplicationProjectLink
+                v-if="app.project"
+                :project="app.project"
+                variant="compact"
+                class="max-w-[16rem]"
+              />
               <span v-if="app.intermediary_name" class="inline-flex items-center gap-1">
                 <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
