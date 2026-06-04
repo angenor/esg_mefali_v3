@@ -28,8 +28,8 @@ def test_create_fund_application_in_tools():
 
 
 def test_application_tools_count():
-    """T003 — APPLICATION_TOOLS contient 6 tools."""
-    assert len(APPLICATION_TOOLS) == 6
+    """T003 — APPLICATION_TOOLS contient 9 tools (6 + 3 tools 049 découverte/checklist)."""
+    assert len(APPLICATION_TOOLS) == 9
 
 
 def test_application_prompt_active_role():

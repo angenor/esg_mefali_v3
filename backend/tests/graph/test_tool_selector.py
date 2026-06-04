@@ -310,8 +310,10 @@ def test_global_whitelist_is_frozenset() -> None:
     assert isinstance(GLOBAL_WHITELIST, frozenset)
     # F01 ajoute les sourcing tools en GLOBAL_WHITELIST.
     # F12 ajoute recall_history en GLOBAL_WHITELIST (mémoire transverse).
-    # F10 ajoute 7 widgets transverses (yes_no/select/number/date/date_range/
-    # rating/file_upload). show_form / show_summary_card sont contextuels.
+    # F10 ajoute des widgets transverses (yes_no/select/number/date/date_range/
+    # rating). show_form / show_summary_card sont contextuels. NB :
+    # ``ask_file_upload`` a été retiré — le bouton natif d'ajout de fichier
+    # remplace le widget d'upload (le LLM invite à l'utiliser).
     # F20 ajoute 3 tools resources globaux.
     # F047 (bugfix US3 2026-05-23) : 6 tools ESG-projet transverses
     # — le chat est flottant et accessible depuis toutes les pages, donc
@@ -331,7 +333,6 @@ def test_global_whitelist_is_frozenset() -> None:
         "ask_date",
         "ask_date_range",
         "ask_rating",
-        "ask_file_upload",
         # F20 — Bibliothèque Ressources transverse.
         "search_resources",
         "get_resource_content",

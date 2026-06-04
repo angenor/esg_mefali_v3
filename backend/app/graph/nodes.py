@@ -108,6 +108,18 @@ _APPLICATION_KEYWORDS = [
     r"\b(?:cr[ée]er?|g[ée]n[ée]r\w*|pr[ée]par\w*|monter|constituer)\s+"
     r"(?:un\s+|le\s+|mon\s+|ce\s+)?dossier\b",
     r"\bdossier\s+(?:de\s+)?financement\b",
+    # 049 — Consultation/fourniture de documents de checklist. Ces phrases
+    # n'ont pas de sens « financement » : on les route vers le nœud application
+    # (qui expose list_applications / get_application_checklist /
+    # provide_checklist_document). « rattache … item » est volontairement
+    # spécifique (item|checklist|dossier|registre) pour NE PAS happer
+    # « rattacher un document à un projet » (flux PROJECT link_document_to_project).
+    r"\bchecklist\b",
+    r"\b(?:ma|mes)\s+candidatures?\b",
+    r"\brattach\w*\b.{0,40}\b(?:item|checklist|dossier|registre)\b",
+    r"\bd[ée]tach\w*\b.{0,40}\b(?:item|checklist|dossier)\b",
+    r"\bdocuments?\s+manquants?\b",
+    r"\bpi[èe]ces?\s+(?:justificatives?\s+)?manquantes?\b",
 ]
 _APPLICATION_PATTERNS = [re.compile(p, re.IGNORECASE) for p in _APPLICATION_KEYWORDS]
 
@@ -301,6 +313,25 @@ _APPLICATION_FLOW_DIRECTIVE = (
     "prétends PAS avoir généré le document : explique les critères ESG requis "
     "manquants (`missing_criteria`) et guide l'utilisateur pour compléter "
     "l'évaluation ESG-projet avant de réessayer.\n"
+    "\n## CONSULTER UN DOSSIER EXISTANT & FOURNIR SES DOCUMENTS — RÈGLE (049)\n"
+    "Quand l'utilisateur veut savoir où en est un dossier, ce qui manque, ou "
+    "rattacher / détacher un document d'un item de checklist :\n"
+    "1. Appelle `list_applications()` (SANS argument) pour lister ses dossiers "
+    "et identifier LE bon (par nom de fonds ou de projet). Ne réponds JAMAIS "
+    "« je n'ai pas d'outil pour consulter vos dossiers » — ce tool existe.\n"
+    "2. Appelle `get_application_checklist(application_id=<uuid>)` pour lire les "
+    "items et leur statut, puis ÉNUMÈRE explicitement les items « Manquant ».\n"
+    "3. Pour fournir un document : `list_user_documents()` pour retrouver un "
+    "document déjà téléversé, puis "
+    "`provide_checklist_document(application_id, item_key, document_id)`. Si "
+    "aucun document adéquat n'existe, N'UTILISE PAS de widget d'upload : INVITE "
+    "l'utilisateur à joindre le fichier via le bouton d'ajout de fichier (icône "
+    "trombone / pièce jointe) de la zone de saisie ; une fois le fichier envoyé, "
+    "rattache-le avec `provide_checklist_document`.\n"
+    "4. Pour retirer un document d'un item : "
+    "`detach_checklist_document(application_id, item_key)`.\n"
+    "Les `item_key` proviennent TOUJOURS de `get_application_checklist` — "
+    "n'invente JAMAIS un item_key, un application_id ou un document_id.\n"
 )
 
 
@@ -1710,8 +1741,10 @@ async def financing_node(
     Conserve le RAG pour le contexte enrichi.
     """
     from app.graph.tools.application_tools import (
+        APPLICATION_DISCOVERY_TOOLS,
         create_fund_application as _create_fund_app_tool,
     )
+    from app.graph.tools.document_tools import DOCUMENT_TOOLS
     from app.graph.tools.financing_tools import FINANCING_TOOLS
     from app.graph.tools.guided_tour_tools import GUIDED_TOUR_TOOLS
     from app.graph.tools.interactive_tools import INTERACTIVE_TOOLS
@@ -1728,9 +1761,15 @@ async def financing_node(
     # F15 BUG-003 — create_fund_application (unique source : application_tools)
     # est ré-injecté ici car l'utilisateur peut candidater depuis le module
     # financement.
+    # 049 — APPLICATION_DISCOVERY_TOOLS + DOCUMENT_TOOLS : une demande de dossier
+    # existant (« mon dossier GCF, que manque-t-il ? ») est routée vers financing
+    # (mot-clé fonds prioritaire) ; le nœud doit pouvoir lister les dossiers, lire
+    # la checklist et rattacher un document sans renvoyer « outil indisponible ».
     full_catalog = (
         (FINANCING_TOOLS or [])
         + [_create_fund_app_tool]
+        + APPLICATION_DISCOVERY_TOOLS
+        + DOCUMENT_TOOLS
         + INTERACTIVE_TOOLS
         + GUIDED_TOUR_TOOLS
         + SOURCING_TOOLS
@@ -2265,6 +2304,7 @@ async def application_node(
     get_application_checklist, simulate_financing et export_application.
     """
     from app.graph.tools.application_tools import APPLICATION_TOOLS
+    from app.graph.tools.document_tools import DOCUMENT_TOOLS
     from app.graph.tools.interactive_tools import INTERACTIVE_TOOLS
     from app.graph.tools.simulation_tools import SIMULATION_TOOLS
     from app.graph.tools.sourcing_tools import SOURCING_TOOLS
@@ -2276,8 +2316,11 @@ async def application_node(
     # Lier les tools application + interactif au LLM (filtres par contexte).
     # F11 — show_match_card / show_comparison_table exposés sur application.
     # F16 — compare_simulations injecté.
+    # 049 — DOCUMENT_TOOLS (dont list_user_documents) pour rattacher un document
+    # déjà téléversé à un item de checklist (US2) sans quitter le nœud.
     full_catalog = (
         (APPLICATION_TOOLS or [])
+        + DOCUMENT_TOOLS
         + INTERACTIVE_TOOLS
         + SOURCING_TOOLS
         + VISUALIZATION_TOOLS

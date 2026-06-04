@@ -99,6 +99,99 @@ async def test_sse_document_events_format():
 
 
 @pytest.mark.asyncio
+async def test_send_message_with_file_propagates_account_id():
+    """Régression : l'upload via le chat DOIT transmettre ``account_id`` à
+    ``upload_document``.
+
+    Sans cet argument, ``documents.account_id`` (NOT NULL en PostgreSQL, F02
+    mig. 019) lève une IntegrityError NON interceptée (seul ``ValueError`` l'est)
+    → 500 sur ``POST /messages``, que le navigateur affiche en erreur CORS
+    trompeuse (« No Access-Control-Allow-Origin »).
+
+    Le endpoint est appelé DIRECTEMENT (pas via AsyncClient) pour rester
+    hermétique : on évite le stack de middlewares + le vrai moteur asyncpg qui,
+    avec ``StreamingResponse`` + ``BaseHTTPMiddleware``, fuite entre les boucles
+    d'événements pytest. On n'AWAIT pas le corps du stream : l'appel à
+    ``upload_document`` se produit dans la partie synchrone, avant le retour de
+    la ``StreamingResponse``.
+    """
+    from fastapi import UploadFile
+    from fastapi.responses import StreamingResponse
+
+    from app.api.chat import send_message
+
+    account_id = uuid.uuid4()
+    user = MagicMock()
+    user.id = uuid.uuid4()
+    user.account_id = account_id
+    user.email = "pme@test.com"
+
+    conversation = MagicMock()
+    conversation.id = uuid.uuid4()
+    conversation.title = "Dossier GCF"
+
+    uploaded = MagicMock()
+    uploaded.id = uuid.uuid4()
+    uploaded.original_filename = "organigramme.pdf"
+
+    req_db = AsyncMock()
+    req_db.add = MagicMock()
+    req_db.flush = AsyncMock()
+    req_db.commit = AsyncMock()
+    req_db.execute = AsyncMock()
+    req_db.refresh = AsyncMock()
+
+    upload_file = UploadFile(
+        file=io.BytesIO(b"%PDF-1.4 fake organigramme"),
+        filename="organigramme.pdf",
+    )
+
+    with patch(
+        "app.modules.documents.service.upload_document",
+        new_callable=AsyncMock,
+        return_value=uploaded,
+    ) as mock_upload, patch(
+        "app.api.chat.get_user_conversation",
+        new_callable=AsyncMock,
+        return_value=conversation,
+    ), patch(
+        "app.api.chat._load_full_context_for_state",
+        new_callable=AsyncMock,
+        return_value={},
+    ), patch(
+        "app.api.chat._load_context_memory",
+        new_callable=AsyncMock,
+        return_value=[],
+    ), patch(
+        "app.api.chat._expire_pending_questions",
+        new_callable=AsyncMock,
+    ):
+        response = await send_message(
+            conversation_id=conversation.id,
+            content="Voici mon organigramme",
+            file=upload_file,
+            interactive_question_id=None,
+            interactive_question_values=None,
+            interactive_question_justification=None,
+            interactive_question_response_payload=None,
+            current_page=None,
+            guidance_stats=None,
+            active_entities=None,
+            current_user=user,
+            db=req_db,
+        )
+
+    # Le endpoint retourne bien un stream (pas une exception/500).
+    assert isinstance(response, StreamingResponse)
+    # Le corps du stream n'est PAS consommé : on valide la partie synchrone.
+    mock_upload.assert_awaited_once()
+    _, kwargs = mock_upload.call_args
+    assert kwargs.get("account_id") == account_id, (
+        "upload_document doit recevoir account_id du current_user (F02)"
+    )
+
+
+@pytest.mark.asyncio
 async def test_auto_create_conversation_with_document():
     """Un upload sans conversation active doit creer automatiquement une conversation."""
     # Ce test verifie la logique d'auto-creation

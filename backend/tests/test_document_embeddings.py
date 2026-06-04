@@ -58,6 +58,80 @@ async def test_store_embeddings_creates_chunks():
     assert mock_db.add.called
 
 
+class _NestedCtx:
+    """Faux context manager pour ``db.begin_nested()`` (SAVEPOINT)."""
+
+    def __init__(self) -> None:
+        self.entered = False
+
+    async def __aenter__(self):
+        self.entered = True
+        return None
+
+    async def __aexit__(self, *exc):
+        # Ne supprime pas l'exception : analyze_document doit la capturer lui-même.
+        return False
+
+
+@pytest.mark.asyncio
+async def test_analyze_document_embedding_failure_is_isolated_and_non_blocking():
+    """Régression : un échec de stockage d'embeddings (ex. dimension de vecteur
+    incohérente avec ``document_chunks.embedding`` — 1536 vs vector(1024) post
+    mig. 043) NE DOIT PAS se propager hors de ``analyze_document`` NI empoisonner
+    la session.
+
+    Il est isolé dans un SAVEPOINT (``db.begin_nested()``) : sans cela, l'échec
+    du ``flush()`` met la transaction PostgreSQL en état « aborted » et toute
+    opération suivante lève « transaction has been rolled back », cassant la
+    réponse chat alors que l'analyse a réussi.
+    """
+    from app.modules.documents import service as doc_service
+
+    document = MagicMock()
+    document.id = uuid.uuid4()
+    document.storage_path = "uploads/fake.pdf"
+    document.original_filename = "fake.pdf"
+    document.mime_type = "application/pdf"
+    document.document_type = None
+
+    nested = _NestedCtx()
+    mock_db = AsyncMock()
+    mock_db.add = MagicMock()
+    mock_db.flush = AsyncMock()
+    mock_db.begin_nested = MagicMock(return_value=nested)
+
+    analysis_output = MagicMock()
+    analysis_output.summary = "Organigramme NÉLO TECH"
+    analysis_output.key_findings = ["43% de féminisation"]
+    analysis_output.structured_data = {}
+    analysis_output.esg_relevant_info = {}  # dict simple → pas de model_dump
+    analysis_output.document_type.value = "autre"
+
+    mock_path = MagicMock()
+    mock_path.return_value.exists.return_value = True
+
+    with patch.object(doc_service, "Path", mock_path), patch.object(
+        doc_service, "extract_text", new_callable=AsyncMock,
+        return_value="Texte extrait de l'organigramme NÉLO TECH SARL, 42 employés.",
+    ), patch(
+        "app.chains.analysis.analyze_document_text",
+        new_callable=AsyncMock, return_value=analysis_output,
+    ), patch.object(
+        doc_service, "store_embeddings", new_callable=AsyncMock,
+        side_effect=Exception("expected 1024 dimensions, not 1536"),
+    ) as mock_store:
+        # NE DOIT PAS lever malgré l'échec du stockage d'embeddings.
+        analysis = await doc_service.analyze_document(mock_db, document)
+
+    # L'analyse aboutit quand même.
+    assert analysis is not None
+    # Le stockage d'embeddings a bien été tenté…
+    mock_store.assert_awaited_once()
+    # …mais DANS un SAVEPOINT (isolation de la session).
+    mock_db.begin_nested.assert_called_once()
+    assert nested.entered is True
+
+
 @pytest.mark.asyncio
 async def test_search_similar_chunks():
     """search_similar_chunks doit retourner des resultats."""

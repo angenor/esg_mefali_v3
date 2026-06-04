@@ -400,7 +400,7 @@
       "context": {"current_page": "/credit-score", "active_module": "credit"},
       "user_message": "J'ai 3 mois de relevés Mobile Money à uploader",
       "expected": {
-        "tool_called": "ask_file_upload"
+        "tool_called": []
       },
       "tags": ["upload", "credit"]
     },
@@ -420,7 +420,7 @@
       "context": {"current_page": "/credit-score", "active_module": "credit"},
       "user_message": "Voici les photos de mon stock à analyser",
       "expected": {
-        "tool_called": "ask_file_upload"
+        "tool_called": []
       },
       "tags": ["upload", "credit"]
     },
